@@ -23,6 +23,7 @@ export type InstallConfiguration = {
     password: string;
     customIsoPath?: string;
     shareHomeFolder: boolean;
+    virglEnabled: boolean;
 }
 
 export type WinApp = {
