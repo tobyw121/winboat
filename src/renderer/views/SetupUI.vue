@@ -417,39 +417,7 @@
                                     <x-label>{{ ramGB }} GB</x-label>
                                 </div>
                             </div>
-
-                            <div>
-                                <label class="text-sm text-neutral-400">
-                                    VirGL Acceleration
-                                </label>
-                                <x-card class="flex flex-row justify-between items-center p-4 mt-2 w-full backdrop-blur-xl backdrop-brightness-150 bg-neutral-800/20">
-                                    <div class="flex flex-col gap-2">
-                                        <div class="flex flex-row gap-2 items-center">
-                                            <Icon class="inline-flex text-violet-400 size-6" icon="mdi:gpu"></Icon>
-                                            <h2 class="my-0 text-base font-semibold">VirGL Acceleration</h2>
-                                        </div>
-                                        <p class="text-neutral-400 text-sm !pt-0 !mt-0">
-                                            Enable experimental VirGL graphics acceleration to improve 3D performance inside Windows.
-                                            Requires a GPU exposed through <span class="font-mono bg-neutral-700 rounded px-1 py-0.5">/dev/dri</span> on the host.
-                                        </p>
-                                        <p
-                                            v-if="!virglSupportAvailable"
-                                            class="text-sm text-red-400 !mt-0"
-                                        >
-                                            No compatible <span class="font-mono bg-neutral-700 rounded px-1 py-0.5">/dev/dri</span> devices were detected. VirGL cannot be enabled on this system.
-                                        </p>
-                                    </div>
-                                    <div class="flex flex-row gap-2 items-center">
-                                        <x-switch
-                                            :toggled="virglEnabled"
-                                            :disabled="!virglSupportAvailable"
-                                            @toggle="toggleVirglSelection"
-                                            size="large"
-                                        ></x-switch>
-                                    </div>
-                                </x-card>
-                            </div>
-
+        
                             <div>
                                 <label for="select-disk" class="text-sm text-neutral-400">
                                     Select Disk Size
@@ -552,10 +520,6 @@
                                     <span class="text-base text-white">{{ diskSpaceGB }} GB</span>
                                 </div>
                                 <div class="flex flex-col">
-                                    <span class="text-sm text-gray-400">VirGL Acceleration</span>
-                                    <span class="text-base text-white">{{ virglEnabled && virglSupportAvailable ? 'Enabled' : 'Disabled' }}</span>
-                                </div>
-                                <div class="flex flex-col">
                                     <span class="text-sm text-gray-400">Username</span>
                                     <span class="text-base text-white">{{ username }}</span>
                                 </div>
@@ -636,7 +600,6 @@ import { InstallManager, type InstallState, InstallStates } from '../lib/install
 import { openAnchorLink } from '../utils/openLink';
 import license from '../assets/LICENSE.txt?raw'
 import { PortManager } from '../utils/port';
-import { checkVirglSupport } from '../utils/gpu';
 
 const path: typeof import('path') = require('path')
 const electron: typeof import('electron') = require('electron').remote || require('@electron/remote');
@@ -743,8 +706,6 @@ const username = ref("winboat");
 const password = ref("");
 const confirmPassword = ref("");
 const homeFolderSharing = ref(false);
-const virglEnabled = ref(false);
-const virglSupportAvailable = ref(checkVirglSupport());
 const installState = ref<InstallState>(InstallStates.IDLE);
 const preinstallMsg = ref("");
 
@@ -762,11 +723,6 @@ onMounted(async () => {
 
     username.value = os.userInfo().username;
     console.log("Username", username.value);
-
-    virglSupportAvailable.value = checkVirglSupport();
-    if (!virglSupportAvailable.value) {
-        virglEnabled.value = false;
-    }
 })
 
 onUnmounted(() => {
@@ -847,14 +803,6 @@ function deselectIsoFile() {
     windowsVersion.value = '11';
 }
 
-function toggleVirglSelection() {
-    if (!virglSupportAvailable.value && !virglEnabled.value) {
-        return;
-    }
-
-    virglEnabled.value = !virglEnabled.value;
-}
-
 function selectInstallFolder() {
     electron.dialog.showOpenDialog({
         title: 'Select Install Folder',
@@ -919,7 +867,6 @@ function install() {
         username: username.value,
         password: password.value,
         shareHomeFolder: homeFolderSharing.value,
-        virglEnabled: virglEnabled.value && virglSupportAvailable.value,
         ...(customIsoPath.value ? { customIsoPath: customIsoPath.value } : {}),
     };
 

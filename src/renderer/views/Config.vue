@@ -57,37 +57,6 @@
                     </div>
                 </x-card>
 
-                <!-- VirGL Acceleration -->
-                <x-card
-                    class="flex flex-row justify-between items-center p-2 py-3 my-0 w-full backdrop-blur-xl backdrop-brightness-150 bg-neutral-800/20"
-                >
-                    <div>
-                        <div class="flex flex-row gap-2 items-center mb-2">
-                            <Icon class="inline-flex text-violet-400 size-8" icon="mdi:gpu"></Icon>
-                            <h1 class="my-0 text-lg font-semibold">
-                                VirGL Acceleration
-                            </h1>
-                        </div>
-                        <p class="text-neutral-400 text-[0.9rem] !pt-0 !mt-0">
-                            Enable VirGL GPU acceleration to unlock 3D support through the host's <span class="font-mono bg-neutral-700 rounded-md px-1 py-0.5">/dev/dri</span> devices.
-                        </p>
-                        <p
-                            v-if="!virglSupportAvailable && !virglEnabled"
-                            class="text-sm text-red-400 !pt-0 !mt-1"
-                        >
-                            No compatible render devices were detected. VirGL cannot be enabled on this system.
-                        </p>
-                    </div>
-                    <div class="flex flex-row justify-center items-center gap-2">
-                        <x-switch
-                            :toggled="virglEnabled"
-                            :disabled="!virglSupportAvailable && !virglEnabled"
-                            @toggle="toggleVirgl"
-                            size="large"
-                        ></x-switch>
-                    </div>
-                </x-card>
-
                 <!-- Shared Home Folder -->
                 <x-card class="flex relative z-20 flex-row justify-between items-center p-2 py-3 my-0 w-full backdrop-blur-xl backdrop-brightness-150 bg-neutral-800/20">
                     <div>
@@ -497,14 +466,9 @@ import {
     RESTART_ON_FAILURE,
     RESTART_NO,
     GUEST_RDP_PORT,
-    DEFAULT_HOST_QMP_PORT,
-    VIRGL_DEVICE_PATH,
-    VIRGL_DISABLED_VALUE,
-    VIRGL_ENABLED_VALUE,
-    VIRGL_ENV_KEY
+    DEFAULT_HOST_QMP_PORT
 } from '../lib/constants';
 import { PortManager } from '../utils/port';
-import { checkVirglSupport, hasVirglDeviceMapping } from '../utils/gpu';
 const { app }: typeof import('@electron/remote') = require('@electron/remote');
 
 // Emits
@@ -538,9 +502,6 @@ const resetQuestionCounter = ref(0);
 const isResettingWinboat = ref(false);
 const isUpdatingUSBPrerequisites = ref(false);
 const origApplicationScale = ref(0);
-const virglEnabled = ref(false);
-const origVirglEnabled = ref(false);
-const virglSupportAvailable = ref(checkVirglSupport());
 
 // For USB Devices
 const availableDevices = ref<Device[]>([]);
@@ -564,18 +525,10 @@ function ensureNumericInput(e: any) {
     if (e.metaKey || e.ctrlKey || e.which <= 0 || e.which === 8 || e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
         return;
     }
-
+    
     if (!/[0-9]/.test(e.key)) {
         e.preventDefault();
     }
-}
-
-function toggleVirgl() {
-    if (!virglSupportAvailable.value && !virglEnabled.value) {
-        return;
-    }
-
-    virglEnabled.value = !virglEnabled.value;
 }
 
 function updateApplicationScale(value: string | number) {
@@ -606,13 +559,6 @@ async function assignValues() {
     autoStartContainer.value = compose.value.services.windows.restart === RESTART_ON_FAILURE;
     origAutoStartContainer.value = autoStartContainer.value;
 
-    const virglEnvValue = compose.value.services.windows.environment[VIRGL_ENV_KEY];
-    const envEnablesVirgl = parseVirglEnv(virglEnvValue);
-    const deviceEnablesVirgl = hasVirglDeviceMapping(compose.value.services.windows.devices ?? []);
-    virglEnabled.value = envEnablesVirgl || deviceEnablesVirgl;
-    origVirglEnabled.value = virglEnabled.value;
-    virglSupportAvailable.value = checkVirglSupport();
-
     freerdpPort.value = qmpPortManager.value.getHostPort(GUEST_RDP_PORT);
     origFreerdpPort.value = freerdpPort.value;
 
@@ -623,23 +569,6 @@ async function assignValues() {
     maxNumCores.value = specs.cpuCores;
 
     refreshAvailableDevices();
-}
-
-function parseVirglEnv(value?: string): boolean {
-    if (!value) {
-        return false;
-    }
-
-    const normalized = value.trim().toLowerCase();
-    if (!normalized.length) {
-        return false;
-    }
-
-    if (normalized === VIRGL_DISABLED_VALUE) {
-        return false;
-    }
-
-    return ["1", "true", "yes", "y", "on"].includes(normalized);
 }
 
 /**
@@ -659,18 +588,6 @@ async function saveDockerCompose() {
     }
 
     compose.value!.services.windows.restart = autoStartContainer.value ? RESTART_ON_FAILURE : RESTART_NO;
-
-    compose.value!.services.windows.environment[VIRGL_ENV_KEY] = virglEnabled.value
-        ? VIRGL_ENABLED_VALUE
-        : VIRGL_DISABLED_VALUE;
-
-    if (virglEnabled.value) {
-        if (!compose.value!.services.windows.devices.includes(VIRGL_DEVICE_PATH)) {
-            compose.value!.services.windows.devices.push(VIRGL_DEVICE_PATH);
-        }
-    } else {
-        compose.value!.services.windows.devices = compose.value!.services.windows.devices.filter(device => device !== VIRGL_DEVICE_PATH);
-    }
 
     qmpPortManager.value!.setPortMapping(GUEST_RDP_PORT, freerdpPort.value);
     compose.value!.services.windows.ports = qmpPortManager.value!.composeFormat;
@@ -759,12 +676,11 @@ const usbPassthroughDisabled = computed(() => {
 
 const saveButtonDisabled = computed(() => {
     const hasResourceChanges = 
-        origNumCores.value !== numCores.value ||
-        origRamGB.value !== ramGB.value ||
-        shareHomeFolder.value !== origShareHomeFolder.value ||
+        origNumCores.value !== numCores.value || 
+        origRamGB.value !== ramGB.value || 
+        shareHomeFolder.value !== origShareHomeFolder.value || 
         freerdpPort.value !== origFreerdpPort.value ||
-        autoStartContainer.value !== origAutoStartContainer.value ||
-        virglEnabled.value !== origVirglEnabled.value;
+        autoStartContainer.value !== origAutoStartContainer.value;
 
     const shouldBeDisabled = 
         errors.value.length || 
