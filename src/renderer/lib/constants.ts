@@ -64,6 +64,12 @@ export const PORT_MAX = 65535;
 export const PORT_SEARCH_RANGE = 100;
 export const PORT_SPACING = 1000;
 
+// VirGL / GPU
+export const VIRGL_ENV_KEY = "VIRGL";
+export const VIRGL_ENABLED_VALUE = "1";
+export const VIRGL_DISABLED_VALUE = "0";
+export const VIRGL_DEVICE_PATH = "/dev/dri:/dev/dri";
+
 // USB
 export const USB_CLASS_IMAGING = 6;
 export const USB_INTERFACE_MTP = 5;

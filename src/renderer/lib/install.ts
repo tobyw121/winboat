@@ -1,5 +1,14 @@
 import { type ComposeConfig, type InstallConfiguration } from "../../types";
-import { GUEST_API_PORT, GUEST_NOVNC_PORT, RESTART_ON_FAILURE, WINBOAT_DIR } from "./constants";
+import {
+    GUEST_API_PORT,
+    GUEST_NOVNC_PORT,
+    RESTART_ON_FAILURE,
+    WINBOAT_DIR,
+    VIRGL_DEVICE_PATH,
+    VIRGL_DISABLED_VALUE,
+    VIRGL_ENABLED_VALUE,
+    VIRGL_ENV_KEY
+} from "./constants";
 import YAML from "json-to-pretty-yaml";
 import { ref, type Ref } from "vue";
 import { createLogger } from "../utils/log";
@@ -36,7 +45,8 @@ export const DefaultCompose: ComposeConfig = {
                 "HOME": "${HOME}",
                 "LANGUAGE": "English",
                 "HOST_PORTS": "7149",
-                "ARGUMENTS": "-qmp tcp:0.0.0.0:7149,server,wait=off"
+                "ARGUMENTS": "-qmp tcp:0.0.0.0:7149,server,wait=off",
+                "VIRGL": VIRGL_DISABLED_VALUE,
             },
             "cap_add": [
                 "NET_ADMIN"
@@ -129,7 +139,7 @@ export class InstallManager {
         }
 
         // Configure the compose file
-        const composeContent = { ...DefaultCompose };
+        const composeContent = JSON.parse(JSON.stringify(DefaultCompose)) as ComposeConfig;
         this.portMgr.value = await PortManager.parseCompose(composeContent);
 
         composeContent.services.windows.ports = this.portMgr.value.composeFormat;
@@ -140,6 +150,19 @@ export class InstallManager {
         composeContent.services.windows.environment.LANGUAGE = this.conf.windowsLanguage;
         composeContent.services.windows.environment.USERNAME = this.conf.username;
         composeContent.services.windows.environment.PASSWORD = this.conf.password;
+        composeContent.services.windows.environment[VIRGL_ENV_KEY] = this.conf.virglEnabled
+            ? VIRGL_ENABLED_VALUE
+            : VIRGL_DISABLED_VALUE;
+
+        if (this.conf.virglEnabled) {
+            if (!composeContent.services.windows.devices.includes(VIRGL_DEVICE_PATH)) {
+                composeContent.services.windows.devices.push(VIRGL_DEVICE_PATH);
+            }
+        } else {
+            composeContent.services.windows.devices = composeContent.services.windows.devices.filter(
+                device => device !== VIRGL_DEVICE_PATH
+            );
+        }
         
         // Boot image mapping
         if (this.conf.customIsoPath) {
