@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { containerInstallFailure } from '../src/shared/install-container.ts';
+import { containerInstallFailure, containerInstallLogFailure } from '../src/shared/install-container.ts';
+
+test('AME preparation diagnostics survive a reset HTTP connection without treating normal setup as a failure', () => {
+    assert.equal(containerInstallLogFailure('Adding OEM folder to image...\nAME OOBE and offline registry preparation injected.'), undefined);
+    assert.match(containerInstallLogFailure('AME ISO injection failed: Windows Pro index 6 has no Windows/System32/oobe/msoobe.exe. Select apply after installation.\nTraceback...')!, /index 6.*apply after installation/);
+    assert.match(containerInstallLogFailure("Couldn't open libGL.so.1 or libOpenGL.so.0")!, /OpenGL runtime/);
+});
 
 test('a healthy VM and Windows reboots do not fail installation monitoring', () => {
     assert.equal(containerInstallFailure({ State: { Status: 'running', Running: true }, RestartCount: 0 }), undefined);

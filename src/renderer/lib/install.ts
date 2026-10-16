@@ -4,7 +4,7 @@ import { configureVmIdentity } from '../../shared/vm-identity';
 import { loadOrCreateVmIdentity } from '../../shared/vm-identity-store';
 import { validateAtlasSelection, validateAtlasProgress, configureAtlasIso, ATLAS_ISO_LABEL, ATLAS_ISO_VERSION } from '../../shared/atlas';
 import { stageAtlasBundle } from '../../shared/atlas-bundle';
-import { containerInstallFailure } from '../../shared/install-container';
+import { containerInstallFailure, containerInstallLogFailure } from '../../shared/install-container';
 import { type ComposeConfig, type InstallConfiguration } from "../../types";
 import {
     GUEST_API_PORT,
@@ -326,21 +326,22 @@ export class InstallManager {
         await this.checkContainer();
     }
 
-    async checkContainer() {
-        if (Date.now() < this.nextContainerCheck) return;
+    async readContainerFailure() {
+        try {
+            const logs = await execFileAsync('docker', ['logs', '--tail', '80', 'WinBoat'], { timeout: 5000 });
+            return containerInstallLogFailure(logs.stdout + '\n' + logs.stderr);
+        } catch { return undefined; }
+    }
+
+    async checkContainer(force = false) {
+        if (!force && Date.now() < this.nextContainerCheck) return;
         this.nextContainerCheck = Date.now() + 5000;
         const { stdout } = await execFileAsync('docker', ['inspect', 'WinBoat'], { timeout: 10000 });
         const info = JSON.parse(stdout)[0];
         const failure = containerInstallFailure(info, this.containerRestarts ?? info.RestartCount);
         if (failure) {
-            let reason = '';
-            try {
-                const logs = await execFileAsync('docker', ['logs', '--tail', '60', 'WinBoat'], { timeout: 5000 });
-                if (/Couldn't open libGL\.so\.1 or libOpenGL\.so\.0/.test(logs.stdout + logs.stderr)) {
-                    reason = ' Helios is missing its OpenGL runtime libraries. Rebuild the Helios host image and recreate the container; keep the VM disk.';
-                }
-            } catch { /* The container failure itself is sufficient to stop waiting. */ }
-            throw new Error(failure + reason);
+            const reason = await this.readContainerFailure();
+            throw new Error(failure + (reason ? ` ${reason}` : ''));
         }
         this.containerRestarts ??= info.RestartCount || 0;
     }
@@ -390,6 +391,10 @@ export class InstallManager {
                     logger.info('Received 404, preinstall completed');
                     return; // Exit the method when fetch throws 404
                 }
+                // A preparation crash can reset HTTP before Docker reports its restart.
+                const reason = await this.readContainerFailure();
+                if (reason) throw new Error(reason);
+                await this.checkContainer(true);
                 logger.error(`Error monitoring container: ${error}`);
                 this.changeState(InstallStates.INSTALL_ERROR);
                 throw error;

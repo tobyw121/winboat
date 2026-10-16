@@ -1,6 +1,7 @@
 """AME-compatible offline preparation for the pinned Atlas Windows 11 Pro image."""
 import datetime
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -16,8 +17,15 @@ ET.register_namespace('', NS)
 ET.register_namespace('wcm', 'http://schemas.microsoft.com/WMIConfig/2002/State')
 
 
+def windows_environment():
+    # wimlib defaults to case-sensitive paths on Linux. Windows media commonly
+    # stores System32/oobe, not System32/OOBE; use Windows semantics for all I/O.
+    return {**os.environ, 'WIMLIB_IMAGEX_IGNORE_CASE': '1'}
+
+
 def command(*args, capture=False):
     result = subprocess.run(list(map(str, args)), check=True,
+                            env=windows_environment(),
                             stdout=subprocess.PIPE if capture else subprocess.DEVNULL)
     return result.stdout
 
@@ -29,12 +37,20 @@ def update(wim, index, source, destination):
 
 def extract(wim, index, name, folder, required=True):
     result = subprocess.run(['wimlib-imagex', 'extract', str(wim), str(index), name,
-                             f'--dest-dir={folder}'], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                             f'--dest-dir={folder}'], env=windows_environment(),
+                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     if result.returncode == 49 and not required:  # WIMLIB_ERR_PATH_DOES_NOT_EXIST only
         return None
     if result.returncode:
         raise RuntimeError(f'Cannot extract {name}: {result.stderr.decode(errors="replace")}')
-    return Path(folder) / Path(name).name
+    # Extraction retains the stored filename's case, including SOFTWARE/system.
+    actual = child(folder, Path(name).name)
+    if actual is None:
+        raise RuntimeError(f'wimlib did not produce the requested file: {name}')
+    expected = Path(folder) / Path(name).name
+    if actual != expected:
+        actual.rename(expected)
+    return expected
 
 
 def images(wim):
@@ -43,7 +59,10 @@ def images(wim):
 
 
 def child(folder, name):
-    return next((p for p in Path(folder).iterdir() if p.name.lower() == name.lower()), None)
+    matches = [p for p in Path(folder).iterdir() if p.name.casefold() == name.casefold()]
+    if len(matches) > 1:
+        raise ValueError(f'Ambiguous Windows filename: {name}')
+    return matches[0] if matches else None
 
 
 def amend_answer(source, index, ame=True):
@@ -158,6 +177,15 @@ def inject(tree, media):
         for name in ['/ProgramData/WinBoat/Atlas/oobe-mode.json', '/Windows/System32/OOBE/msoobeext.exe']:
             if extract(wim, index, name, work, required=False):
                 raise ValueError('AME OOBE has already been injected; use a fresh Windows image')
+        original_oobe = extract(wim, index, '/Windows/System32/OOBE/msoobe.exe', work, required=False)
+        if original_oobe is None:
+            raise ValueError(f'Windows Pro index {index} has no Windows/System32/oobe/msoobe.exe. '
+                             'AME OOBE requires the original Windows OOBE. Use an unmodified Windows ISO '
+                             'or select Atlas: apply after installation.')
+        if not original_oobe.read_bytes().startswith(b'MZ'):
+            raise ValueError('The Windows OOBE executable is invalid')
+        software = extract(wim, index, '/Windows/System32/config/SOFTWARE', work)
+        system = extract(wim, index, '/Windows/System32/config/SYSTEM', work)
         oobe = work / 'oobe'
         oobe.mkdir()
         extract_oobe(media / 'AME-Beta-v0.8.4.exe', oobe)
@@ -174,11 +202,6 @@ def inject(tree, media):
             converted.replace(target)
             wim.unlink()
             wim = target
-        original_oobe = extract(wim, index, '/Windows/System32/OOBE/msoobe.exe', work)
-        if not original_oobe.read_bytes().startswith(b'MZ'):
-            raise ValueError('The Windows OOBE executable is invalid')
-        software = extract(wim, index, '/Windows/System32/config/SOFTWARE', work)
-        system = extract(wim, index, '/Windows/System32/config/SYSTEM', work)
         backup = prepare_install(software, system)
         mode = {'mode': 'ame-oobe', 'release': conf['release'], 'instanceId': str(uuid.uuid4()),
                 'createdAtUtc': datetime.datetime.now(datetime.timezone.utc).isoformat(),

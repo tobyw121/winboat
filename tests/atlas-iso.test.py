@@ -45,7 +45,8 @@ class MediaTests(unittest.TestCase):
         hive = Hive(self.config / 'SOFTWARE')
         hive.set('Microsoft\\Windows Defender\\Features', 'TamperProtection', 5)
         hive.commit()
-        oobe = self.source / 'Windows/System32/OOBE'
+        # Real Windows media uses lowercase "oobe"; Linux wimlib defaults differ.
+        oobe = self.source / 'Windows/System32/oobe'
         oobe.mkdir()
         (oobe / 'msoobe.exe').write_bytes(b'MZ-original-Windows-OOBE-fixture')
         setup = self.source / 'Windows/Setup/Scripts'
@@ -118,8 +119,8 @@ class MediaTests(unittest.TestCase):
         original_home = self.read(self.wim, 1, '/Windows/System32/config/SOFTWARE')
         inject.inject(self.tree, self.media)
         self.assertEqual(original_home, self.read(self.wim, 1, '/Windows/System32/config/SOFTWARE'))
-        self.assertEqual(self.read(self.wim, 2, '/Windows/System32/OOBE/msoobeext.exe'), b'MZ-original-Windows-OOBE-fixture')
-        self.assertEqual(self.read(self.wim, 2, '/Windows/System32/OOBE/msoobe.exe'), b'MZ-oobe_shim.exe-fixture')
+        self.assertEqual(self.read(self.wim, 2, '/Windows/System32/oobe/msoobeext.exe'), b'MZ-original-Windows-OOBE-fixture')
+        self.assertEqual(self.read(self.wim, 2, '/Windows/System32/oobe/msoobe.exe'), b'MZ-oobe_shim.exe-fixture')
         self.assertEqual(self.read(self.wim, 2, '/Windows/Setup/Scripts/WinBoatOriginalSetupComplete.cmd'), b'@echo preserve-custom-WIM-hook\r\n')
         self.assertIn(b'WinBoatOriginalSetupComplete.cmd', self.read(self.wim, 2, '/Windows/Setup/Scripts/SetupComplete.cmd'))
         self.assertEqual(list((self.sources / '$OEM$' / '$1' / 'OEM' / 'atlas').iterdir()), [])
@@ -147,6 +148,30 @@ class MediaTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256(self.wim.read_bytes()).digest(), original)
         self.assert_answer(self.read(self.boot, 2, '/autounattend.dat'), False)
         self.assertFalse((self.tree / 'winboat-atlas-iso.json').exists())
+
+    def test_windows_path_case_and_extracted_hive_names(self):
+        for old, new in [('/Windows', '/windows'), ('/windows/System32', '/windows/system32'),
+                         ('/windows/system32/config/SOFTWARE', '/windows/system32/config/software'),
+                         ('/windows/system32/oobe/msoobe.exe', '/windows/system32/oobe/MSOOBE.EXE')]:
+            self.run_wim('update', self.wim, 2, '--command', f'rename {old} {new}')
+        inject.inject(self.tree, self.media)
+        # Read actual stored paths without the injector's case-insensitive lookup.
+        paths = self.run_wim('dir', self.wim, 2).decode().splitlines()
+        paths = [p.casefold() for p in paths if p.startswith('/')]
+        self.assertEqual(len(paths), len(set(paths)), 'Duplicate Windows directories/files differ only by case')
+        self.assertIn('/windows/system32/oobe/msoobeext.exe', paths)
+        self.assertEqual(self.hive_value(self.wim, 2, 'SOFTWARE', 'Microsoft\\Windows Defender\\Features', 'TamperProtection'), (4, struct.pack('<I', 4)))
+
+    def test_missing_oobe_fails_before_changing_the_image_or_loading_ame(self):
+        self.run_wim('update', self.wim, 2, '--command', 'delete /Windows/System32/oobe/msoobe.exe')
+        original = self.wim.read_bytes()
+        with patch.object(inject, 'extract_oobe', side_effect=AssertionError('Must validate Windows first')):
+            with self.assertRaisesRegex(ValueError, 'index 2.*apply after installation'):
+                inject.inject(self.tree, self.media)
+        self.assertEqual(self.wim.read_bytes(), original)
+        # The post-install option can still prepare this medium without replacing OOBE.
+        self.set_mode('live')
+        inject.inject(self.tree, self.media)
 
     def test_custom_esd_conversion_preserves_other_editions(self):
         self.run_wim('export', self.wim, 'all', self.sources / 'install.esd', '--compress=LZMS', '--solid')

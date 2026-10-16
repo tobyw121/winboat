@@ -19,6 +19,12 @@ und baut daraus die tatsächlich gebootete ISO. WinBoat ändert die ausgewählte
 Originaldatei nicht. Vorhandene VM-Festplatten werden nicht nachträglich auf
 Atlas umgestellt; diese Funktion ist für neue VMs vorgesehen.
 
+WIM-Pfade werden auch unter Linux ohne Unterscheidung der Groß-/Kleinschreibung
+aufgelöst (`oobe`/`OOBE`, `System32`/`system32`). Fehlt `msoobe.exe` tatsächlich,
+bricht die ISO-Injection vor WIM-Änderungen mit einer konkreten Meldung ab.
+Dann eine unveränderte Windows-ISO oder **apply after installation** wählen;
+WinBoat zeigt die AME-Ursache auch bei einem zurückgesetzten HTTP-Zugriff an.
+
 ## ISO injection mit AMEs OOBE (experimentell, bevorzugt)
 
 1. Atlas und die gewünschte ISO auswählen. Ohne Custom ISO wird Windows 11 Pro
