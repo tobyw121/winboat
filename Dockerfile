@@ -28,7 +28,7 @@ RUN --mount=type=secret,id=proxy_ca \
     apt-get ${SSL_CERT_FILE:+-o Acquire::https::CaInfo=$SSL_CERT_FILE} update; \
     apt-get ${SSL_CERT_FILE:+-o Acquire::https::CaInfo=$SSL_CERT_FILE} install -y --no-install-recommends \
       ca-certificates git curl unzip zip python3 build-essential pkg-config \
-      libudev-dev libusb-1.0-0-dev rpm xz-utils; \
+      libudev-dev libusb-1.0-0-dev rpm xz-utils wimtools; \
     rm -rf /var/lib/apt/lists/*
 COPY --from=go /usr/local/go /usr/local/go
 ENV PATH=/usr/local/go/bin:$PATH

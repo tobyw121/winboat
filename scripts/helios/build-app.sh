@@ -13,7 +13,9 @@ npm run helios:stage -- resources/helios
 npm run test:helios
 npm run test:virgl
 npm run test:packaging
-go test guest_server/helios_status.go guest_server/helios_status_test.go
+npm run test:atlas
+npm run test:atlas:iso
+go test guest_server/helios_status.go guest_server/helios_status_test.go guest_server/atlas_status.go guest_server/atlas_status_test.go
 npx vue-tsc --noEmit -p src/renderer --skipLibCheck
 npm run build-guest-server
 npm run build
@@ -28,6 +30,7 @@ cp resources/helios/HeliosSetup.exe resources/helios/helios-build.json /out/
 cp docs/build-helios-local.md /out/BUILD-INSTRUCTIONS.md
 cp docs/helios-local-display.md /out/LOCAL-DISPLAY.md
 cp docs/vm-hardware-profile.md /out/vm-hardware-profile.md
+cp docs/atlas-installation.md /out/atlas-installation.md
 node --input-type=module - <<'JS' > /out/BUILD-INFO.json
 import fs from 'node:fs';
 import crypto from 'node:crypto';

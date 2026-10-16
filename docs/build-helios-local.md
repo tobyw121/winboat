@@ -74,6 +74,9 @@ Ressourcen. Eine laufende VM unterhalb des Checkouts gehört nicht in die App.
 Damit wird auch der Fehler `data.img: file size can not be larger than 4.2GB`
 vermieden. Die VM-Dateien müssen dafür nicht gelöscht werden.
 
+Die ISO-Auswahl unterstützt außerdem die optionale
+[Atlas-Einrichtung mit WIM-Injection oder nach der Windows-Installation](atlas-installation.md).
+
 Der Build enthält auch den optionalen nativen Helios-Viewer. Für dessen Ausführung
 benötigt der Desktop GTK4 4.8+, libepoxy und dbus-daemon; siehe
 [lokaler Helios-Desktop](helios-local-display.md). Die Standardanzeige bleibt noVNC.
