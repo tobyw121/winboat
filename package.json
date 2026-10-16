@@ -13,6 +13,7 @@
         "build:linux-gs": "bash build-guest-server.sh && node scripts/build.ts && npm run build:helios:viewer && electron-builder --linux",
         "build:helios:viewer": "bash native/helios-viewer/build.sh",
         "test:virgl": "tsx --test tests/virgl.test.ts",
+        "test:packaging": "node --test tests/packaging.test.cjs",
         "build:helios:host": "node scripts/helios/build-host.ts",
         "helios:stage": "node scripts/helios/stage.ts",
         "helios:adopt-installer": "node scripts/helios/adopt-installer.ts",

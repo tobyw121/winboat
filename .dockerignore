@@ -15,3 +15,17 @@ temp
 **/__pycache__
 guest_server/winboat_guest_server.exe
 guest_server/winboat_guest_server.zip
+# VM storage and installation media must never enter the build context.
+**/*.img
+**/*.qcow
+**/*.qcow2
+**/*.raw
+**/*.vhd
+**/*.vhdx
+**/*.vmdk
+**/*.iso
+**/windows.rom
+**/windows.vars
+**/windows.mac
+**/windows.ver
+**/windows.base

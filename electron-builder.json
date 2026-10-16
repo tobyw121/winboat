@@ -46,9 +46,7 @@
         "**/*"
       ]
     },
-    "!build",
-    "!dist",
-    "!scripts"
+    "package.json"
   ],
   "extraResources": [
     {

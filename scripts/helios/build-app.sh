@@ -12,6 +12,7 @@ python3 tests/helios-build-update.test.py
 npm run helios:stage -- resources/helios
 npm run test:helios
 npm run test:virgl
+npm run test:packaging
 go test guest_server/helios_status.go guest_server/helios_status_test.go
 npx vue-tsc --noEmit -p src/renderer --skipLibCheck
 npm run build-guest-server

@@ -67,6 +67,13 @@ Installer werden weder GitHub-Token noch Actions-Artefakt-Download benötigt.
 Die Compiler laden weiterhin ihre festgelegten externen Abhängigkeiten; der
 Gesamtbuild ist deshalb nicht vollständig offline.
 
+VM-Festplatten (`*.img`, `*.qcow2`, `*.vhdx` usw.) und ISO-Dateien werden auch
+in Unterordnern aus dem Docker-Build-Kontext ausgeschlossen. Electron verpackt
+nur `package.json`, die gebauten Programmdateien und die ausdrücklich angegebenen
+Ressourcen. Eine laufende VM unterhalb des Checkouts gehört nicht in die App.
+Damit wird auch der Fehler `data.img: file size can not be larger than 4.2GB`
+vermieden. Die VM-Dateien müssen dafür nicht gelöscht werden.
+
 Der Build enthält auch den optionalen nativen Helios-Viewer. Für dessen Ausführung
 benötigt der Desktop GTK4 4.8+, libepoxy und dbus-daemon; siehe
 [lokaler Helios-Desktop](helios-local-display.md). Die Standardanzeige bleibt noVNC.
