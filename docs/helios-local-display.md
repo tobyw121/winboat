@@ -141,6 +141,10 @@ Für einen Mitschnitt auf dem Linux-Host im Repository ausführen:
 python3 scripts/helios/diagnose-vm.py
 ```
 
+Vor dem Mitschnitt die WinBoat-App und andere QMP-Clients schließen, damit der
+Monitoranschluss frei ist. Der Recorder wiederholt Verbindungen, solange nach
+einem offenen Docker-Port noch keine echte QMP-Begrüßung empfangen wurde.
+
 Das Skript startet einen gestoppten Container `WinBoat` oder hängt sich an einen
 laufenden Container an. Es sammelt für höchstens 120 Sekunden Docker-Ausgaben,
 Snapshots der QEMU-Protokolle und Ereignisse vom veröffentlichten QMP-Port

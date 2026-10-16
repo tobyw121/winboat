@@ -45,42 +45,54 @@ def capture_qmp(endpoint, output, stop, deadline):
             log.write(json.dumps({'receivedAtUtc': dt.datetime.now(dt.timezone.utc).isoformat(),
                                   **value}) + '\n')
             log.flush()
+        warned_early_close = False
+        ever_greeted = False
         while not stop.is_set() and time.monotonic() < deadline:
             try:
                 connection = socket.create_connection(endpoint, timeout=1)
-                break
             except OSError:
                 stop.wait(0.25)
-        else:
-            record({'diagnostic': 'QMP did not become reachable'})
-            return
-        with connection:
-            connection.settimeout(0.5)
-            buffer = b''
-            negotiated = False
-            while not stop.is_set() and time.monotonic() < deadline:
-                try:
-                    data = connection.recv(65536)
-                    if not data:
-                        record({'diagnostic': 'QMP connection closed'})
-                        return
-                    buffer += data
-                    while b'\n' in buffer:
-                        line, buffer = buffer.split(b'\n', 1)
-                        if not line.strip():
-                            continue
-                        message = json.loads(line)
-                        record(message)
-                        if 'QMP' in message:
-                            connection.sendall(b'{"execute":"qmp_capabilities","id":"capabilities"}\n')
-                        elif message.get('id') == 'capabilities' and not negotiated:
-                            negotiated = True
-                            connection.sendall(b'{"execute":"query-status","id":"initial-status"}\n')
-                except socket.timeout:
-                    continue
-                except (OSError, ValueError) as error:
-                    record({'diagnostic': str(error)})
-                    return
+                continue
+            with connection:
+                connection.settimeout(0.5)
+                buffer = b''
+                negotiated = greeted = False
+                connected_at = time.monotonic()
+                while not stop.is_set() and time.monotonic() < deadline:
+                    try:
+                        data = connection.recv(65536)
+                        if not data:
+                            if greeted:
+                                record({'diagnostic': 'QMP connection closed after greeting; reconnecting'})
+                            elif not warned_early_close:
+                                record({'diagnostic': 'Port accepted before QMP was ready; retrying until a QMP greeting arrives'})
+                                warned_early_close = True
+                            break
+                        buffer += data
+                        if len(buffer) > 1024 * 1024:
+                            raise ValueError('QMP response exceeded the capture limit')
+                        while b'\n' in buffer:
+                            line, buffer = buffer.split(b'\n', 1)
+                            if not line.strip():
+                                continue
+                            message = json.loads(line)
+                            record(message)
+                            if 'QMP' in message:
+                                greeted = ever_greeted = True
+                                connection.sendall(b'{"execute":"qmp_capabilities","id":"capabilities"}\n')
+                            elif message.get('id') == 'capabilities' and not negotiated:
+                                negotiated = True
+                                connection.sendall(b'{"execute":"query-status","id":"initial-status"}\n')
+                    except socket.timeout:
+                        if not greeted and time.monotonic() - connected_at >= 2:
+                            break
+                    except (OSError, ValueError) as error:
+                        if greeted:
+                            record({'diagnostic': str(error)})
+                        break
+            stop.wait(0.25)
+        if not ever_greeted:
+            record({'diagnostic': 'No QMP greeting received during this capture; QEMU events are unavailable'})
 
 
 def capture(container, duration, output):
@@ -140,7 +152,7 @@ def capture(container, duration, output):
     if qmp.exists():
         for line in qmp.read_text().splitlines():
             message = json.loads(line)
-            if 'event' in message or 'diagnostic' in message:
+            if 'event' in message or 'diagnostic' in message or 'QMP' in message or message.get('id') == 'initial-status':
                 print(json.dumps(message))
     for name in ['qemu.log', 'qemu.out', 'qemu.pty', 'docker.log']:
         path = output / name

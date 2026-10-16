@@ -23,6 +23,7 @@ class DiagnosticsTest(unittest.TestCase):
             output = Path(temporary) / 'capture'
             # No Windows, GPU, KVM or VM volumes. timeout ends only this fixture.
             command = ('set -e; mkdir -p /run/shm; echo synthetic-stderr >&2; echo volatile-fixture >/run/shm/qemu.out; '
+                       'for attempt in 1 2 3; do timeout 3 nc -l -N 7149 </dev/null || true; done; '
                        'exec timeout -s TERM 12 qemu-system-x86_64 '
                        '-machine q35,accel=tcg -m 128M -nodefaults -display none -S '
                        '-qmp tcp:0.0.0.0:7149,server=on,wait=off -D /run/shm/qemu.log')
@@ -35,6 +36,7 @@ class DiagnosticsTest(unittest.TestCase):
                 self.assertEqual((output / 'qemu.out').read_text(), 'volatile-fixture\n')
                 self.assertIn('synthetic-stderr', (output / 'docker.log').read_text())
                 messages = [json.loads(line) for line in (output / 'qmp.jsonl').read_text().splitlines()]
+                self.assertTrue(any('before QMP was ready' in m.get('diagnostic', '') for m in messages), messages)
                 self.assertTrue(any(m.get('event') == 'SHUTDOWN' and m['data']['reason'] == 'host-signal' for m in messages), messages)
                 self.assertTrue(any(m.get('id') == 'initial-status' and m['return']['status'] == 'prelaunch' for m in messages), messages)
                 self.assertNotIn('Config', json.loads((output / 'initial-state.json').read_text()))
