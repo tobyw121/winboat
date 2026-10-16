@@ -1,4 +1,4 @@
-import { HELIOS_REVISION, HELIOS_GUEST_REVISION, HELIOS_IMAGE, HELIOS_LABEL } from '../../shared/helios';
+import { HELIOS_REVISION, HELIOS_GUEST_REVISION, HELIOS_IMAGE, HELIOS_LABEL, HELIOS_RUNTIME_LABEL, HELIOS_RUNTIME_VERSION } from '../../shared/helios';
 const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
 const crypto: typeof import('crypto') = require('crypto');
@@ -54,6 +54,8 @@ export async function requireHelios(): Promise<{ renderNode: string; nvidia: boo
     try {
         const { stdout } = await promisify(execFile)('docker', ['image', 'inspect', '--format', `{{ index .Config.Labels "${HELIOS_LABEL}" }}`, HELIOS_IMAGE]);
         if (stdout.trim() !== HELIOS_REVISION) throw new Error('Image revision mismatch.');
+        const { stdout: runtime } = await promisify(execFile)('docker', ['image', 'inspect', '--format', `{{ index .Config.Labels "${HELIOS_RUNTIME_LABEL}" }}`, HELIOS_IMAGE]);
+        if (runtime.trim() !== HELIOS_RUNTIME_VERSION) throw new Error('Image lacks the required OpenGL runtime.');
     } catch (error) {
         throw new Error(`Build the matching Helios host image with npm run build:helios:host. ${error}`);
     }

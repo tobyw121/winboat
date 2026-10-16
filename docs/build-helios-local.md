@@ -77,6 +77,37 @@ vermieden. Die VM-Dateien müssen dafür nicht gelöscht werden.
 Die ISO-Auswahl unterstützt außerdem die optionale
 [Atlas-Einrichtung mit WIM-Injection oder nach der Windows-Installation](atlas-installation.md).
 
+## QEMU bricht mit fehlendem OpenGL-Loader ab
+
+`Couldn't open libGL.so.1 or libOpenGL.so.0` bedeutet, dass die Bibliotheken im
+Helios-Container fehlen. Der Host-Kernel ist nicht die Ursache dieses Fehlers.
+Das Runtime-Image installiert jetzt `libgl1`, `libopengl0` und `libglx-mesa0`
+zusätzlich zu EGL/Mesa. Der Build lädt GL/OpenGL/EGL ausdrücklich mit `dlopen`;
+ein einfaches `ldd` auf QEMU erkennt diese dynamisch geladenen Abhängigkeiten nicht.
+`--skip-host` lehnt Images ohne diese Runtime-Prüfung ab.
+
+Ein bereits gebautes, passendes Helios-Image lässt sich ohne erneute
+QEMU-/Renderer-Kompilierung reparieren. Im WinBoat-Checkout ausführen:
+
+```bash
+git pull --ff-only origin work
+docker buildx build --load -f helios/host/Dockerfile \
+  --build-arg HELIOS_COMPILED_IMAGE=winboat/helios:d82ce565ac79 \
+  -t winboat/helios:d82ce565ac79 .
+docker compose -f "$HOME/.winboat/docker-compose.yml" up -d --force-recreate windows
+```
+
+Dabei werden nur die gepaarten Binärdateien aus `/opt/helios` wiederverwendet;
+der Runtime-Unterbau und dessen Abhängigkeiten werden regulär neu aufgebaut.
+Der Build prüft die Revision und QEMUs Venus-Unterstützung. Für einen vollständigen
+Quellbuild bleibt `./scripts/build-helios.sh` der normale Einstieg.
+
+Das Neuerstellen des Containers übernimmt das korrigierte Image und erhält die
+eingebundene VM-Festplatte. Keine `data.img`, ISO oder Windows-Konfiguration
+löschen. WinBoat kann anschließend die vorhandene Installation fortsetzen.
+In einer Cloud mit TLS-Proxy muss auch diesem direkten Build der konfigurierte
+CA-Build-Secret übergeben werden, wie im Abschnitt zum Proxy beschrieben.
+
 Der Build enthält auch den optionalen nativen Helios-Viewer. Für dessen Ausführung
 benötigt der Desktop GTK4 4.8+, libepoxy und dbus-daemon; siehe
 [lokaler Helios-Desktop](helios-local-display.md). Die Standardanzeige bleibt noVNC.

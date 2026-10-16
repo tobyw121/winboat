@@ -4,6 +4,7 @@ import { configureVmIdentity } from '../../shared/vm-identity';
 import { loadOrCreateVmIdentity } from '../../shared/vm-identity-store';
 import { validateAtlasSelection, validateAtlasProgress, configureAtlasIso } from '../../shared/atlas';
 import { stageAtlasBundle } from '../../shared/atlas-bundle';
+import { containerInstallFailure } from '../../shared/install-container';
 import { type ComposeConfig, type InstallConfiguration } from "../../types";
 import {
     GUEST_API_PORT,
@@ -17,13 +18,14 @@ import { createLogger } from "../utils/log";
 import { createNanoEvents, type Emitter } from "nanoevents";
 import { PortManager } from "../utils/port";
 const fs: typeof import('fs') = require('fs');
-const { exec }: typeof import('child_process') = require('child_process');
+const { exec, execFile }: typeof import('child_process') = require('child_process');
 const path: typeof import('path') = require('path');
 const { promisify }: typeof import('util') = require('util');
 const nodeFetch: typeof import('node-fetch').default = require('node-fetch');
 const remote: typeof import('@electron/remote') = require('@electron/remote');
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 const logger = createLogger(path.join(WINBOAT_DIR, 'install.log'));
 
 const composeFilePath = path.join(WINBOAT_DIR, 'docker-compose.yml');
@@ -101,6 +103,8 @@ export class InstallManager {
     state: InstallState;
     preinstallMsg: string;
     portMgr: Ref<PortManager | null>;
+    private containerRestarts: number | undefined;
+    private nextContainerCheck = 0;
 
     constructor(conf: InstallConfiguration) {
         this.conf = conf;
@@ -314,6 +318,28 @@ export class InstallManager {
             throw e;
         }
         logger.info('Container started successfully.');
+        this.containerRestarts = undefined;
+        this.nextContainerCheck = 0;
+        await this.checkContainer();
+    }
+
+    async checkContainer() {
+        if (Date.now() < this.nextContainerCheck) return;
+        this.nextContainerCheck = Date.now() + 5000;
+        const { stdout } = await execFileAsync('docker', ['inspect', 'WinBoat'], { timeout: 10000 });
+        const info = JSON.parse(stdout)[0];
+        const failure = containerInstallFailure(info, this.containerRestarts ?? info.RestartCount);
+        if (failure) {
+            let reason = '';
+            try {
+                const logs = await execFileAsync('docker', ['logs', '--tail', '60', 'WinBoat'], { timeout: 5000 });
+                if (/Couldn't open libGL\.so\.1 or libOpenGL\.so\.0/.test(logs.stdout + logs.stderr)) {
+                    reason = ' Helios is missing its OpenGL runtime libraries. Rebuild the Helios host image and recreate the container; keep the VM disk.';
+                }
+            } catch { /* The container failure itself is sufficient to stop waiting. */ }
+            throw new Error(failure + reason);
+        }
+        this.containerRestarts ??= info.RestartCount || 0;
     }
 
     async prepareAtlas() {
@@ -342,6 +368,7 @@ export class InstallManager {
         logger.info('Starting preinstall monitoring...');
 
         while (true) {
+            await this.checkContainer();
             try {
                 const vncHostPort = this.portMgr.value!.getHostPort(GUEST_NOVNC_PORT);
                 const response = await nodeFetch(`http://127.0.0.1:${vncHostPort}/msg.html`);
@@ -375,9 +402,10 @@ export class InstallManager {
         let attempts = 0;
 
         while (true) {
+            await this.checkContainer();
             try {
                 const apiHostPort = this.portMgr.value!.getHostPort(GUEST_API_PORT);
-                const res = await nodeFetch(`http://127.0.0.1:${apiHostPort}/health`);
+                const res = await nodeFetch(`http://127.0.0.1:${apiHostPort}/health`, { timeout: 5000 });
                 if (res.status === 200) {
                     logger.info("WinBoat Guest Server is up and healthy!");
                     return;
@@ -403,6 +431,7 @@ export class InstallManager {
         const deadline = Date.now() + 45 * 60 * 1000;
         const port = this.portMgr.value!.getHostPort(GUEST_API_PORT);
         while (Date.now() < deadline) {
+            await this.checkContainer();
             let response;
             try { response = await nodeFetch(`http://127.0.0.1:${port}/graphics/helios`, { timeout: 5000 }); }
             catch { await this.sleep(5000); continue; } // Expected while Windows restarts.
@@ -421,6 +450,7 @@ export class InstallManager {
         const port = this.portMgr.value!.getHostPort(GUEST_API_PORT);
         const deadline = Date.now() + 120 * 60 * 1000;
         while (Date.now() < deadline) {
+            await this.checkContainer();
             let response;
             try { response = await nodeFetch(`http://127.0.0.1:${port}/provisioning/atlas`, { timeout: 5000 }); }
             catch { await this.sleep(5000); continue; }

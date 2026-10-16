@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1
+ARG HELIOS_COMPILED_IMAGE=builder
 FROM ghcr.io/dockur/windows:5.07@sha256:00d59df9af7cfc6e8cd7137c52f126f9671c773fee10adcf8fc75aafedfb5052 AS builder
 ARG HELIOS_BUILD_JOBS=4
 # The optional build secret is the session's trusted CA bundle, never an image layer.
@@ -24,6 +25,8 @@ RUN --mount=type=secret,id=proxy_ca \
     cp -a /context/helios/host/patches /build/patches; \
     bash /context/helios/host/fetch-stack.sh; \
     bash /context/helios/host/build-stack.sh
+# Reuse an already paired /opt/helios for dependency-only repairs when requested.
+FROM ${HELIOS_COMPILED_IMAGE} AS compiled
 # Runtime shares the builder's Debian ABI without shipping its compiler/source tree.
 FROM ghcr.io/dockur/windows:5.07@sha256:00d59df9af7cfc6e8cd7137c52f126f9671c773fee10adcf8fc75aafedfb5052 AS runtime
 RUN --mount=type=secret,id=proxy_ca \
@@ -31,19 +34,23 @@ RUN --mount=type=secret,id=proxy_ca \
     if [ -f /run/secrets/proxy_ca ]; then export SSL_CERT_FILE=/run/secrets/proxy_ca; fi; \
     apt-get ${SSL_CERT_FILE:+-o Acquire::https::CaInfo=$SSL_CERT_FILE} update; \
     apt-get ${SSL_CERT_FILE:+-o Acquire::https::CaInfo=$SSL_CERT_FILE} install -y --no-install-recommends \
-      libglib2.0-0t64 libpixman-1-0 libepoxy0 libegl1 libgbm1 libdrm2 libvulkan1 \
+      libglib2.0-0t64 libpixman-1-0 libepoxy0 libegl1 libgl1 libopengl0 libglx-mesa0 libgbm1 libdrm2 libvulkan1 \
       libssl3t64 libslirp0 libcap-ng0 libattr1 libusb-1.0-0 libspice-server1 \
       libusbredirparser1 liburing2 libaio1t64 libzstd1 libpng16-16t64 libjpeg62-turbo \
       mesa-vulkan-drivers libegl-mesa0 libgl1-mesa-dri; \
     rm -rf /var/lib/apt/lists/*
 LABEL org.winboat.helios.revision="d82ce565ac792eb48da5e59f2a82a12ff221851d"
 LABEL org.winboat.helios.display="dbus-v3"
-RUN --mount=from=builder,source=/opt/helios,target=/build/runtime \
+LABEL org.winboat.helios.runtime="glvnd-v1"
+RUN --mount=from=compiled,source=/opt/helios,target=/build/runtime \
     --mount=type=bind,source=helios/host,target=/build/host \
     cp -a /build/runtime /opt/helios && \
+    test "$(cat /opt/helios/revision)" = d82ce565ac792eb48da5e59f2a82a12ff221851d && \
+    install -m 755 /build/host/check-runtime.sh /opt/helios/check-runtime.sh && \
     install -m 755 /build/host/display.sh /run/display.sh && \
     install -m 755 /build/host/qemu.sh /usr/bin/qemu-system-x86_64 && \
     install -m 755 /build/host/qemu.sh /usr/local/bin/qemu-system-x86_64 && \
     /usr/bin/qemu-system-x86_64 --version && \
+    /opt/helios/check-runtime.sh && \
     /usr/bin/qemu-system-x86_64 -device virtio-gpu-gl-pci,help | grep venus
 ENV HELIOS=1 HELIOS_REVISION=d82ce565ac792eb48da5e59f2a82a12ff221851d

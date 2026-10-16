@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
-import { HELIOS_IMAGE, HELIOS_LABEL, HELIOS_REVISION } from '../../src/shared/helios.ts';
+import { HELIOS_IMAGE, HELIOS_LABEL, HELIOS_REVISION, HELIOS_RUNTIME_LABEL, HELIOS_RUNTIME_VERSION } from '../../src/shared/helios.ts';
 import { HELIOS_DISPLAY_CAPABILITY, HELIOS_DISPLAY_VERSION } from '../../src/shared/helios-display.ts';
 function docker(args: string[], input?: string): string {
     const result = spawnSync('docker', args, { input, encoding: 'utf8', timeout: 30000, maxBuffer: 8 * 1024 * 1024 });
@@ -15,6 +15,8 @@ function docker(args: string[], input?: string): string {
 }
 assert.equal(docker(['image', 'inspect', '--format', `{{ index .Config.Labels "${HELIOS_LABEL}" }}`, HELIOS_IMAGE]).trim(), HELIOS_REVISION);
 assert.equal(docker(['image', 'inspect', '--format', `{{ index .Config.Labels "${HELIOS_DISPLAY_CAPABILITY}" }}`, HELIOS_IMAGE]).trim(), HELIOS_DISPLAY_VERSION);
+assert.equal(docker(['image', 'inspect', '--format', `{{ index .Config.Labels "${HELIOS_RUNTIME_LABEL}" }}`, HELIOS_IMAGE]).trim(), HELIOS_RUNTIME_VERSION);
+console.log(docker(['run', '--rm', '--network', 'none', '--entrypoint', '/opt/helios/check-runtime.sh', HELIOS_IMAGE]).trim());
 const startup = fs.readFileSync(new URL('../../tests/helios-startup.sh', import.meta.url), 'utf8');
 // A null character-device fixture exercises argument generation, never GPU rendering.
 const display = docker(['run', '--rm', '-i', '--network', 'none', '--device', '/dev/null:/dev/dri/renderD128',
