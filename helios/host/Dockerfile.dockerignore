@@ -9,3 +9,6 @@
 !scripts/
 !scripts/helios/
 !scripts/helios/verify-source.py
+!resources/
+!resources/atlas-tools/
+!resources/atlas-tools/requirements.txt

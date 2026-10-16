@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/Atlas-OS/Atlas",
+  "release": "0.5.0-hotfix",
+  "sourceCommit": "6cbd1a3401ae3bc73a1ad1b6eba324a7813fa48c",
+  "asset": "AtlasPlaybook_v0.5.0-hotfix.apbx",
+  "sha256": "13c4d8e7fc0ed38c37c5942ebcabf7f636389972e6de391a192ae649967602d8",
+  "license": "GPL-3.0"
+}

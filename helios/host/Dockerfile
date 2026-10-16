@@ -28,7 +28,18 @@ RUN --mount=type=secret,id=proxy_ca \
 # Reuse an already paired /opt/helios for dependency-only repairs when requested.
 FROM ${HELIOS_COMPILED_IMAGE} AS compiled
 # Runtime shares the builder's Debian ABI without shipping its compiler/source tree.
-FROM ghcr.io/dockur/windows:5.07@sha256:00d59df9af7cfc6e8cd7137c52f126f9671c773fee10adcf8fc75aafedfb5052 AS runtime
+FROM ghcr.io/dockur/windows:5.07@sha256:00d59df9af7cfc6e8cd7137c52f126f9671c773fee10adcf8fc75aafedfb5052 AS atlas-runtime
+RUN --mount=type=secret,id=proxy_ca \
+    --mount=type=bind,source=resources/atlas-tools/requirements.txt,target=/tmp/atlas-requirements.txt \
+    set -eu; \
+    if [ -f /run/secrets/proxy_ca ]; then export SSL_CERT_FILE=/run/secrets/proxy_ca PIP_CERT=/run/secrets/proxy_ca; fi; \
+    apt-get ${SSL_CERT_FILE:+-o Acquire::https::CaInfo=$SSL_CERT_FILE} update; \
+    apt-get ${SSL_CERT_FILE:+-o Acquire::https::CaInfo=$SSL_CERT_FILE} install -y --no-install-recommends python3 python3-hivex python3-pip; \
+    python3 -m pip install --target /opt/winboat-atlas/lib --require-hashes --no-compile -r /tmp/atlas-requirements.txt; \
+    rm -rf /var/lib/apt/lists/* /root/.cache/pip
+ENV PYTHONPATH=/opt/winboat-atlas/lib
+LABEL org.winboat.atlas.iso="ame-oobe-v1"
+FROM atlas-runtime AS runtime
 RUN --mount=type=secret,id=proxy_ca \
     set -eu; \
     if [ -f /run/secrets/proxy_ca ]; then export SSL_CERT_FILE=/run/secrets/proxy_ca; fi; \
