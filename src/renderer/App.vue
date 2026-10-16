@@ -134,7 +134,7 @@ import { Winboat } from './lib/winboat';
 import { openAnchorLink } from './utils/openLink';
 import { WinboatConfig } from './lib/config';
 import { USBManager } from './lib/usbmanager';
-import { GUEST_NOVNC_PORT, NOVNC_URL } from './lib/constants';
+import { GUEST_NOVNC_PORT } from './lib/constants';
 const { BrowserWindow }: typeof import('@electron/remote') = require('@electron/remote')
 const os: typeof import('os') = require('os')
 const path: typeof import('path') = require('path')

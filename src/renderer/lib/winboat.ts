@@ -1,3 +1,4 @@
+import { requireHelios } from './helios';
 import { ref, type Ref } from "vue";
 import { WINBOAT_DIR, GUEST_API_PORT, GUEST_RDP_PORT, GUEST_QMP_PORT, GUEST_NOVNC_PORT } from "./constants";
 import type { ComposeConfig, GuestServerUpdateResponse, GuestServerVersion, Metrics, WinApp, CustomAppCallbacks } from "../../types";
@@ -262,6 +263,7 @@ export class Winboat {
         // TODO: Investigate whether we need to remap user ports
         if(!this.portMgr.value) {
             const compose = this.parseCompose();
+            if (compose.services.windows.environment.HELIOS === '1') await requireHelios();
             this.portMgr.value = await PortManager.parseCompose(compose, { findOpenPorts: false });
         }
 
@@ -484,6 +486,7 @@ export class Winboat {
         this.containerActionLoading.value = true;
         try {
             const compose = this.parseCompose();
+            if (compose.services.windows.environment.HELIOS === '1') await requireHelios();
             this.portMgr.value = await PortManager.parseCompose(compose);
 
             if(!this.portMgr.value!.composeFormat.every((elem) => compose.services.windows.ports.includes(elem))) {
@@ -551,6 +554,7 @@ export class Winboat {
     }
 
     async replaceCompose(composeConfig: ComposeConfig) {
+        if (composeConfig.services.windows.environment.HELIOS === '1') await requireHelios();
         logger.info("Going to replace compose config");
         this.containerActionLoading.value = true;
 
@@ -634,8 +638,15 @@ export class Winboat {
             return;
         }
 
-        const { username, password } = this.getCredentials();
         const compose = this.parseCompose();
+        if (app.Path === InternalApps.WINDOWS_DESKTOP && compose.services.windows.environment.HELIOS === '1') {
+            // Keep games on the Helios console adapter, not an RDP virtual display.
+            customAppCallbacks[CustomAppCommands.NOVNC_COMMAND]!(this);
+            this.appMgr?.incrementAppUsage(app);
+            this.appMgr?.writeToDisk();
+            return;
+        }
+        const { username, password } = this.getCredentials();
         const rdpHostPort = this.getHostPort(GUEST_RDP_PORT);
 
         logger.info(`Launching app: ${app.Name} at path ${app.Path}`);

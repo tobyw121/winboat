@@ -123,3 +123,10 @@ They're awesome and you should check them out:
    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=tibixdev/winboat&type=Date" />
  </picture>
 </a>
+
+## Experimental Helios shared-GPU graphics
+
+This branch integrates a pinned Helios host stack and its native Windows driver
+installer. See [Helios build, installation and migration](docs/helios.md) for the
+Windows installer workflow, `npm run build:helios:host`, required hardware,
+automatic guest provisioning, rollback and the current testing limitations.

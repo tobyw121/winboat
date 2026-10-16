@@ -11,7 +11,13 @@
         "dev": "node scripts/dev-server.ts",
         "build-guest-server": "bash build-guest-server.sh",
         "build:linux-gs": "bash build-guest-server.sh && node scripts/build.ts && electron-builder --linux",
-        "test:virgl": "tsx --test tests/virgl.test.ts"
+        "test:virgl": "tsx --test tests/virgl.test.ts",
+        "build:helios:host": "node scripts/helios/build-host.ts",
+        "helios:stage": "node scripts/helios/stage.ts",
+        "test:helios": "tsx --test tests/helios.test.ts",
+        "build": "node scripts/build.ts",
+        "helios:fetch-installer": "node scripts/helios/fetch-installer.ts",
+        "test:helios:host": "node scripts/helios/smoke-host.ts"
     },
     "repository": "https://github.com/TibixDev/winboat",
     "author": {

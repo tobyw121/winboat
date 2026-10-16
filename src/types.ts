@@ -23,7 +23,7 @@ export type InstallConfiguration = {
     password: string;
     customIsoPath?: string;
     shareHomeFolder: boolean;
-    virglEnabled: boolean;
+    heliosEnabled: boolean;
 }
 
 export type WinApp = {
@@ -46,6 +46,8 @@ export type ComposeConfig = {
     services: {
         windows: {
             image: string;
+            gpus?: string;
+            pull_policy?: string;
             container_name: string;
             environment: {
                 VERSION: WindowsVersionKey;

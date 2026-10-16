@@ -57,7 +57,7 @@
                     </div>
                 </x-card>
 
-                <!-- VirGL Acceleration -->
+                <!-- Helios Acceleration -->
                 <x-card
                     class="flex flex-row justify-between items-center p-2 py-3 my-0 w-full backdrop-blur-xl backdrop-brightness-150 bg-neutral-800/20"
                 >
@@ -65,24 +65,24 @@
                         <div class="flex flex-row gap-2 items-center mb-2">
                             <Icon class="inline-flex text-violet-400 size-8" icon="mdi:gpu"></Icon>
                             <h1 class="my-0 text-lg font-semibold">
-                                VirGL Acceleration
+                                Helios Acceleration
                             </h1>
                         </div>
                         <p class="text-neutral-400 text-[0.9rem] !pt-0 !mt-0">
-                            Enable VirGL GPU acceleration to unlock 3D support through the host's <span class="font-mono bg-neutral-700 rounded-md px-1 py-0.5">/dev/dri</span> devices.
+                            On an existing VM, switch the adapter here, then install the bundled HeliosSetup.exe through the Browser Display console. Experimental GPU sharing uses the host's <span class="font-mono bg-neutral-700 rounded-md px-1 py-0.5">/dev/dri</span> devices.
                         </p>
                         <p
-                            v-if="!virglSupportAvailable && !virglEnabled"
+                            v-if="!heliosSupportAvailable && !heliosEnabled"
                             class="text-sm text-red-400 !pt-0 !mt-1"
                         >
-                            No compatible render devices were detected. VirGL cannot be enabled on this system.
+                            No compatible render devices were detected. Helios cannot be enabled on this system.
                         </p>
                     </div>
                     <div class="flex flex-row justify-center items-center gap-2">
                         <x-switch
-                            :toggled="virglEnabled"
-                            :disabled="!virglSupportAvailable && !virglEnabled"
-                            @toggle="toggleVirgl"
+                            :toggled="heliosEnabled"
+                            :disabled="!heliosSupportAvailable && !heliosEnabled"
+                            @toggle="toggleHelios"
                             size="large"
                         ></x-switch>
                     </div>
@@ -483,6 +483,9 @@
 </template>
 
 <script setup lang="ts">
+import { configureHelios, HELIOS_IMAGE } from '../../shared/helios';
+import { requireHelios } from '../lib/helios';
+
 import { computed, onMounted, ref } from 'vue';
 import { ContainerStatus, Winboat } from '../lib/winboat';
 import type { ComposeConfig } from '../../types';
@@ -497,14 +500,11 @@ import {
     RESTART_ON_FAILURE,
     RESTART_NO,
     GUEST_RDP_PORT,
+    GUEST_API_PORT,
     DEFAULT_HOST_QMP_PORT,
-    VIRGL_DEVICE_PATH,
-    VIRGL_DISABLED_VALUE,
-    VIRGL_ENABLED_VALUE,
-    VIRGL_ENV_KEY
 } from '../lib/constants';
 import { PortManager } from '../utils/port';
-import { checkVirglSupport, hasVirglDeviceMapping } from '../utils/gpu';
+import { checkHeliosSupport } from '../utils/gpu';
 const { app }: typeof import('@electron/remote') = require('@electron/remote');
 
 // Emits
@@ -538,9 +538,9 @@ const resetQuestionCounter = ref(0);
 const isResettingWinboat = ref(false);
 const isUpdatingUSBPrerequisites = ref(false);
 const origApplicationScale = ref(0);
-const virglEnabled = ref(false);
-const origVirglEnabled = ref(false);
-const virglSupportAvailable = ref(checkVirglSupport());
+const heliosEnabled = ref(false);
+const origHeliosEnabled = ref(false);
+const heliosSupportAvailable = ref(checkHeliosSupport());
 
 // For USB Devices
 const availableDevices = ref<Device[]>([]);
@@ -570,12 +570,12 @@ function ensureNumericInput(e: any) {
     }
 }
 
-function toggleVirgl() {
-    if (!virglSupportAvailable.value && !virglEnabled.value) {
+function toggleHelios() {
+    if (!heliosSupportAvailable.value && !heliosEnabled.value) {
         return;
     }
 
-    virglEnabled.value = !virglEnabled.value;
+    heliosEnabled.value = !heliosEnabled.value;
 }
 
 function updateApplicationScale(value: string | number) {
@@ -606,12 +606,9 @@ async function assignValues() {
     autoStartContainer.value = compose.value.services.windows.restart === RESTART_ON_FAILURE;
     origAutoStartContainer.value = autoStartContainer.value;
 
-    const virglEnvValue = compose.value.services.windows.environment[VIRGL_ENV_KEY];
-    const envEnablesVirgl = parseVirglEnv(virglEnvValue);
-    const deviceEnablesVirgl = hasVirglDeviceMapping(compose.value.services.windows.devices ?? []);
-    virglEnabled.value = envEnablesVirgl || deviceEnablesVirgl;
-    origVirglEnabled.value = virglEnabled.value;
-    virglSupportAvailable.value = checkVirglSupport();
+    heliosEnabled.value = compose.value.services.windows.image === HELIOS_IMAGE && compose.value.services.windows.environment.HELIOS === '1';
+    origHeliosEnabled.value = heliosEnabled.value;
+    heliosSupportAvailable.value = checkHeliosSupport();
 
     freerdpPort.value = qmpPortManager.value.getHostPort(GUEST_RDP_PORT);
     origFreerdpPort.value = freerdpPort.value;
@@ -625,66 +622,65 @@ async function assignValues() {
     refreshAvailableDevices();
 }
 
-function parseVirglEnv(value?: string): boolean {
-    if (!value) {
-        return false;
-    }
-
-    const normalized = value.trim().toLowerCase();
-    if (!normalized.length) {
-        return false;
-    }
-
-    if (normalized === VIRGL_DISABLED_VALUE) {
-        return false;
-    }
-
-    return ["1", "true", "yes", "y", "on"].includes(normalized);
-}
-
 /**
  * Saves the currently specified values to the Docker Compose file
  * and then re-assigns the initial values to the reactive refs
  */
 async function saveDockerCompose() {
-    compose.value!.services.windows.environment.RAM_SIZE = `${ramGB.value}G`;
-    compose.value!.services.windows.environment.CPU_CORES = `${numCores.value}`;
-
-    const composeHasHomefolderShare = compose.value!.services.windows.volumes.includes(HOMEFOLDER_SHARE_STR);
-
-    if (shareHomeFolder.value && !composeHasHomefolderShare) {
-        compose.value!.services.windows.volumes.push(HOMEFOLDER_SHARE_STR);
-    } else if (!shareHomeFolder.value && composeHasHomefolderShare) {
-        compose.value!.services.windows.volumes = compose.value!.services.windows.volumes.filter(v => v !== HOMEFOLDER_SHARE_STR);
-    }
-
-    compose.value!.services.windows.restart = autoStartContainer.value ? RESTART_ON_FAILURE : RESTART_NO;
-
-    compose.value!.services.windows.environment[VIRGL_ENV_KEY] = virglEnabled.value
-        ? VIRGL_ENABLED_VALUE
-        : VIRGL_DISABLED_VALUE;
-
-    if (virglEnabled.value) {
-        if (!compose.value!.services.windows.devices.includes(VIRGL_DEVICE_PATH)) {
-            compose.value!.services.windows.devices.push(VIRGL_DEVICE_PATH);
-        }
-    } else {
-        compose.value!.services.windows.devices = compose.value!.services.windows.devices.filter(device => device !== VIRGL_DEVICE_PATH);
-    }
-
-    qmpPortManager.value!.setPortMapping(GUEST_RDP_PORT, freerdpPort.value);
-    compose.value!.services.windows.ports = qmpPortManager.value!.composeFormat;
-
-    isApplyingChanges.value = true;
     try {
-        await winboat.replaceCompose(compose.value!);
-        await assignValues();
-    } catch(e) {
-        console.error("Failed to apply changes");
-        console.error(e);
-    } finally {
-        isApplyingChanges.value = false;
+        compose.value!.services.windows.environment.RAM_SIZE = `${ramGB.value}G`;
+        compose.value!.services.windows.environment.CPU_CORES = `${numCores.value}`;
+
+        const composeHasHomefolderShare = compose.value!.services.windows.volumes.includes(HOMEFOLDER_SHARE_STR);
+
+        if (shareHomeFolder.value && !composeHasHomefolderShare) {
+            compose.value!.services.windows.volumes.push(HOMEFOLDER_SHARE_STR);
+        } else if (!shareHomeFolder.value && composeHasHomefolderShare) {
+            compose.value!.services.windows.volumes = compose.value!.services.windows.volumes.filter(v => v !== HOMEFOLDER_SHARE_STR);
+        }
+
+        compose.value!.services.windows.restart = autoStartContainer.value ? RESTART_ON_FAILURE : RESTART_NO;
+
+        const host = heliosEnabled.value ? await requireHelios() : undefined;
+        compose.value!.services.windows = configureHelios(compose.value!.services.windows,
+            heliosEnabled.value, host?.renderNode, host?.nvidia);
+        if (heliosEnabled.value && !origHeliosEnabled.value) {
+            // The Windows driver needs Venus during its first boot. Switching
+            // the host adapter must precede installing it on an existing VM.
+            const { dialog, shell } = require('@electron/remote');
+            const { response } = await dialog.showMessageBox({
+                type: 'warning', title: 'Switch this VM to Helios',
+                message: 'Back up the Windows disk first. WinBoat will restart the VM with the Helios adapter. Then copy HeliosSetup.exe from the opened folder into Windows, run it in the Browser Display console and complete its restart prompts. Graphics are not ready until that installation finishes.',
+                buttons: ['Switch adapter', 'Cancel'], defaultId: 1, cancelId: 1,
+            });
+            if (response !== 0) { await assignValues(); return; }
+            const { heliosBundlePath } = await import('../lib/helios');
+            await shell.openPath(heliosBundlePath());
+        }
+
+        if (!heliosEnabled.value && origHeliosEnabled.value) {
+            const port = qmpPortManager.value!.getHostPort(GUEST_API_PORT);
+            const response = await fetch(`http://127.0.0.1:${port}/graphics/helios`);
+            if (!response.ok || (await response.json()).installed !== false) {
+                throw new Error('Uninstall Helios with HeliosSetup.exe inside Windows and restart Windows before switching back to the standard graphics adapter.');
+            }
+        }
+
+        qmpPortManager.value!.setPortMapping(GUEST_RDP_PORT, freerdpPort.value);
+        compose.value!.services.windows.ports = qmpPortManager.value!.composeFormat;
+
+        isApplyingChanges.value = true;
+        try {
+            await winboat.replaceCompose(compose.value!);
+            await assignValues();
+        } finally {
+            isApplyingChanges.value = false;
+        }
+    } catch (error) {
+        const { dialog } = require('@electron/remote');
+        await dialog.showMessageBox({ type: 'error', title: 'Helios configuration', message: error instanceof Error ? error.message : String(error) });
     }
+
 }
 
 /**
@@ -764,7 +760,7 @@ const saveButtonDisabled = computed(() => {
         shareHomeFolder.value !== origShareHomeFolder.value ||
         freerdpPort.value !== origFreerdpPort.value ||
         autoStartContainer.value !== origAutoStartContainer.value ||
-        virglEnabled.value !== origVirglEnabled.value;
+        heliosEnabled.value !== origHeliosEnabled.value;
 
     const shouldBeDisabled = 
         errors.value.length || 

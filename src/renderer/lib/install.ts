@@ -1,13 +1,11 @@
+import { configureHelios, validateHeliosProgress } from '../../shared/helios';
+import { requireHelios, heliosBundlePath } from './helios';
 import { type ComposeConfig, type InstallConfiguration } from "../../types";
 import {
     GUEST_API_PORT,
     GUEST_NOVNC_PORT,
     RESTART_ON_FAILURE,
     WINBOAT_DIR,
-    VIRGL_DEVICE_PATH,
-    VIRGL_DISABLED_VALUE,
-    VIRGL_ENABLED_VALUE,
-    VIRGL_ENV_KEY
 } from "./constants";
 import YAML from "json-to-pretty-yaml";
 import { ref, type Ref } from "vue";
@@ -46,7 +44,6 @@ export const DefaultCompose: ComposeConfig = {
                 "LANGUAGE": "English",
                 "HOST_PORTS": "7149",
                 "ARGUMENTS": "-qmp tcp:0.0.0.0:7149,server,wait=off",
-                "VIRGL": VIRGL_DISABLED_VALUE,
             },
             "cap_add": [
                 "NET_ADMIN"
@@ -80,6 +77,7 @@ export const InstallStates = {
     STARTING_CONTAINER: 'Starting Container',
     MONITORING_PREINSTALL: 'Monitoring Preinstall',
     INSTALLING_WINDOWS: 'Installing Windows',
+    INSTALLING_HELIOS: 'Installing Helios graphics driver',
     COMPLETED: 'Completed',
     INSTALL_ERROR: 'Install Error'
 } as const;
@@ -150,20 +148,10 @@ export class InstallManager {
         composeContent.services.windows.environment.LANGUAGE = this.conf.windowsLanguage;
         composeContent.services.windows.environment.USERNAME = this.conf.username;
         composeContent.services.windows.environment.PASSWORD = this.conf.password;
-        composeContent.services.windows.environment[VIRGL_ENV_KEY] = this.conf.virglEnabled
-            ? VIRGL_ENABLED_VALUE
-            : VIRGL_DISABLED_VALUE;
+        const host = this.conf.heliosEnabled ? await requireHelios() : undefined;
+        composeContent.services.windows = configureHelios(composeContent.services.windows,
+            this.conf.heliosEnabled, host?.renderNode, host?.nvidia);
 
-        if (this.conf.virglEnabled) {
-            if (!composeContent.services.windows.devices.includes(VIRGL_DEVICE_PATH)) {
-                composeContent.services.windows.devices.push(VIRGL_DEVICE_PATH);
-            }
-        } else {
-            composeContent.services.windows.devices = composeContent.services.windows.devices.filter(
-                device => device !== VIRGL_DEVICE_PATH
-            );
-        }
-        
         // Boot image mapping
         if (this.conf.customIsoPath) {
             composeContent.services.windows.volumes.push(`${this.conf.customIsoPath}:/boot.iso`);
@@ -193,7 +181,7 @@ export class InstallManager {
         const composeYAML = YAML.stringify(composeContent).replaceAll("null", "");
         fs.writeFileSync(composeFilePath, composeYAML, { encoding: 'utf8' });
         logger.info(`Creating compose file at: ${composeFilePath}`);
-        logger.info(`Compose file content: ${JSON.stringify(composeContent, null, 2)}`);
+
     }
 
     createOEMAssets() {
@@ -254,6 +242,18 @@ export class InstallManager {
                 const destPath = path.join(oemPath, entry);
                 copyRecursive(srcPath, destPath);
             });
+            if (this.conf.heliosEnabled) {
+                const bundle = heliosBundlePath();
+                const target = path.join(oemPath, 'helios');
+                fs.mkdirSync(target, { recursive: true });
+                for (const name of ['HeliosSetup.exe', 'helios-build.json']) {
+                    fs.copyFileSync(path.join(bundle, name), path.join(target, name));
+                }
+                fs.writeFileSync(path.join(oemPath, 'helios-enabled'), '1');
+            } else {
+                fs.rmSync(path.join(oemPath, 'helios-enabled'), { force: true });
+                fs.rmSync(path.join(oemPath, 'helios'), { recursive: true, force: true });
+            }
             logger.info("OEM assets created successfully");
         } catch (error) {
             logger.error(`Failed to copy OEM assets: ${error}`);
@@ -328,7 +328,6 @@ export class InstallManager {
                 const res = await nodeFetch(`http://127.0.0.1:${apiHostPort}/health`);
                 if (res.status === 200) {
                     logger.info("WinBoat Guest Server is up and healthy!");
-                    this.changeState(InstallStates.COMPLETED);
                     return;
                 }
                 // Log every 60 seconds (every 12th attempt with 5-second intervals)
@@ -347,17 +346,43 @@ export class InstallManager {
         }
     }
 
+    async monitorHelios() {
+        this.changeState(InstallStates.INSTALLING_HELIOS);
+        const deadline = Date.now() + 45 * 60 * 1000;
+        const port = this.portMgr.value!.getHostPort(GUEST_API_PORT);
+        while (Date.now() < deadline) {
+            let response;
+            try { response = await nodeFetch(`http://127.0.0.1:${port}/graphics/helios`, { timeout: 5000 }); }
+            catch { await this.sleep(5000); continue; } // Expected while Windows restarts.
+            if (response.status === 503) { await this.sleep(5000); continue; }
+            if (!response.ok) throw new Error(`Helios status API returned HTTP ${response.status}. Update the Windows guest server.`);
+            const progress = validateHeliosProgress(await response.json());
+            this.setPreinstallMsg(progress.message || progress.status);
+            if (progress.status === 'finished') return;
+            await this.sleep(5000);
+        }
+        throw new Error('Helios installation timed out. Inspect C:\\ProgramData\\Helios\\logs\\setup.log in Windows.');
+    }
+
     async install() {
         logger.info('Starting installation...');
 
-        await this.createComposeFile();
-        this.createOEMAssets();
-        await this.startContainer();
-        await this.monitorContainerPreinstall();
-        await this.monitorAPIHealth();
-        this.changeState(InstallStates.COMPLETED);
+        try {
+            await this.createComposeFile();
+            this.createOEMAssets();
+            await this.startContainer();
+            await this.monitorContainerPreinstall();
+            await this.monitorAPIHealth();
+            if (this.conf.heliosEnabled) await this.monitorHelios();
+            this.changeState(InstallStates.COMPLETED);
 
-        logger.info('Installation completed successfully.');
+            logger.info('Installation completed successfully.');
+        } catch (error) {
+            this.changeState(InstallStates.INSTALL_ERROR);
+            this.setPreinstallMsg(error instanceof Error ? error.message : String(error));
+            this.emitter.emit('error', error instanceof Error ? error : new Error(String(error)));
+            throw error;
+        }
     }
 }
 

@@ -1,0 +1,23 @@
+{
+  "hostRevision": "d82ce565ac792eb48da5e59f2a82a12ff221851d",
+  "guestRevision": "fecffde64fd32399a877b452332681ef0db7993e",
+  "sharedSources": {
+    "kmd_render": "3a5fc3812ce6c4b5e450c2c6da47364bc7907d62",
+    "umd": "1c9f330d642966ee791c7d6fb79f7bf86ccb2db8",
+    "umd12": "6074b6beb916323638d7b045715883e9b454bd76",
+    "umd_common": "e1cea113a54f7667e9965783d9090c5aa869c5ce",
+    "protocol": "8246c4bd0e00e79175024bf9b87571bf71e1e5b3",
+    "icd/mesa": "aa42464065e0b436516fa7514eeda18a976b462d",
+    "dxvk-helios": "6948271578bf2aa6481389a07b5070c95f911952",
+    "vkd3d-proton-helios": "3d1ba76b2c2e89b657112b44e0771beff3677ebe",
+    "venus-protocol": "fe08e82c3819e8ee3c547b1ea810fde61f46fa78",
+    "virglrenderer": "48cbbf401443e96c7e7f2cd113e432c557ebf6a0"
+  },
+  "installerArtifact": {
+    "id": 11436728866,
+    "sha256": "56cd36ec48fb7dd1d470e5f3372c182b6e7370398e59ccff9bfecff9e7162f51",
+    "package": "helios-windows-x64-22.22.289.0-fecffde6.zip",
+    "entry": "helios-windows-x64-22.22.289.0-fecffde6/HeliosSetup.exe",
+    "executableSha256": "08f22b6685940834415fa3472fc7e6b864c7c46b5f972a8798377836adc0a886"
+  }
+}

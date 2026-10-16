@@ -1,4 +1,5 @@
-import * as fs from 'node:fs';
+// Node 22+ in Electron and the test runner; avoids Vite's browser fs shim.
+const fs = process.getBuiltinModule('fs');
 
 const VIRGL_DEVICE_PREFIXES = [/^card\d+$/, /^renderD\d+$/];
 
@@ -18,4 +19,11 @@ export function checkVirglSupport(): boolean {
 
 export function hasVirglDeviceMapping(devices: string[]): boolean {
     return devices.some(device => device.startsWith('/dev/dri'));
+}
+
+/** Availability only, not a claim of Vulkan/DirectX compatibility. */
+export function checkHeliosSupport(): boolean {
+    try {
+        return process.arch === 'x64' && fs.readdirSync('/dev/dri').some(name => /^renderD\d+$/.test(name));
+    } catch { return false; }
 }

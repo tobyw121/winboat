@@ -420,30 +420,30 @@
 
                             <div>
                                 <label class="text-sm text-neutral-400">
-                                    VirGL Acceleration
+                                    Helios Acceleration
                                 </label>
                                 <x-card class="flex flex-row justify-between items-center p-4 mt-2 w-full backdrop-blur-xl backdrop-brightness-150 bg-neutral-800/20">
                                     <div class="flex flex-col gap-2">
                                         <div class="flex flex-row gap-2 items-center">
                                             <Icon class="inline-flex text-violet-400 size-6" icon="mdi:gpu"></Icon>
-                                            <h2 class="my-0 text-base font-semibold">VirGL Acceleration</h2>
+                                            <h2 class="my-0 text-base font-semibold">Helios Acceleration</h2>
                                         </div>
                                         <p class="text-neutral-400 text-sm !pt-0 !mt-0">
-                                            Enable experimental VirGL graphics acceleration to improve 3D performance inside Windows.
-                                            Requires a GPU exposed through <span class="font-mono bg-neutral-700 rounded px-1 py-0.5">/dev/dri</span> on the host.
+                                            Enable experimental Helios graphics acceleration to improve 3D performance inside Windows.
+                                            Requires the matching host image and Windows installer. The VM uses test-signed drivers and restarts automatically during setup. Requires a Vulkan-capable GPU exposed through <span class="font-mono bg-neutral-700 rounded px-1 py-0.5">/dev/dri</span> on the host.
                                         </p>
                                         <p
-                                            v-if="!virglSupportAvailable"
+                                            v-if="!heliosSupportAvailable"
                                             class="text-sm text-red-400 !mt-0"
                                         >
-                                            No compatible <span class="font-mono bg-neutral-700 rounded px-1 py-0.5">/dev/dri</span> devices were detected. VirGL cannot be enabled on this system.
+                                            No compatible <span class="font-mono bg-neutral-700 rounded px-1 py-0.5">/dev/dri</span> devices were detected. Helios cannot be enabled on this system.
                                         </p>
                                     </div>
                                     <div class="flex flex-row gap-2 items-center">
                                         <x-switch
-                                            :toggled="virglEnabled"
-                                            :disabled="!virglSupportAvailable"
-                                            @toggle="toggleVirglSelection"
+                                            :toggled="heliosEnabled"
+                                            :disabled="!heliosSupportAvailable"
+                                            @toggle="toggleHeliosSelection"
                                             size="large"
                                         ></x-switch>
                                     </div>
@@ -552,8 +552,8 @@
                                     <span class="text-base text-white">{{ diskSpaceGB }} GB</span>
                                 </div>
                                 <div class="flex flex-col">
-                                    <span class="text-sm text-gray-400">VirGL Acceleration</span>
-                                    <span class="text-base text-white">{{ virglEnabled && virglSupportAvailable ? 'Enabled' : 'Disabled' }}</span>
+                                    <span class="text-sm text-gray-400">Helios Acceleration</span>
+                                    <span class="text-base text-white">{{ heliosEnabled && heliosSupportAvailable ? 'Enabled' : 'Disabled' }}</span>
                                 </div>
                                 <div class="flex flex-col">
                                     <span class="text-sm text-gray-400">Username</span>
@@ -583,7 +583,7 @@
                         <!-- Installing -->
                         <div v-if="installState !== InstallStates.COMPLETED && installState !== InstallStates.INSTALL_ERROR" class="flex flex-col h-full items-center justify-center gap-4">
                             <x-throbber class="size-16"></x-throbber>
-                            <x-label v-if="installState !== InstallStates.MONITORING_PREINSTALL" class="text-lg text-gray-400 text-center">
+                            <x-label v-if="installState !== InstallStates.MONITORING_PREINSTALL && installState !== InstallStates.INSTALLING_HELIOS" class="text-lg text-gray-400 text-center">
                                 {{ installState }}...
                             </x-label>
                             <x-label v-else class="text-lg text-gray-400 text-center">
@@ -595,7 +595,7 @@
                          <div v-if="installState === InstallStates.INSTALL_ERROR" class="flex flex-col h-full items-center justify-center gap-4">
                             <Icon icon="line-md:alert" class="size-16 text-red-500"></Icon>
                             <x-label class="text-lg text-gray-400 text-center">
-                                An error occurred while installing Windows. Please check the logs in
+                                {{ preinstallMsg || "An error occurred while installing Windows or Helios." }} Please check the logs in
                                 <span class="font-mono bg-neutral-700 rounded-md px-0.5">~/.winboat</span>
                                 and verify
                                 <span class="font-mono bg-neutral-700 rounded-md px-0.5">docker logs WinBoat</span>
@@ -636,7 +636,7 @@ import { InstallManager, type InstallState, InstallStates } from '../lib/install
 import { openAnchorLink } from '../utils/openLink';
 import license from '../assets/LICENSE.txt?raw'
 import { PortManager } from '../utils/port';
-import { checkVirglSupport } from '../utils/gpu';
+import { checkHeliosSupport } from '../utils/gpu';
 
 const path: typeof import('path') = require('path')
 const electron: typeof import('electron') = require('electron').remote || require('@electron/remote');
@@ -743,8 +743,8 @@ const username = ref("winboat");
 const password = ref("");
 const confirmPassword = ref("");
 const homeFolderSharing = ref(false);
-const virglEnabled = ref(false);
-const virglSupportAvailable = ref(checkVirglSupport());
+const heliosEnabled = ref(true);
+const heliosSupportAvailable = ref(checkHeliosSupport());
 const installState = ref<InstallState>(InstallStates.IDLE);
 const preinstallMsg = ref("");
 
@@ -763,9 +763,9 @@ onMounted(async () => {
     username.value = os.userInfo().username;
     console.log("Username", username.value);
 
-    virglSupportAvailable.value = checkVirglSupport();
-    if (!virglSupportAvailable.value) {
-        virglEnabled.value = false;
+    heliosSupportAvailable.value = checkHeliosSupport();
+    if (!heliosSupportAvailable.value) {
+        heliosEnabled.value = false;
     }
 })
 
@@ -847,12 +847,12 @@ function deselectIsoFile() {
     windowsVersion.value = '11';
 }
 
-function toggleVirglSelection() {
-    if (!virglSupportAvailable.value && !virglEnabled.value) {
+function toggleHeliosSelection() {
+    if (!heliosSupportAvailable.value && !heliosEnabled.value) {
         return;
     }
 
-    virglEnabled.value = !virglEnabled.value;
+    heliosEnabled.value = !heliosEnabled.value;
 }
 
 function selectInstallFolder() {
@@ -919,7 +919,7 @@ function install() {
         username: username.value,
         password: password.value,
         shareHomeFolder: homeFolderSharing.value,
-        virglEnabled: virglEnabled.value && virglSupportAvailable.value,
+        heliosEnabled: heliosEnabled.value && heliosSupportAvailable.value,
         ...(customIsoPath.value ? { customIsoPath: customIsoPath.value } : {}),
     };
 
@@ -936,7 +936,11 @@ function install() {
         console.log("Preinstall msg", msg);
     });
 
-    installManager.install();
+    void installManager.install().catch(error => {
+        console.error(error);
+        const { dialog } = require('@electron/remote');
+        void dialog.showMessageBox({ type: 'error', title: 'WinBoat installation', message: error instanceof Error ? error.message : String(error) });
+    });
 }
 </script>
 
