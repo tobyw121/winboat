@@ -19,3 +19,5 @@ guest_server/winboat_guest_server.zip
 /vendor/
 /resources/helios/*
 !/resources/helios/.gitkeep
+!/resources/helios/HeliosSetup.exe
+!/resources/helios/helios-build.json

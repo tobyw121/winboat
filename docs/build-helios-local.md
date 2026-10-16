@@ -49,19 +49,15 @@ Der Standardablauf:
 1. Docker und Plugins prüfen.
 2. Helios aus `helios/upstream/` und den festgelegten Abhängigkeiten kompilieren.
 3. Image-Identität und QEMU-Steuerung mit gemeinsamem memfd-Speicher prüfen.
-4. Den vorhandenen Windows-Installer unter `resources/helios/` prüfen oder den
-   festgelegten Upstream-Installer mit SHA-256-Prüfung herunterladen.
+4. Den vollständig im Git-Repository enthaltenen Windows-Installer unter
+   `resources/helios/` gegen Receipt und festgelegte SHA-256-Prüfsumme prüfen.
 5. WinBoat-Tests, Gaststatus-Tests und Vue-Typprüfung ausführen.
 6. Windows-Gastserver und Linux-AppImage bauen und nach `dist/` exportieren.
 
-Der automatische Installer-Download nutzt ein festgelegtes GitHub-Actions-Artefakt.
-GitHub verlangt dafür normalerweise eine Anmeldung. Falls `GH_TOKEN` oder
-`GITHUB_TOKEN` bereits in deiner Shell gesetzt ist, reicht das Skript es als
-BuildKit-Secret weiter. Der Token benötigt Zugriff auf `winboat-org/helios` mit
-**Actions: read** (bei einem klassischen Token für öffentliche Repositorys genügt
-`public_repo`). Er wird weder als Buildargument noch als Image-Umgebungsvariable
-gespeichert. Alternativ kannst du ein vorhandenes Installer-Paket mit
-`--installer-dir` verwenden; dafür ist kein GitHub-Download nötig.
+`HeliosSetup.exe` und `helios-build.json` werden mit WinBoat geklont. Für den
+Installer werden weder GitHub-Token noch Actions-Artefakt-Download benötigt.
+Die Compiler laden weiterhin ihre festgelegten externen Abhängigkeiten; der
+Gesamtbuild ist deshalb nicht vollständig offline.
 
 Der Build enthält auch den optionalen nativen Helios-Viewer. Für dessen Ausführung
 benötigt der Desktop GTK4 4.8+, libepoxy und dbus-daemon; siehe
@@ -90,53 +86,37 @@ an `helios/host/` nicht ein. Nach Host-Änderungen immer ohne `--skip-host` baue
 Ergebnisse werden erst nach erfolgreichem Build und Prüfsummenprüfung übernommen.
 Ältere Pakete in `dist/` bleiben erhalten; `SHA256SUMS` gehört zum letzten Lauf.
 
-## Windows-Installer aus einem eigenen Build
+## Windows-Installer aus den eingebetteten Quellen neu bauen
+
+Der vollständige Installer und seine Treiber werden durch WinBoats eigenen
+Workflow `.github/workflows/build-helios-windows.yml` gebaut. Alle Helios-
+Eigenquellen stammen aus `helios/upstream/` dieses Checkouts. Der Workflow klont
+kein separates Helios-Repository. MSVC-/WDK-Builds laufen weiterhin auf Windows.
+
+Ein neues, geprüftes Paket aus diesem Workflow wird ausdrücklich übernommen:
 
 ```bash
-./scripts/build-helios.sh --installer-dir /pfad/zum/entpackten/windows-artefakt
+npm run helios:adopt-installer -- /pfad/zum/entpackten/winboat-windows-artefakt
 ```
 
-Der Ordner muss `HeliosSetup.exe` und seine zugehörige `helios-build.json`
-enthalten. Revision, Datei- und eingebettete Payload-Prüfsummen werden geprüft.
-Ein ungültiger oder unvollständiger lokaler Installer führt zum Abbruch.
+Das aktualisiert `resources/helios/HeliosSetup.exe`, die zugehörige Receipt und
+`helios/stack.lock.json`. Diese drei Dateien gemeinsam prüfen und committen.
+Der Import prüft Repository, WinBoat-Commit, Quellen-Snapshot, Quellen-Lockhash,
+Gastkompatibilität und das vollständige Installer-Format samt Payload-Prüfsumme.
 
-Falls das festgelegte GitHub-Actions-Artefakt abgelaufen ist oder sein Download
-für deinen Account nicht verfügbar ist, nutze diesen Weg mit dem Artefakt des Workflows
-**Build WinBoat Helios Windows installer** im eigenen Repository. Der native
-Windows-Treiberbau benötigt Windows/MSVC/WDK; er wird nicht durch den Linux-
-Docker-Build ersetzt. Die Quellen für Treiber, UMDs und Installer liegen trotzdem
-mit WinBoat unter `helios/upstream/` im selben Repository. Der bestehende
-Windows-Workflow verwendet weiterhin den kompatiblen, festgelegten Guest-Commit.
-
-## Fehler beim Installer-Download (HTTP 401/403)
-
-Dieser Fehler betrifft die Anmeldung beim GitHub-Artefakt-Download. Ein bereits
-gebautes Helios-Host-Image muss dafür nicht erneut kompiliert werden.
-
-Einen passenden GitHub-Token kannst du verdeckt in der Shell einlesen und nur
-für diesen Build bereitstellen (nicht in Git oder im Chat ablegen):
+Danach genügt wieder:
 
 ```bash
-read -rsp 'GitHub-Token (Actions: read): ' GH_TOKEN
-printf '\n'
-export GH_TOKEN
 ./scripts/build-helios.sh --skip-host
-unset GH_TOKEN
 ```
 
-Ohne Token lege `HeliosSetup.exe` und die dazugehörige `helios-build.json` in
-einem lokalen Verzeichnis ab und verwende:
+`--installer-dir /pfad/zum/paket` bleibt für ein externes Arbeitsverzeichnis mit
+**dem bereits festgelegten Paket** verfügbar. Ein Paket mit neuer Prüfsumme muss
+zuerst ausdrücklich übernommen werden. Ein beschädigter oder fehlender Installer
+führt zum Abbruch; der Build ersetzt ihn nicht durch einen Download.
 
-```bash
-./scripts/build-helios.sh --skip-host --installer-dir /pfad/zum/installer
-```
-
-Bei direktem Docker-Build lautet die zusätzliche Option
-`--secret id=github_token,env=GH_TOKEN`. Ein `docker login` meldet dich nur bei
-einer Container-Registry an und ersetzt diese GitHub-API-Anmeldung nicht.
-HTTP 404/410 kann auf ein abgelaufenes Artefakt oder fehlenden Zugriff hinweisen;
-ein Token stellt gelöschte Artefakte nicht wieder her. Prüfsummen- und
-Revisionsprüfungen bleiben auch bei lokalen Installer-Paketen aktiv.
+Details, Herkunft des mitgelieferten Pakets und lokale Windows-Voraussetzungen:
+[Windows-Treiber und Installer bauen](helios-windows-build.md).
 
 ## Gemeinsame Quellen und Dockerfile
 
@@ -158,7 +138,7 @@ docker buildx build --platform linux/amd64 --target artifacts \
 
 Das Helios-Host-Dockerfile liegt unter `helios/host/Dockerfile`. Das Bash-Skript
 koordiniert beide Dockerfiles, sodass ein einzelner Aufruf genügt. Basis-Images,
-Helios-Quellen und Windows-Artefakte sind festgelegt; Debian-Pakete werden aus den
+Helios-Quellen und Windows-Installer sind festgelegt und mitgeliefert; Debian-Pakete werden aus den
 aktuellen Paketquellen bezogen. Builds sind dadurch nicht bitidentisch.
 
 ## Proxy und Zertifikate
@@ -196,5 +176,6 @@ umstellen und vorher die Windows-Disk sichern.
 Die Treiber sind test-signiert und benötigen deaktiviertes Secure Boot in der
 VM. Helios ist experimentell. Ein bestandener Build oder QEMU-Test bestätigt
 keine GPU-Beschleunigung, Windows-Treiberinstallation oder Spielekompatibilität.
-Diese müssen auf dem Zielrechner geprüft werden. Die aktuelle Bildausgabe ist
-noVNC; Details stehen in [helios.md](helios.md).
+Diese müssen auf dem Zielrechner geprüft werden. Die Standard-Bildausgabe ist
+noVNC; ein optionaler lokaler Viewer ist ebenfalls enthalten. Details stehen in
+[helios.md](helios.md).

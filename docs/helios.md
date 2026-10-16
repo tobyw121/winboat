@@ -12,51 +12,46 @@ An initial optional native viewer is documented in
 This WinBoat branch integrates the Helios Windows WDDM graphics stack at commit
 `d82ce565ac792eb48da5e59f2a82a12ff221851d`. Its Windows installer is pinned to
 `fecffde64fd32399a877b452332681ef0db7993e`, the last complete upstream bundle.
-All ten guest/transport/renderer trees are identical between these revisions;
+The guest/transport/renderer, installer and Windows build-tool trees are identical between these revisions;
 the newer host pin carries QEMU fixes. `helios/stack.lock.json` records this pair,
-the shared tree/gitlink identities and the downloaded artifact/executable hashes.
+the shared tree/gitlink identities, bundled executable hash and its original provenance.
 It uses Helios's own installer and paired QEMU, Venus protocol, virglrenderer, Mesa, DXVK and vkd3d revisions.
 It does not pass a physical GPU exclusively to Windows. Windows remains a full
 VM. The old `VIRGL=1` toggle is replaced by a Helios graphics selection.
 
-## Obtain or build the Windows installer
+## Included Windows installer and source build
 
-The verified complete upstream installer is staged in `resources/helios` in the
-current workspace. Reproduce that import (requires curl, unzip and access to
-GitHub Actions artifacts) with:
+The complete `resources/helios/HeliosSetup.exe` and `helios-build.json` are tracked
+in this WinBoat repository. A fresh clone has the installer; packaging never
+needs an upstream Actions download or GitHub token. The initial imported binary
+retains its upstream origin and SHA-256 in `helios/stack.lock.json`; it is not
+presented as a newly compiled WinBoat binary.
 
-```sh
-npm run helios:fetch-installer
-```
+WinBoat's `.github/workflows/build-helios-windows.yml` checks out **this repository**
+and verifies/prepares its embedded `helios/upstream/` sources. It builds the WDK
+miniport, native/WoW64 D3D11/D3D12 UMDs, Mesa Venus/Zink, CLVK, loaders and complete
+Rust installer payload. External engines remain dependencies fetched at the
+recorded gitlinks. The workflow runs on relevant pushes to `work`. Manual
+dispatch is available once the workflow is also present on the default branch.
+It does not automatically publish or replace the checked-in binary.
 
-This checks the pinned artifact, nested archive, installer and embedded-container
-SHA-256 values. Artifact retention may eventually expire; use the source build
-below instead of substituting another revision or weakening the checks.
-
-
-Run the **Build WinBoat Helios Windows installer** workflow
-(`.github/workflows/build-helios-windows.yml`) in your repository's Actions tab.
-It checks out the pinned upstream Helios source, builds the native Windows WDK
-miniport, x64/x86 D3D11 and D3D12 UMDs, Mesa Venus/Zink, CLVK and Khronos loaders,
-then builds the upstream Rust installer and embeds the complete payload.
-The workflow runs only on manual dispatch and does not publish a release.
-
-Download the `helios-windows-x64-…-Release` artifact from that run. Its loose
-`HeliosSetup.exe` is the self-contained **Windows driver installer**, not a
-Windows build of the Linux WinBoat application. Keep `helios-build.json` from
-that same trusted build beside it. This receipt records the exact Helios guest source
-revision and SHA-256; it is an integrity record, not a digital signature.
-
-Stage both files for WinBoat:
+To promote a reviewed package from WinBoat's own CI:
 
 ```sh
-npm run helios:stage -- /path/to/downloaded-artifact
+npm run helios:adopt-installer -- /path/to/downloaded-winboat-artifact
 ```
 
-Staging rejects mismatched revisions, truncated installers, skeleton-only EXEs,
-invalid payload bounds and checksum failures. `electron-builder` refuses to
-package WinBoat without this verified bundle. The installed Linux application
-carries both files under its `resources/helios` directory.
+Commit the updated installer, receipt and checksum lock together. The receipt
+records the producing WinBoat commit, repository, embedded source snapshot and
+source-lock digest, alongside guest compatibility and executable SHA-256.
+Normal staging/package builds enforce the pinned hash and reject an unexpected
+replacement. The receipt is an integrity/provenance record, not a digital signature.
+`npm run helios:fetch-installer` remains a compatibility alias that verifies the
+included bundle locally; it no longer contacts GitHub.
+
+See [the Windows build instructions](helios-windows-build.md) for the complete
+source/build/import flow. The installed Linux application carries both files
+under its `resources/helios` directory.
 
 The actual installer offers GUI install/repair/update/uninstall, as well as:
 

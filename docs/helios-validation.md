@@ -98,11 +98,11 @@ Validated on 16 October 2026 (UTC), after the baseline packages above:
 - Earlier failed authentication and frame-format experiments were corrected;
   only the successful current test is counted above.
 
-## Installer authentication fix
+## Previous installer authentication fix (superseded)
 
 The reported clean-clone failure was HTTP 401 from GitHub's Actions artifact
-download API. The builder now accepts `GH_TOKEN`/`GITHUB_TOKEN` through a
-BuildKit secret; curl receives the authorization header over stdin, and retains
+download API. Before the full migration below, the builder accepted
+`GH_TOKEN`/`GITHUB_TOKEN` through a BuildKit secret; curl receives the authorization header over stdin, and retains
 its default cross-origin credential stripping. Download errors report the HTTP
 status and describe both authentication and local-installer remedies.
 
@@ -120,6 +120,38 @@ Validated on 16 October 2026:
 - Shell syntax and TypeScript checking of the download helper/tests passed.
   The GitHub-authenticated user flow was checked with local test credentials;
   access to the upstream artifact still depends on the caller's GitHub account.
+
+## Installer migration into WinBoat
+
+On 16 October 2026 the complete verified Windows installer and its receipt were
+added to Git. Its executable SHA-256 remains
+`08f22b6685940834415fa3472fc7e6b864c7c46b5f972a8798377836adc0a886`.
+This is the existing imported upstream binary with retained provenance, not a
+claim that a new native Windows binary has already been compiled.
+
+- All seven Windows jobs now check out WinBoat and prepare its embedded sources
+  in a separate build tree. No job checks out the Helios root repository.
+- The installer, packaging, Windows build-tool, metadata, compatibility-header,
+  common tool and KMD-logic trees were compared across the original guest/host
+  commits and match. Their IDs extend the existing shared-source lock.
+- Normal packaging has no installer download path or GitHub token requirement.
+  It verifies both the complete embedded container and the repository's pinned
+  EXE hash. The former fetch command now verifies the included bundle locally.
+- All 17 Helios tests passed, including real bundled-binary validation, deliberate
+  CI-package adoption, rejection of foreign/mismatched provenance and a real Git
+  checkout with Windows-style newline conversion enabled. Source attributes
+  preserve both original LF and CRLF snapshot files and the source-lock digest.
+- PowerShell source preparation/reuse, build-directory isolation, receipt export,
+  corrupted-container rejection and skeleton rejection passed under PowerShell
+  7.5 on Linux. This is script/format evidence, not a native MSVC/WDK build.
+- The combined Docker/Bash build completed with `--skip-host`, using the
+  repository-bundled installer without any installer-download step. All 22
+  JavaScript tests, Go status tests, Vue checks, the guest-server cross-build
+  and the AppImage build passed. All six exported checksums passed. Extracting
+  the AppImage confirmed the bundled EXE pin and identical provenance receipt.
+- The Windows workflow passed actionlint. TypeScript checking of the new import
+  tools/tests and shell syntax checks passed; all 611 vendored source hashes
+  still match the immutable snapshot.
 
 Unverified: KVM execution, Windows driver loading/signature acceptance, actual
 provisioning reboots, GPU rendering, NVIDIA/AMD/Intel hardware compatibility,

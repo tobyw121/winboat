@@ -11,13 +11,29 @@
     "dxvk-helios": "6948271578bf2aa6481389a07b5070c95f911952",
     "vkd3d-proton-helios": "3d1ba76b2c2e89b657112b44e0771beff3677ebe",
     "venus-protocol": "fe08e82c3819e8ee3c547b1ea810fde61f46fa78",
-    "virglrenderer": "48cbbf401443e96c7e7f2cd113e432c557ebf6a0"
+    "virglrenderer": "48cbbf401443e96c7e7f2cd113e432c557ebf6a0",
+    "installer": "7d245e1913a3bce0839c913f7fcce6616af52c22",
+    "ci/windows": "430799dfcaf5df01e938ebd3c6cbb11cc712bf3b",
+    "packaging/windows": "1519c61ba17562d221c022d850eeaf692b938364",
+    "metadata": "0f8d59aaea73986ec27d7a6b8b62c4fc012a62cc",
+    "tools": "914d83b10ad6eb843ca585e73e7819cae70d7983",
+    "icd/win-build": "0e1ae24fee659d0c1a41e81f42bb0bd09903d88c",
+    "kmd_logic": "0f60330b416ab6d3b01f371ed2e2f8c116a7df87"
   },
-  "installerArtifact": {
-    "id": 11436728866,
-    "sha256": "56cd36ec48fb7dd1d470e5f3372c182b6e7370398e59ccff9bfecff9e7162f51",
-    "package": "helios-windows-x64-22.22.289.0-fecffde6.zip",
-    "entry": "helios-windows-x64-22.22.289.0-fecffde6/HeliosSetup.exe",
-    "executableSha256": "08f22b6685940834415fa3472fc7e6b864c7c46b5f972a8798377836adc0a886"
+  "installerBuild": {
+    "repository": "tobyw121/winboat",
+    "workflow": ".github/workflows/build-helios-windows.yml",
+    "sourceDirectory": "helios/upstream"
+  },
+  "bundledInstaller": {
+    "path": "resources/helios",
+    "sha256": "08f22b6685940834415fa3472fc7e6b864c7c46b5f972a8798377836adc0a886",
+    "provenance": {
+      "repository": "winboat-org/helios",
+      "revision": "fecffde64fd32399a877b452332681ef0db7993e",
+      "artifactId": 11436728866,
+      "archiveSha256": "56cd36ec48fb7dd1d470e5f3372c182b6e7370398e59ccff9bfecff9e7162f51",
+      "package": "helios-windows-x64-22.22.289.0-fecffde6.zip"
+    }
   }
 }

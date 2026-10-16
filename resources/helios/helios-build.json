@@ -1,0 +1,11 @@
+{
+  "revision": "fecffde64fd32399a877b452332681ef0db7993e",
+  "sha256": "08f22b6685940834415fa3472fc7e6b864c7c46b5f972a8798377836adc0a886",
+  "artifactId": 11436728866,
+  "provenance": {
+    "repository": "winboat-org/helios",
+    "revision": "fecffde64fd32399a877b452332681ef0db7993e",
+    "artifactId": 11436728866,
+    "kind": "imported-complete-bundle"
+  }
+}

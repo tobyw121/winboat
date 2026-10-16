@@ -1,5 +1,6 @@
 const path = require('node:path');
 module.exports = async () => {
-    const { verifyBundle } = await import('./bundle.ts');
-    verifyBundle(path.resolve(__dirname, '../../resources/helios'));
+    const { verifyPinnedInstaller } = await import('./bundled-installer.ts');
+    const root = path.resolve(__dirname, '../..');
+    verifyPinnedInstaller(path.join(root, 'resources/helios'), root);
 };

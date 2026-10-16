@@ -1,0 +1,6 @@
+# Keep the checksum-locked upstream snapshot byte-identical on Windows too.
+helios/upstream/** -text
+helios/source.lock.json text eol=lf
+helios/stack.lock.json text eol=lf
+resources/helios/HeliosSetup.exe binary
+resources/helios/helios-build.json text eol=lf

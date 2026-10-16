@@ -1,9 +1,16 @@
 name: Build WinBoat Helios Windows installer
 
-# Adapted from winboat-org/helios at the pinned source revision below.
-# Builds the upstream installer and complete native/WoW64 driver payload.
+# Builds the embedded Helios first-party sources owned by this WinBoat checkout.
+# Only pinned third-party engines/loaders are fetched into a separate build tree.
 on:
   workflow_dispatch:
+  push:
+    branches: [work]
+    paths:
+      - '.github/workflows/build-helios-windows.yml'
+      - 'scripts/helios/windows/**'
+      - 'helios/upstream/**'
+      - 'helios/source.lock.json'
 
 permissions:
   contents: read
@@ -11,6 +18,10 @@ permissions:
 concurrency:
   group: windows-stack-${{ github.ref }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: temp/helios-windows
 
 env:
   PYTHON_VERSION: '3.12'
@@ -40,14 +51,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: winboat-org/helios
-          ref: fecffde64fd32399a877b452332681ef0db7993e
           persist-credentials: false
           submodules: false
           fetch-depth: 1
-      - name: Initialize DXVK and vkd3d sources
+      - name: Check WinBoat installer integration
         shell: pwsh
-        run: git submodule update --init --recursive dxvk-helios vkd3d-proton-helios
+        working-directory: .
+        run: ./tests/helios-windows.test.ps1 -RepoRoot $env:GITHUB_WORKSPACE
+      - name: Prepare embedded Helios sources
+        shell: pwsh
+        working-directory: .
+        run: ./scripts/helios/windows/Initialize-Sources.ps1 -RepoRoot $env:GITHUB_WORKSPACE -Component driver
       - name: Check registry snapshot preservation (PowerShell 7)
         shell: pwsh
         run: ./packaging/windows/Test-HeliosRegistrySnapshots.ps1
@@ -103,7 +117,7 @@ jobs:
         run: ./ci/windows/Install-WindowsDriverKit.ps1
       - name: Build driver package
         shell: pwsh
-        run: ./ci/windows/Build-Driver.ps1 -RepoRoot $env:GITHUB_WORKSPACE -OutputDir "$env:RUNNER_TEMP/helios-driver" -Configuration ${{ matrix.configuration }}
+        run: ./ci/windows/Build-Driver.ps1 -RepoRoot $env:HELIOS_SOURCE_ROOT -OutputDir "$env:RUNNER_TEMP/helios-driver" -Configuration ${{ matrix.configuration }}
       - uses: actions/upload-artifact@v4
         with:
           name: helios-driver-${{ matrix.configuration }}
@@ -124,14 +138,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: winboat-org/helios
-          ref: fecffde64fd32399a877b452332681ef0db7993e
           persist-credentials: false
           submodules: false
           fetch-depth: 1
-      - name: Initialize Mesa fork
+      - name: Prepare embedded Helios sources
         shell: pwsh
-        run: git submodule update --init icd/mesa
+        working-directory: .
+        run: ./scripts/helios/windows/Initialize-Sources.ps1 -RepoRoot $env:GITHUB_WORKSPACE -Component mesa
       - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884
         with:
           msystem: UCRT64
@@ -152,7 +165,7 @@ jobs:
             flex
       - name: Build Mesa runtime
         shell: msys2 {0}
-        run: bash ./ci/windows/build-mesa.sh "$GITHUB_WORKSPACE" "$RUNNER_TEMP/helios-mesa"
+        run: bash ./ci/windows/build-mesa.sh "$HELIOS_SOURCE_ROOT" "$RUNNER_TEMP/helios-mesa"
       - uses: actions/upload-artifact@v4
         with:
           name: helios-mesa
@@ -167,14 +180,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: winboat-org/helios
-          ref: fecffde64fd32399a877b452332681ef0db7993e
           persist-credentials: false
           submodules: false
           fetch-depth: 1
-      - name: Initialize Mesa fork
+      - name: Prepare embedded Helios sources
         shell: pwsh
-        run: git submodule update --init icd/mesa
+        working-directory: .
+        run: ./scripts/helios/windows/Initialize-Sources.ps1 -RepoRoot $env:GITHUB_WORKSPACE -Component mesa
       - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884
         with:
           msystem: MINGW32
@@ -195,7 +207,7 @@ jobs:
             flex
       - name: Build WoW64 Mesa runtime
         shell: msys2 {0}
-        run: bash ./ci/windows/build-mesa.sh "$GITHUB_WORKSPACE" "$RUNNER_TEMP/helios-mesa-x86"
+        run: bash ./ci/windows/build-mesa.sh "$HELIOS_SOURCE_ROOT" "$RUNNER_TEMP/helios-mesa-x86"
       - uses: actions/upload-artifact@v4
         with:
           name: helios-mesa-x86
@@ -210,11 +222,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: winboat-org/helios
-          ref: fecffde64fd32399a877b452332681ef0db7993e
           persist-credentials: false
           submodules: false
           fetch-depth: 1
+      - name: Prepare embedded Helios sources
+        shell: pwsh
+        working-directory: .
+        run: ./scripts/helios/windows/Initialize-Sources.ps1 -RepoRoot $env:GITHUB_WORKSPACE -Component none
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -253,16 +267,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: winboat-org/helios
-          ref: fecffde64fd32399a877b452332681ef0db7993e
           persist-credentials: false
           submodules: false
           fetch-depth: 1
+      - name: Prepare embedded Helios sources
+        shell: pwsh
+        working-directory: .
+        run: ./scripts/helios/windows/Initialize-Sources.ps1 -RepoRoot $env:GITHUB_WORKSPACE -Component none
       - name: Build official loaders and probes
         shell: pwsh
         run: >-
           ./ci/windows/Build-KhronosLoaders.ps1
-          -RepoRoot $env:GITHUB_WORKSPACE
+          -RepoRoot $env:HELIOS_SOURCE_ROOT
           -OutputDir "$env:RUNNER_TEMP/helios-loaders"
           -VulkanLoaderCommit $env:VULKAN_LOADER_COMMIT
           -VulkanHeadersCommit $env:VULKAN_HEADERS_COMMIT
@@ -282,16 +298,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: winboat-org/helios
-          ref: fecffde64fd32399a877b452332681ef0db7993e
           persist-credentials: false
           submodules: false
           fetch-depth: 1
+      - name: Prepare embedded Helios sources
+        shell: pwsh
+        working-directory: .
+        run: ./scripts/helios/windows/Initialize-Sources.ps1 -RepoRoot $env:GITHUB_WORKSPACE -Component none
       - name: Build and validate compatibility shims
         shell: pwsh
         run: >-
           ./ci/windows/Build-CompatibilityShims.ps1
-          -RepoRoot $env:GITHUB_WORKSPACE
+          -RepoRoot $env:HELIOS_SOURCE_ROOT
           -OutputDir "$env:RUNNER_TEMP/helios-compatibility"
       - uses: actions/upload-artifact@v4
         with:
@@ -312,11 +330,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: winboat-org/helios
-          ref: fecffde64fd32399a877b452332681ef0db7993e
           persist-credentials: false
           submodules: false
           fetch-depth: 1
+      - name: Prepare embedded Helios sources
+        shell: pwsh
+        working-directory: .
+        run: ./scripts/helios/windows/Initialize-Sources.ps1 -RepoRoot $env:GITHUB_WORKSPACE -Component none
       - uses: actions/download-artifact@v4
         with:
           name: helios-driver-${{ matrix.configuration }}
@@ -357,21 +377,23 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - name: Build the self-contained installer skeleton
         shell: pwsh
-        run: ./ci/windows/Build-Installer.ps1 -RepoRoot $env:GITHUB_WORKSPACE -OutputDir "$env:RUNNER_TEMP/helios-installer" -Configuration ${{ matrix.configuration }}
+        run: ./ci/windows/Build-Installer.ps1 -RepoRoot $env:HELIOS_SOURCE_ROOT -OutputDir "$env:RUNNER_TEMP/helios-installer" -Configuration ${{ matrix.configuration }}
       - name: Read package metadata
         id: metadata
         shell: pwsh
         run: |
           $version = (Get-Content kmd_render/driver-version.env | Where-Object { $_ -match '^HELIOS_KMD_VERSION=' }) -replace '^HELIOS_KMD_VERSION=', ''
           "version=$version" >> $env:GITHUB_OUTPUT
-          "mesa=$(git rev-parse HEAD:icd/mesa)" >> $env:GITHUB_OUTPUT
-          "dxvk=$(git rev-parse HEAD:dxvk-helios)" >> $env:GITHUB_OUTPUT
-          "vkd3d=$(git rev-parse HEAD:vkd3d-proton-helios)" >> $env:GITHUB_OUTPUT
+          $stack = Get-Content (Join-Path $env:WINBOAT_ROOT 'helios/stack.lock.json') -Raw | ConvertFrom-Json
+          "guest=$($stack.guestRevision)" >> $env:GITHUB_OUTPUT
+          "mesa=$($stack.sharedSources.'icd/mesa')" >> $env:GITHUB_OUTPUT
+          "dxvk=$($stack.sharedSources.'dxvk-helios')" >> $env:GITHUB_OUTPUT
+          "vkd3d=$($stack.sharedSources.'vkd3d-proton-helios')" >> $env:GITHUB_OUTPUT
       - name: Assemble and test-sign bundle
         shell: pwsh
         run: >-
           ./ci/windows/Assemble-Package.ps1
-          -RepoRoot $env:GITHUB_WORKSPACE
+          -RepoRoot $env:HELIOS_SOURCE_ROOT
           -DriverArtifact "$env:RUNNER_TEMP/artifacts/driver"
           -MesaArtifact "$env:RUNNER_TEMP/artifacts/mesa"
           -MesaX86Artifact "$env:RUNNER_TEMP/artifacts/mesa-x86"
@@ -382,7 +404,7 @@ jobs:
           -OutputDir "$env:RUNNER_TEMP/helios-package"
           -Configuration '${{ matrix.configuration }}'
           -Version '${{ steps.metadata.outputs.version }}'
-          -RepositoryCommit "$(git rev-parse HEAD)"
+          -RepositoryCommit '${{ steps.metadata.outputs.guest }}'
           -MesaCommit '${{ steps.metadata.outputs.mesa }}'
           -DxvkCommit '${{ steps.metadata.outputs.dxvk }}'
           -Vkd3dCommit '${{ steps.metadata.outputs.vkd3d }}'
@@ -393,16 +415,11 @@ jobs:
           -OpenClHeadersCommit $env:OPENCL_HEADERS_COMMIT
       - name: Export the complete installer and paired WinBoat receipt
         shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $root = Join-Path $env:RUNNER_TEMP 'helios-package'
-          $installer = @(Get-ChildItem -LiteralPath $root -Filter HeliosSetup.exe -Recurse -File)
-          if ($installer.Count -ne 1) { throw 'Expected exactly one complete installer.' }
-          $revision = (git rev-parse HEAD).Trim()
-          if ($revision -ne 'fecffde64fd32399a877b452332681ef0db7993e') { throw 'Unexpected Helios source revision.' }
-          Copy-Item -LiteralPath $installer[0].FullName -Destination (Join-Path $root 'HeliosSetup.exe')
-          @{ revision = $revision; sha256 = (Get-FileHash -LiteralPath $installer[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() } |
-            ConvertTo-Json | Set-Content -LiteralPath (Join-Path $root 'helios-build.json') -Encoding ascii
+        run: >-
+          & "$env:WINBOAT_ROOT/scripts/helios/windows/Export-Installer.ps1"
+          -RepoRoot $env:WINBOAT_ROOT
+          -PackageRoot "$env:RUNNER_TEMP/helios-package"
+          -WinBoatCommit $env:GITHUB_SHA
       - uses: actions/upload-artifact@v4
         with:
           name: helios-windows-x64-${{ steps.metadata.outputs.version }}-${{ matrix.configuration }}

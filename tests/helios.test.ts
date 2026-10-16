@@ -107,12 +107,19 @@ test('host and Windows CI follow the pinned compatible stack', () => {
         for (const step of job.steps) {
             if (step.uses?.startsWith('actions/checkout@')) {
                 checkouts++;
-                assert.equal(step.with.repository, 'winboat-org/helios');
-                assert.equal(step.with.ref, HELIOS_GUEST_REVISION);
+                assert.equal(step.with.repository, undefined);
+                assert.equal(step.with.ref, undefined);
+                assert.equal(step.with['persist-credentials'], false);
             }
         }
     }
     assert.ok(checkouts >= 5);
+    assert.equal(workflow.defaults.run['working-directory'], 'temp/helios-windows');
+    for (const job of Object.values(workflow.jobs) as any[]) {
+        const prepare = job.steps.find((step: any) => step.name === 'Prepare embedded Helios sources');
+        assert.ok(prepare?.run.includes('Initialize-Sources.ps1'));
+        assert.equal(prepare['working-directory'], '.');
+    }
     for (const filename of ['helios/host/Dockerfile', 'helios/host/build-stack.sh']) {
         assert.ok(fs.readFileSync(filename, 'utf8').includes(HELIOS_REVISION), filename);
     }

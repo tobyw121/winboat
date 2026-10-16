@@ -1,7 +1,8 @@
 /** Host image and Windows bundle are one versioned graphics stack. */
 export const HELIOS_REVISION = 'd82ce565ac792eb48da5e59f2a82a12ff221851d';
-// Last complete upstream Windows bundle; all guest/protocol source trees match
-// the host pin. See helios/stack.lock.json for immutable provenance.
+// Guest source compatibility identity. The embedded installer, Windows build
+// tools and guest/transport trees match this commit and the host snapshot.
+// The bundled EXE's actual build provenance and hash live in stack.lock.json.
 export const HELIOS_GUEST_REVISION = 'fecffde64fd32399a877b452332681ef0db7993e';
 export const HELIOS_IMAGE = `winboat/helios:${HELIOS_REVISION.slice(0, 12)}`;
 export const HELIOS_LABEL = 'org.winboat.helios.revision';

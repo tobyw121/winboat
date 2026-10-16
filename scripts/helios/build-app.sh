@@ -8,9 +8,6 @@ case "${1:-AppImage}" in
     *) echo 'Expected package target AppImage or all.' >&2; exit 2 ;;
 esac
 python3 scripts/helios/verify-source.py
-if [[ ! -e resources/helios/HeliosSetup.exe && ! -e resources/helios/helios-build.json ]]; then
-    npm run helios:fetch-installer
-fi
 npm run helios:stage -- resources/helios
 npm run test:helios
 npm run test:virgl

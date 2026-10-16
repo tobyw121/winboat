@@ -79,11 +79,12 @@ Buildx, build both with:
 ./scripts/build-helios.sh
 ```
 
-This builds the Helios host image and a WinBoat AppImage with the verified
-Windows installer. Automatic download of the GitHub Actions installer normally
-requires `GH_TOKEN` or `GITHUB_TOKEN` with Actions read access to `winboat-org/helios`;
-the script passes it as a BuildKit secret. Add `--all-packages` for DEB, RPM and tar.gz or
-`--installer-dir /path/to/artifact` for a Windows installer built by CI.
+This builds the Helios host image and a WinBoat AppImage with the complete,
+checksum-pinned Windows installer already included in this Git repository.
+No GitHub artifact download or token is needed for that installer.
+Add `--all-packages` for DEB, RPM and tar.gz. The
+[Windows build workflow](docs/helios-windows-build.md) rebuilds the installer and
+its full driver payload from the embedded sources in this WinBoat checkout.
 See [the complete local build instructions](docs/build-helios-local.md).
 The optional [native Helios desktop](docs/helios-local-display.md) is built into
 the application and can be enabled in Settings; the default remains Browser Display.
