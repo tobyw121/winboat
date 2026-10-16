@@ -40,6 +40,8 @@ WinBoat zeigt die AME-Ursache auch bei einem zurückgesetzten HTTP-Zugriff an.
    Installationsindex eingebettet. Die originale `msoobe.exe` bleibt als
    `msoobeext.exe` erhalten; der originale AME-Shim übernimmt ihren Platz.
    `iso.conf` und `oobe.conf` entsprechen AMEs Datenformaten.
+   Der gepinnte Shim benötigt den Dateinamen `AME.Client.exe`, der Dienst
+   dagegen `OOBE.exe`. Beide Namen enthalten denselben unveränderten Client.
 5. Die Antwortdateien wählen Pro aus und überlassen AME die Benutzererstellung.
    `SetupComplete.cmd` übernimmt die Installation des WinBoat-Gastdienstes;
    ein vorhandener WIM-SetupComplete-Hook wird vorher ausgeführt.
@@ -112,6 +114,23 @@ enthalten die gewählten Windows-Anmeldedaten und sollten privat bleiben.
 Status: `C:\ProgramData\WinBoat\Atlas\status.json`, API `/provisioning/atlas`.
 OOBE-Dateien/AME-Logs: `C:\ProgramData\AME\OOBE`.
 WinBoat wartet auf einen überprüften Abschluss, nicht nur auf kopierte Dateien.
+
+### Normale Windows-Anmeldung mit „Other users“ nach ISO-Injection
+
+Eine ältere Injection hat `AME.Client.exe` in `OOBE.exe` umbenannt. Der
+mitgelieferte Shim prüft jedoch ausdrücklich `AME.Client.exe`; fehlt diese
+Datei, wechselt er zur Microsoft-OOBE zurück, stellt die ursprüngliche
+`msoobe.exe` wieder her und entfernt den AME-Dienst. Da die Antwortdatei die
+Benutzererstellung AME überlässt, können dann auch die gewählten Windows-
+Zugangsdaten fehlen. Die Korrektur behält beide benötigten Client-Dateinamen.
+
+Sie gilt für neu vorbereitete Installationsmedien. Eine bereits installierte
+Windows-Kopie wird durch einen Git-Pull oder Container-Neustart nicht erneut
+injiziert. Bei einer neuen Einrichtung einen anderen VM-Speicherordner wählen
+und die alte VM behalten; ein wiederverwendetes fertiges Installationsabbild
+enthält weiterhin die alte Injection. WIM-Warnungen über fehlende optionale
+Integritätstabellen sind kein Beleg für diesen OOBE-Fehler. AME-Ressourcen und
+Atlas-Archiv werden unabhängig davon gegen festgelegte SHA-256-Werte geprüft.
 
 Geprüft: echte WIM-/ESD-/Hive-Bearbeitung mit synthetischen Windows-Dateien,
 Pro-Auswahl bei mehreren Editionen, unveränderte andere Editionen, beide Modi,

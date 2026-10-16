@@ -1,5 +1,20 @@
 # Validation record
 
+## AME OOBE client filename repair, 17 October 2026 (Berlin)
+
+- The pinned original shim's `Main` checks `%PROGRAMDATA%\AME\OOBE\AME.Client.exe`
+  and `oobe.conf` before starting AME. Its contingency restores the Microsoft
+  OOBE executable and removes the AME service. The old injection only retained
+  `OOBE.exe`, matching the service but failing the shim's first check.
+- Injection now retains both names with identical original client contents.
+  Seven real WIM/ESD/hive tests passed, including both entry points and the
+  selected username/password configuration. The actual original Wizard/Atlas
+  integration test also passed: the shim and both client paths inside the WIM
+  match the pinned SHA-256 values. These tests do not execute Windows.
+- Three Atlas and 27 Helios application tests passed. The fix applies to newly
+  prepared media; an already-installed guest that took the contingency path
+  is not repaired by updating only the Docker/OEM scripts.
+
 ## Windows installation display repair, 16 October 2026 (UTC)
 
 - Runtime `glvnd-v3` adds bootstrap VGA before the Helios GPU until the host

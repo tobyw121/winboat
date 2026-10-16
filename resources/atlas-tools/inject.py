@@ -214,7 +214,9 @@ def inject(tree, media):
                 'rename /Windows/System32/OOBE/msoobe.exe /Windows/System32/OOBE/msoobeext.exe')
         update(wim, index, oobe / 'oobe_shim.exe', '/Windows/System32/OOBE/msoobe.exe')
         (oobe / 'oobe_shim.exe').unlink()
-        (oobe / 'AME.Client.exe').rename(oobe / 'OOBE.exe')
+        # The pinned shim requires AME.Client.exe; the service requires OOBE.exe.
+        # Keep both names. WIM stores their identical data as a shared blob.
+        shutil.copyfile(oobe / 'AME.Client.exe', oobe / 'OOBE.exe')
         update(wim, index, oobe, '/ProgramData/AME/OOBE')
         for name in ['SOFTWARE', 'SYSTEM']:
             update(wim, index, work / name, f'/Windows/System32/config/{name}')

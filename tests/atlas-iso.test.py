@@ -121,6 +121,8 @@ class MediaTests(unittest.TestCase):
         self.assertEqual(original_home, self.read(self.wim, 1, '/Windows/System32/config/SOFTWARE'))
         self.assertEqual(self.read(self.wim, 2, '/Windows/System32/oobe/msoobeext.exe'), b'MZ-original-Windows-OOBE-fixture')
         self.assertEqual(self.read(self.wim, 2, '/Windows/System32/oobe/msoobe.exe'), b'MZ-oobe_shim.exe-fixture')
+        for name in ['AME.Client.exe', 'OOBE.exe']:
+            self.assertEqual(self.read(self.wim, 2, f'/ProgramData/AME/OOBE/{name}'), b'MZ-AME.Client.exe-fixture')
         self.assertEqual(self.read(self.wim, 2, '/Windows/Setup/Scripts/WinBoatOriginalSetupComplete.cmd'), b'@echo preserve-custom-WIM-hook\r\n')
         self.assertIn(b'WinBoatOriginalSetupComplete.cmd', self.read(self.wim, 2, '/Windows/Setup/Scripts/SetupComplete.cmd'))
         self.assertEqual(list((self.sources / '$OEM$' / '$1' / 'OEM' / 'atlas').iterdir()), [])
@@ -133,6 +135,7 @@ class MediaTests(unittest.TestCase):
         self.assert_answer(self.read(self.boot, 2, '/autounattend.xml'), True)
         self.assert_answer((self.tree / 'autounattend.xml').read_bytes(), True)
         config = ET.fromstring(self.read(self.wim, 2, '/ProgramData/AME/OOBE/oobe.conf'))
+        self.assertEqual(config.findtext('Username'), 'testuser')
         self.assertEqual(config.findtext('Password'), 'secret<&')
         self.assertEqual([n.text for n in config.findall('Options/string')], OPTIONS)
         marker = json.loads((self.tree / 'winboat-atlas-iso.json').read_text())

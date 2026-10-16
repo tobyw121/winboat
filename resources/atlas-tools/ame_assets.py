@@ -34,6 +34,12 @@ def extract_oobe(wizard, output):
                                f'TrustedUninstaller.Shared.Properties.{name}')
                 if hashlib.sha256(payload).hexdigest() != expected or not payload.startswith(b'MZ'):
                     raise ValueError(f'Invalid AME OOBE resource: {name}')
+                if name == 'oobe_shim.exe':
+                    # This pinned shim checks this filename before starting AME;
+                    # otherwise it restores Microsoft's OOBE and removes its service.
+                    client_path = r'%PROGRAMDATA%\AME\OOBE\AME.Client.exe'
+                    if client_path.encode('utf-16-le') not in payload:
+                        raise ValueError('Unsupported AME shim client path contract')
                 (Path(output) / name).write_bytes(payload)
         finally:
             inner.close()
