@@ -1,4 +1,4 @@
-import { configureHelios, validateHeliosProgress } from '../../shared/helios';
+import { configureHelios, validateHeliosProgress, HELIOS_REVISION } from '../../shared/helios';
 import { requireHelios, heliosBundlePath } from './helios';
 import { configureVmIdentity } from '../../shared/vm-identity';
 import { loadOrCreateVmIdentity } from '../../shared/vm-identity-store';
@@ -449,7 +449,15 @@ export class InstallManager {
             if (!response.ok) throw new Error(`Helios status API returned HTTP ${response.status}. Update the Windows guest server.`);
             const progress = validateHeliosProgress(await response.json());
             this.setPreinstallMsg(progress.message || progress.status);
-            if (progress.status === 'finished') return;
+            if (progress.status === 'finished') {
+                // The next container start can remove the installation VGA.
+                // Never interrupt Windows/AME by recreating this running VM.
+                const marker = path.join(this.conf.installFolder, '.winboat-helios-ready');
+                const temporary = `${marker}.${process.pid}.${Date.now()}.tmp`;
+                fs.writeFileSync(temporary, `${HELIOS_REVISION}\n`, { flag: 'wx', mode: 0o600 });
+                fs.renameSync(temporary, marker);
+                return;
+            }
             await this.sleep(5000);
         }
         throw new Error('Helios installation timed out. Inspect C:\\ProgramData\\Helios\\logs\\setup.log in Windows.');

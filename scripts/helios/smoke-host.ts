@@ -7,8 +7,8 @@ import path from 'node:path';
 import net from 'node:net';
 import { HELIOS_IMAGE, HELIOS_LABEL, HELIOS_REVISION, HELIOS_RUNTIME_LABEL, HELIOS_RUNTIME_VERSION } from '../../src/shared/helios.ts';
 import { HELIOS_DISPLAY_CAPABILITY, HELIOS_DISPLAY_VERSION } from '../../src/shared/helios-display.ts';
-function docker(args: string[], input?: string): string {
-    const result = spawnSync('docker', args, { input, encoding: 'utf8', timeout: 30000, maxBuffer: 8 * 1024 * 1024 });
+function docker(args: string[], input?: string, timeout = 30000): string {
+    const result = spawnSync('docker', args, { input, encoding: 'utf8', timeout, maxBuffer: 8 * 1024 * 1024 });
     if (result.error) throw result.error;
     assert.equal(result.status, 0, result.stderr);
     return result.stdout;
@@ -23,6 +23,7 @@ const display = docker(['run', '--rm', '-i', '--network', 'none', '--device', '/
     '-e', 'RENDERNODE=/dev/dri/renderD128', '-e', 'RAM_SIZE=128M', '-e', 'VNC_PORT=5900', '-e', 'WSS_PORT=5700',
     '--entrypoint', 'bash', HELIOS_IMAGE, '-s'], startup);
 assert.ok(display.includes('venus=on,blob=on'));
+assert.ok(display.includes('-device VGA,id=helios-bootstrap -device virtio-gpu-gl-pci'));
 assert.ok(display.includes('memory-backend-memfd,id=helios-ram,size=128M,share=on'));
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'winboat-display-args-'));
 const socket = net.createServer();
@@ -35,6 +36,7 @@ try {
     assert.ok(local.includes('dbus,addr=unix:path=/run/helios-display/bus,gl=on,rendernode=/dev/dri/renderD128'));
     assert.ok(local.includes('-vnc :0,websocket=5700'));
     assert.ok(local.includes('venus=on,blob=on'));
+    assert.ok(local.includes('-device VGA,id=helios-bootstrap -device virtio-gpu-gl-pci'));
 } finally {
     await new Promise<void>(resolve => socket.close(() => resolve()));
     fs.rmSync(temporary, { recursive: true });
@@ -52,6 +54,11 @@ try {
     console.log(docker(['run', '--rm', '--network', 'none',
         '-v', `${probe}/probe:/opt/helios/qemu/bin/qemu-system-x86_64:ro`,
         '--entrypoint', 'qemu-system-x86_64', HELIOS_IMAGE]).trim());
+    fs.copyFileSync(new URL('../../tests/helios-bootstrap-qemu.py', import.meta.url), path.join(probe, 'bootstrap.py'));
+    console.log(docker(['run', '--rm', '--network', 'none', '-v', `${probe}:/test`,
+        '--entrypoint', 'python3', HELIOS_IMAGE, '/test/bootstrap.py', '/test/bootstrap.ppm'], undefined, 60000).trim());
+    fs.mkdirSync(new URL('../../dist/', import.meta.url), { recursive: true });
+    fs.copyFileSync(path.join(probe, 'bootstrap.ppm'), new URL('../../dist/helios-bootstrap-smoke.ppm', import.meta.url));
 } finally {
     fs.rmSync(probe, { recursive: true });
 }

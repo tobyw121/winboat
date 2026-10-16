@@ -12,7 +12,7 @@ set -Eeuo pipefail
 # Keep Browser Display available in both the EGL and native D-Bus modes.
 DISPLAY=web
 # Headless EGL creates the host rendering context; VNC/WebSocket carries the
-# Helios scanout. No extra standard VGA adapter or full GPU passthrough.
+# Helios scanout. A bootstrap VGA supplies Windows Setup/AME's initial display.
 case "${HELIOS_DISPLAY:-novnc}" in
     novnc) DISPLAY_OPTS="-display egl-headless,rendernode=$RENDERNODE -vga none" ;;
     dbus)
@@ -20,6 +20,24 @@ case "${HELIOS_DISPLAY:-novnc}" in
         DISPLAY_OPTS="-display dbus,addr=unix:path=/run/helios-display/bus,gl=on,rendernode=$RENDERNODE -vga none"
         ;;
     *) echo 'Invalid HELIOS_DISPLAY mode.' >&2; exit 1 ;;
+esac
+# The upstream launcher also supplies VGA for installation, before Windows has
+# the Helios driver. Create it first so VNC and the GTK viewer's Console_0 show it.
+: "${HELIOS_BOOTSTRAP_DISPLAY:=auto}"
+bootstrap="$HELIOS_BOOTSTRAP_DISPLAY"
+if [[ "$bootstrap" == auto ]]; then
+    bootstrap=1
+    ready="${STORAGE:-/storage}/.winboat-helios-ready"
+    if [[ -f "$ready" && ! -L "$ready" && "$(stat -c%s "$ready")" == 41 && "$(cat "$ready")" == "$HELIOS_REVISION" ]]; then
+        bootstrap=0
+    fi
+fi
+case "$bootstrap" in
+    1|yes)
+        DISPLAY_OPTS+=' -device VGA,id=helios-bootstrap'
+        echo 'Helios: bootstrap VGA enabled for Windows Setup/AME; Helios GPU remains attached.' ;;
+    0|no) ;;
+    *) echo 'Invalid HELIOS_BOOTSTRAP_DISPLAY (use auto, 1/yes or 0/no).' >&2; exit 1 ;;
 esac
 DISPLAY_OPTS+=" -device virtio-gpu-gl-pci,id=heliosgpu,venus=on,blob=on,hostmem=8G,max_hostmem=8G"
 DISPLAY_OPTS+=" -vnc :$((VNC_PORT - 5900)),websocket=$WSS_PORT"

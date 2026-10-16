@@ -81,7 +81,44 @@ Das Build-Skript erstellt dafür zusätzlich `winboat/atlas:0.5.0-hotfix`;
 das Helios-Image enthält dieselben Offline-Werkzeuge. Das Atlas-Playbook ist
 einschließlich Prüfsumme und Lizenz im Repository und AppImage enthalten.
 
-## QEMU bricht mit fehlendem OpenGL-Loader ab
+## Grafikprobleme beim Start
+
+### Kein Bild während Windows Setup oder AME
+
+`Display output is not active` kann auftreten, wenn nur die Helios-GPU vorhanden
+ist, deren Windows-Treiber erst später installiert wird. Die Runtime `glvnd-v3`
+fügt deshalb wie der upstream Helios-Installer einen Standard-VGA-Adapter vor
+der Helios-GPU hinzu. noVNC und der GTK-Viewer zeigen während der Einrichtung
+dessen Konsole 0. Die Helios-GPU bleibt angeschlossen.
+
+Nach geprüftem Gaststatus `finished` mit `installed=true` speichert der aktuelle
+WinBoat-Installer atomar `.winboat-helios-ready` im VM-Speicherverzeichnis. Beim
+nächsten Containerstart entfernt die Runtime den VGA-Adapter, sofern die
+Revision im Marker genau passt. Sie unterbricht oder startet Windows dafür
+nicht automatisch neu. Fehlende, veraltete und verlinkte Marker behalten VGA.
+
+`HELIOS_BOOTSTRAP_DISPLAY=auto` ist der Standard; `1`/`yes` erzwingt VGA,
+`0`/`no` deaktiviert es für eine bereits eingerichtete Helios-VM. Ein alter
+WinBoat-Installer schreibt diesen Marker noch nicht; nach einem reinen
+Container-Hotfix bleibt VGA deshalb bis zum manuellen Umschalten oder einer
+Einrichtung mit dem aktuellen Installer aktiv.
+
+Ein vorhandener Container kann ohne Löschen der VM oder erneuten ISO-Bau
+repariert werden (im WinBoat-Checkout):
+
+```bash
+git pull --ff-only origin work
+docker cp helios/host/display.sh WinBoat:/run/display.sh
+docker restart WinBoat
+docker logs --follow --tail 60 WinBoat
+```
+
+Dieser Hotfix ändert den vorhandenen Container; für künftige Container das
+Runtime-Image regulär neu bauen. Nach dem Neustart noVNC neu laden.
+Die Meldung `Windows started successfully` aus Dockurs Boot-Prüfung bestätigt
+seriellen Firmware-Text, nicht den erfolgreichen Abschluss von Windows oder AME.
+
+### Fehlende OpenGL-Loader
 
 `Couldn't open libGL.so.1 or libOpenGL.so.0` bedeutet, dass die Bibliotheken im
 Helios-Container fehlen. Der Host-Kernel ist nicht die Ursache dieses Fehlers.

@@ -1,5 +1,22 @@
 # Validation record
 
+## Windows installation display repair, 16 October 2026 (UTC)
+
+- Runtime `glvnd-v3` adds bootstrap VGA before the Helios GPU until the host
+  installer records a confirmed matching Helios installation. Marker absence,
+  stale revision, symlink rejection, explicit disable and invalid configuration
+  were exercised in both installed display modes through dockur's real scripts.
+- The complete host smoke passed, including the renderer-server regression and
+  shared-memfd QMP/TCG control. Image ID:
+  `sha256:86283af800693443214a9973011dbee92b429e24929774db4b2f4240f7500c08`.
+- A separate real OVMF/TCG boot with VGA first and a secondary **non-GL** VirtIO
+  GPU captured console 0 at 1280x800. The capture was visually inspected as a
+  readable UEFI shell, rather than QEMU's inactive-display placeholder.
+  Artifact: `dist/helios-bootstrap-smoke.ppm`.
+- All 27 Helios tests, Vue type checking and the renderer/main production build
+  passed. Windows Setup/AME, physical GL/Venus rendering and automatic removal
+  after a real Windows driver installation still require the user's VM.
+
 ## Renderer-server launcher repair, 16 October 2026 (UTC)
 
 - Reproduced the missing PID file with the actual paired renderer library:

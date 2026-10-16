@@ -55,7 +55,7 @@ export async function requireHelios(): Promise<{ renderNode: string; nvidia: boo
         const { stdout } = await promisify(execFile)('docker', ['image', 'inspect', '--format', `{{ index .Config.Labels "${HELIOS_LABEL}" }}`, HELIOS_IMAGE]);
         if (stdout.trim() !== HELIOS_REVISION) throw new Error('Image revision mismatch.');
         const { stdout: runtime } = await promisify(execFile)('docker', ['image', 'inspect', '--format', `{{ index .Config.Labels "${HELIOS_RUNTIME_LABEL}" }}`, HELIOS_IMAGE]);
-        if (runtime.trim() !== HELIOS_RUNTIME_VERSION) throw new Error('Image lacks the current Helios runtime and renderer-server launcher.');
+        if (runtime.trim() !== HELIOS_RUNTIME_VERSION) throw new Error('Image lacks the current Helios runtime and installation display.');
     } catch (error) {
         throw new Error(`Build the matching Helios host image with npm run build:helios:host. ${error}`);
     }

@@ -10,7 +10,31 @@ VNC_PORT=5900
 WSS_PORT=5700
 MON_PORT=7100
 WEB_PORT=8006
+temporary=$(mktemp -d)
+trap 'if [[ -f "$temporary/nginx.pid" ]]; then kill "$(cat "$temporary/nginx.pid")"; fi; rm -rf "$temporary"' EXIT
+STORAGE="$temporary/storage"
+mkdir -p "$STORAGE"
 source /run/utils.sh
+source /run/display.sh
+[[ "$DISPLAY_OPTS" == *'-device VGA,id=helios-bootstrap -device virtio-gpu-gl-pci'* ]]
+# A ready marker only belongs to a confirmed, matching Helios installation.
+printf '%s\n' "$HELIOS_REVISION" > "$STORAGE/.winboat-helios-ready"
+source /run/display.sh
+[[ "$DISPLAY_OPTS" != *'VGA,id=helios-bootstrap'* ]]
+printf 'stale-revision\n' > "$STORAGE/.winboat-helios-ready"
+source /run/display.sh
+[[ "$DISPLAY_OPTS" == *'VGA,id=helios-bootstrap'* ]]
+rm "$STORAGE/.winboat-helios-ready"
+printf '%s\n' "$HELIOS_REVISION" > "$temporary/external-marker"
+ln -s "$temporary/external-marker" "$STORAGE/.winboat-helios-ready"
+source /run/display.sh
+[[ "$DISPLAY_OPTS" == *'VGA,id=helios-bootstrap'* ]]
+HELIOS_BOOTSTRAP_DISPLAY=0
+source /run/display.sh
+[[ "$DISPLAY_OPTS" != *'VGA,id=helios-bootstrap'* ]]
+if (HELIOS_BOOTSTRAP_DISPLAY=invalid; source /run/display.sh) 2>/dev/null; then exit 1; fi
+rm "$STORAGE/.winboat-helios-ready"
+HELIOS_BOOTSTRAP_DISPLAY=auto
 source /run/display.sh
 
 # NAT must reserve the console's ports instead of forwarding them to Windows.
@@ -18,8 +42,6 @@ NETWORK=N
 source /run/network.sh
 [[ "$(getHostPorts 7149)" == '7149,5700,5900,7100,8006' ]]
 
-temporary=$(mktemp -d)
-trap 'if [[ -f "$temporary/nginx.pid" ]]; then kill "$(cat "$temporary/nginx.pid")"; fi; rm -rf "$temporary"' EXIT
 INFO="$temporary/msg.html"
 PAGE="$temporary/index.html"
 TEMPLATE=/var/www/index.html
