@@ -1,10 +1,25 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { ref, isProxy } from 'vue';
 import { configureHelios } from '../src/shared/helios';
 import { configureHeliosDisplay, heliosDisplayAddress, heliosDisplayBusConfig, heliosDisplayDirectory } from '../src/shared/helios-display';
 
 const service = () => ({ image: 'standard', devices: [], environment: { HELIOS: '1', ARGUMENTS: '-qmp tcp:0.0.0.0:7149,server,wait=off' },
     volumes: ['disk:/storage', '/home/alice:/shared'], ports: ['3389:3389'] });
+
+test('local display settings accept a reactive compose service without mutating it', () => {
+    const original = ref(service());
+    const before = JSON.stringify(original.value);
+    const local = configureHeliosDisplay(original.value, true, '/tmp/winboat-helios-1000');
+    assert.equal(local.environment.HELIOS_DISPLAY, 'dbus');
+    assert.equal(isProxy(local.ports), false);
+    local.ports.push('8006:8006');
+    assert.equal(JSON.stringify(original.value), before);
+    const disabled = configureHeliosDisplay(ref(local).value, false);
+    assert.deepEqual(disabled.volumes, original.value.volumes);
+    assert.equal(disabled.environment.HELIOS_DISPLAY, undefined);
+    assert.equal(local.environment.HELIOS_DISPLAY, 'dbus');
+});
 
 test('local display preserves disks, ports and existing QMP while mounting only its private bus read-only', () => {
     const original = service();

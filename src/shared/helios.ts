@@ -25,7 +25,9 @@ export function validateHeliosProgress(value: unknown): HeliosProgress {
 export function configureHelios<T extends { image: string; environment: Record<string, string>; devices: string[]; volumes?: string[]; gpus?: string; pull_policy?: string }>(
     service: T, enabled: boolean, renderNode?: string, nvidia = false,
 ): T {
-    const next = structuredClone(service);
+    // Compose data is JSON-compatible. JSON cloning also unwraps nested Vue
+    // proxies (such as the installer's ports), which structuredClone rejects.
+    const next = JSON.parse(JSON.stringify(service)) as T;
     delete next.environment.VIRGL;
     next.devices = next.devices.filter(device => device !== '/dev/dri:/dev/dri');
     if (enabled) {

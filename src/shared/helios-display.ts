@@ -30,7 +30,9 @@ export function heliosDisplayBusConfig(directory: string, uid: number): string {
 export function configureHeliosDisplay<T extends { environment: Record<string, string>; volumes: string[] }>(
     service: T, enabled: boolean, directory?: string,
 ): T {
-    const next = structuredClone(service);
+    // Settings pass a Vue-reactive service; clone its plain Compose data,
+    // including nested proxies, before changing mounts or environment values.
+    const next = JSON.parse(JSON.stringify(service)) as T;
     next.volumes = next.volumes.filter(volume => volume.split(':')[1] !== HELIOS_DISPLAY_MOUNT);
     delete next.environment.HELIOS_DISPLAY;
     if (enabled) {

@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { parse } from 'yaml';
+import { reactive, ref, isProxy } from 'vue';
 import { HELIOS_REVISION, HELIOS_GUEST_REVISION, HELIOS_IMAGE, configureHelios, validateHeliosProgress } from '../src/shared/helios';
 import { verifyBundle } from '../scripts/helios/bundle';
 
@@ -13,6 +14,28 @@ const service = () => ({
     environment: { ARGUMENTS: '-qmp tcp:0.0.0.0:7149,server,wait=off', VIRGL: '1', PASSWORD: 'local-test-value' },
     devices: ['/dev/kvm', '/dev/dri:/dev/dri', '/dev/snd:/dev/snd'],
     volumes: ['disk:/storage'], ports: ['3389:3389/tcp'],
+});
+
+test('installation and settings accept Vue proxies without retaining mutable source references', () => {
+    // Installation assigns ports from a reactive PortManager getter; settings
+    // pass the entire service through a ref. Unwrapping only the root misses ports.
+    const withReactivePorts = { ...service(), ports: reactive(service().ports) };
+    for (const original of [withReactivePorts, reactive(service()), ref(service()).value]) {
+        const before = JSON.stringify(original);
+        for (const enabled of [false, true]) {
+            const updated = configureHelios(original, enabled, '/dev/dri/renderD128');
+            assert.deepEqual(updated.ports, original.ports);
+            assert.equal(updated.environment.PASSWORD, original.environment.PASSWORD);
+            assert.equal(updated.environment.HELIOS, enabled ? '1' : undefined);
+            assert.equal(isProxy(updated.ports), false);
+            // Later installation steps adjust storage and ISO mappings.
+            updated.volumes.push('/tmp/install.iso:/boot.iso');
+            updated.ports.push('8006:8006');
+            updated.environment.PASSWORD = 'changed';
+            updated.devices.push('/dev/test');
+            assert.equal(JSON.stringify(original), before);
+        }
+    }
 });
 
 test('Helios configuration preserves VM data and QMP while selecting the paired stack', () => {
