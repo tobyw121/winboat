@@ -7,6 +7,8 @@ temp
 .idea
 .env
 .env.*
+**/winboat-hardware.json
+**/.winboat-hardware
 **/.git
 **/node_modules
 **/target

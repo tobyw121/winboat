@@ -11,6 +11,8 @@ package-lock.json
 # src/renderer/public/*
 
 # Custom
+winboat-hardware.json
+.winboat-hardware/
 # *.exe
 temp
 guest_server/winboat_guest_server.exe
