@@ -16,10 +16,11 @@
         "build:helios:host": "node scripts/helios/build-host.ts",
         "helios:stage": "node scripts/helios/stage.ts",
         "helios:adopt-installer": "node scripts/helios/adopt-installer.ts",
-        "test:helios": "tsx --test tests/helios.test.ts tests/helios-display.test.ts tests/helios-installer.test.ts",
+        "test:helios": "tsx --test tests/helios.test.ts tests/helios-display.test.ts tests/helios-installer.test.ts tests/vm-identity.test.ts",
         "build": "node scripts/build.ts",
         "helios:fetch-installer": "node scripts/helios/fetch-installer.ts",
         "test:helios:host": "node scripts/helios/smoke-host.ts",
+        "test:vm-identity:qemu": "node scripts/helios/smoke-identity.ts",
         "test:helios:viewer": "bash scripts/helios/smoke-viewer.sh",
         "test:helios:windows": "pwsh -NoProfile -File tests/helios-windows.test.ps1"
     },

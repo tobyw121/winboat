@@ -24,6 +24,8 @@ export type InstallConfiguration = {
     customIsoPath?: string;
     shareHomeFolder: boolean;
     heliosEnabled: boolean;
+    hardwareIdentityEnabled: boolean;
+    reduceCpuMarkers: boolean;
 }
 
 export type WinApp = {

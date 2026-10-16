@@ -205,6 +205,8 @@ docker load -i winboat-helios-host-d82ce565ac79.tar.gz
 ```
 
 Bei einer neuen VM Helios wählen; WinBoat übernimmt die Treiberinstallation.
+Der Assistent bietet außerdem ein [Hardware-Kompatibilitätsprofil](vm-hardware-profile.md)
+mit einmaligen Zufallskennungen und separat abschaltbaren CPU-Anpassungen.
 Bestehende VMs nach der [Migrationsanleitung](helios.md#existing-vms-and-rollback)
 umstellen und vorher die Windows-Disk sichern.
 

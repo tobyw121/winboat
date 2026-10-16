@@ -1,5 +1,7 @@
 import { configureHelios, validateHeliosProgress } from '../../shared/helios';
 import { requireHelios, heliosBundlePath } from './helios';
+import { configureVmIdentity } from '../../shared/vm-identity';
+import { loadOrCreateVmIdentity } from '../../shared/vm-identity-store';
 import { type ComposeConfig, type InstallConfiguration } from "../../types";
 import {
     GUEST_API_PORT,
@@ -151,6 +153,12 @@ export class InstallManager {
         const host = this.conf.heliosEnabled ? await requireHelios() : undefined;
         composeContent.services.windows = configureHelios(composeContent.services.windows,
             this.conf.heliosEnabled, host?.renderNode, host?.nvidia);
+        if (this.conf.hardwareIdentityEnabled) {
+            const os: typeof import('os') = require('os');
+            const hardwareIdentity = loadOrCreateVmIdentity(fs, this.conf.installFolder,
+                os.cpus()[0]?.model || '');
+            composeContent.services.windows = configureVmIdentity(composeContent.services.windows, hardwareIdentity, this.conf.reduceCpuMarkers);
+        }
 
         // Boot image mapping
         if (this.conf.customIsoPath) {

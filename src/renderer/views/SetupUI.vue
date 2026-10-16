@@ -451,6 +451,20 @@
                             </div>
 
                             <div>
+                                <x-card class="flex flex-row justify-between items-center p-4 w-full bg-neutral-800/20">
+                                    <div>
+                                        <h2 class="my-0 text-base font-semibold">Hardware compatibility profile</h2>
+                                        <p class="text-neutral-400 text-sm">Use host manufacturer/model names with new random serials and a fixed identity for this VM. Does not make the VM undetectable.</p>
+                                        <label v-if="hardwareIdentityEnabled" class="flex items-center gap-3 text-sm text-neutral-300">
+                                            <x-switch :toggled="reduceCpuMarkers" @toggle="reduceCpuMarkers = !reduceCpuMarkers"></x-switch>
+                                            Reduce hypervisor CPU identifiers (may reduce performance)
+                                        </label>
+                                    </div>
+                                    <x-switch :toggled="hardwareIdentityEnabled" @toggle="hardwareIdentityEnabled = !hardwareIdentityEnabled" size="large"></x-switch>
+                                </x-card>
+                            </div>
+
+                            <div>
                                 <label for="select-disk" class="text-sm text-neutral-400">
                                     Select Disk Size
                                     <span
@@ -554,6 +568,10 @@
                                 <div class="flex flex-col">
                                     <span class="text-sm text-gray-400">Helios Acceleration</span>
                                     <span class="text-base text-white">{{ heliosEnabled && heliosSupportAvailable ? 'Enabled' : 'Disabled' }}</span>
+                                </div>
+                                <div class="flex flex-col">
+                                    <span class="text-sm text-gray-400">Hardware profile / CPU compatibility</span>
+                                    <span class="text-base text-white">{{ hardwareIdentityEnabled ? (reduceCpuMarkers ? 'Enabled / Reduced identifiers' : 'Enabled / Standard CPU') : 'Disabled' }}</span>
                                 </div>
                                 <div class="flex flex-col">
                                     <span class="text-sm text-gray-400">Username</span>
@@ -744,6 +762,8 @@ const password = ref("");
 const confirmPassword = ref("");
 const homeFolderSharing = ref(false);
 const heliosEnabled = ref(true);
+const hardwareIdentityEnabled = ref(true);
+const reduceCpuMarkers = ref(true);
 const heliosSupportAvailable = ref(checkHeliosSupport());
 const installState = ref<InstallState>(InstallStates.IDLE);
 const preinstallMsg = ref("");
@@ -920,6 +940,8 @@ function install() {
         password: password.value,
         shareHomeFolder: homeFolderSharing.value,
         heliosEnabled: heliosEnabled.value && heliosSupportAvailable.value,
+        hardwareIdentityEnabled: hardwareIdentityEnabled.value,
+        reduceCpuMarkers: reduceCpuMarkers.value,
         ...(customIsoPath.value ? { customIsoPath: customIsoPath.value } : {}),
     };
 

@@ -26,6 +26,7 @@ find dist -maxdepth 1 -type f \( -name '*.AppImage' -o -name '*.deb' -o -name '*
 cp resources/helios/HeliosSetup.exe resources/helios/helios-build.json /out/
 cp docs/build-helios-local.md /out/BUILD-INSTRUCTIONS.md
 cp docs/helios-local-display.md /out/LOCAL-DISPLAY.md
+cp docs/vm-hardware-profile.md /out/vm-hardware-profile.md
 node --input-type=module - <<'JS' > /out/BUILD-INFO.json
 import fs from 'node:fs';
 import crypto from 'node:crypto';
