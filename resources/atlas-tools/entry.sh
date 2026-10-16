@@ -10,6 +10,9 @@ if ! grep -q '^# WinBoat Atlas ISO injection$' /run/install.sh; then
     replacement=$'# WinBoat Atlas ISO injection\n. /oem/.winboat-atlas/inject.sh "$DIR"\n\n'
     replacement+="$anchor"
     printf '%s\n' "${content/"$anchor"/"$replacement"}" > /run/install.sh
+    # Dockur normally falls back to booting unknown custom media unchanged.
+    # With Atlas selected, preparation errors must fail instead of silently skipping it.
+    sed -i '/^abortInstall() {$/a\  error "Atlas requires compatible Windows installation media; preparation failed."; return 1' /run/install.sh
 fi
 if [[ "${WINBOAT_HARDWARE_PROFILE:-}" == 1 ]]; then
     exec /bin/bash /oem/.winboat-hardware/entry.sh "$@"

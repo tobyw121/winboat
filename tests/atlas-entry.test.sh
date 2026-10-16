@@ -2,6 +2,22 @@
 # Run only in a disposable dockur/Helios container; replaces /run/entry.sh there.
 set -Eeuo pipefail
 [[ -f /run/install.sh && -f /run/entry.sh ]] || exit 1
+PYTHONPATH="/oem/.winboat-atlas:${PYTHONPATH:-}" python3 - <<'PY'
+import shutil
+import tempfile
+from pathlib import Path
+import xml.etree.ElementTree as ET
+from inject import amend_answer, NS
+with tempfile.TemporaryDirectory() as temporary:
+    for mode in [False, True]:
+        target = Path(temporary) / 'unattend.xml'
+        shutil.copyfile('/run/assets/win11x64.xml', target)
+        amend_answer(target, '6', mode)
+        root = ET.parse(target).getroot()
+        assert root.findtext(f'.//{{{NS}}}InstallFrom/{{{NS}}}MetaData/{{{NS}}}Value') == '6'
+        assert (root.find(f'.//{{{NS}}}UserAccounts') is None) == mode
+print('Actual dockur Windows 11 answer file accepts both Atlas modes.')
+PY
 cat > /run/entry.sh <<'SH'
 #!/usr/bin/env bash
 set -Eeuo pipefail
