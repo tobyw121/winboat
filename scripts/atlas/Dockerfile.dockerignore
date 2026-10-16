@@ -1,0 +1,5 @@
+**
+!guest_server/
+!guest_server/*.go
+!guest_server/go.mod
+!guest_server/go.sum

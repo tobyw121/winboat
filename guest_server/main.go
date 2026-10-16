@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log"
@@ -62,6 +63,16 @@ func getHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
+}
+
+func collectAtlasDiagnostics(ctx context.Context) ([]byte, error) {
+	executable, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	script := filepath.Join(filepath.Dir(executable), "scripts", "Get-AtlasDiagnostics.ps1")
+	return exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive",
+		"-ExecutionPolicy", "Bypass", "-File", script).Output()
 }
 
 func getVersion(w http.ResponseWriter, r *http.Request) {
@@ -234,6 +245,7 @@ func main() {
 	r.HandleFunc("/health", getHealth).Methods("GET")
 	r.HandleFunc("/graphics/helios", getHeliosStatus).Methods("GET")
 	r.HandleFunc("/provisioning/atlas", getAtlasStatus).Methods("GET")
+	r.HandleFunc("/provisioning/atlas/diagnostics", atlasDiagnosticsHandler(collectAtlasDiagnostics)).Methods("GET")
 	r.HandleFunc("/version", getVersion).Methods("GET")
 	r.HandleFunc("/metrics", getMetrics).Methods("GET")
 	r.HandleFunc("/rdp/status", getRdpConnectedStatus).Methods("GET")
