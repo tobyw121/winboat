@@ -76,6 +76,10 @@ vermieden. Die VM-Dateien müssen dafür nicht gelöscht werden.
 
 Die ISO-Auswahl unterstützt außerdem die optionale
 [Atlas-Einrichtung mit WIM-Injection oder nach der Windows-Installation](atlas-installation.md).
+Beide Wege stehen auch für eine eigene Windows-11-Pro-ISO zur Verfügung.
+Das Build-Skript erstellt dafür zusätzlich `winboat/atlas:0.5.0-hotfix`;
+das Helios-Image enthält dieselben Offline-Werkzeuge. Das Atlas-Playbook ist
+einschließlich Prüfsumme und Lizenz im Repository und AppImage enthalten.
 
 ## QEMU bricht mit fehlendem OpenGL-Loader ab
 

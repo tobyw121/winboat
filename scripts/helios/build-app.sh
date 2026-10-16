@@ -35,10 +35,13 @@ node --input-type=module - <<'JS' > /out/BUILD-INFO.json
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { HELIOS_DISPLAY_VERSION } from './src/shared/helios-display.ts';
+import { ATLAS_RELEASE, ATLAS_ASSETS, ATLAS_ISO_VERSION } from './src/shared/atlas.ts';
 const stack = JSON.parse(fs.readFileSync('helios/stack.lock.json', 'utf8'));
 console.log(JSON.stringify({ winboatCommit: process.env.WINBOAT_BUILD_COMMIT,
     hostRevision: stack.hostRevision, guestRevision: stack.guestRevision,
     displayCapability: HELIOS_DISPLAY_VERSION,
+    atlasRelease: ATLAS_RELEASE, atlasPlaybookSha256: ATLAS_ASSETS[1].sha256,
+    atlasIsoCapability: ATLAS_ISO_VERSION,
     viewerSha256: crypto.createHash('sha256').update(fs.readFileSync('build/native/winboat-helios-viewer')).digest('hex'),
     hostPatchset: fs.readFileSync('helios/host/patches/SHA256SUMS', 'utf8').trim(),
     node: process.version, builtAt: new Date().toISOString() }, null, 2));

@@ -1,86 +1,115 @@
 # AtlasOS mit WinBoat
 
-Unter **Setup → Windows Configuration → Installation mode** gibt es drei Wege:
+Unter **Setup → Windows Configuration → Installation mode** stehen Standard
+Windows sowie zwei Atlas-Methoden zur Auswahl. Beide Methoden funktionieren mit
+heruntergeladenem Windows und mit einer unter **Custom ISO → Select ISO File**
+ausgewählten ISO. Die Auswahl einer ISO behält die Atlas-Methode bei; die
+Reihenfolge der beiden Auswahlen spielt keine Rolle.
 
-- **Standard Windows**: bisherige Windows-Installation.
-- **Windows 11 Pro + AtlasOS: ISO injection (experimental)**: der bevorzugte
-  Atlas-Weg. Dockur lädt Windows wie bisher herunter und bereitet seine
-  unbeaufsichtigte Installation vor. WinBoat ergänzt vor dem ISO-Neubau die
-  Pro-Edition in `install.wim` um die geprüften AME-/Atlas-Dateien unter
-  `ProgramData\WinBoat\AtlasMedia`. Die so erzeugte ISO wird automatisch gebootet.
-- **Windows 11 Pro + AtlasOS: apply after installation**: Windows wird ohne
-  Atlas-WIM-Änderung installiert; die gleichen Dateien kommen über den OEM-Ordner
-  in den Gast. Danach startet dieselbe AME-CLI-Einrichtung.
+Unterstützt wird **Windows 11 Pro x64 24H2/25H2 (Build 26100/26200)**. WinBoat
+prüft die tatsächlichen WIM-/ESD-Metadaten. Bei mehreren Editionen muss genau ein
+passender Pro-Index enthalten sein; dieser wird in der Antwortdatei explizit
+für Windows Setup ausgewählt. Home, Enterprise, ARM und ältere Builds werden
+für Atlas abgewiesen. Der Gast prüft Edition/Build im nachträglichen CLI-Modus
+vor der Playbook-Ausführung erneut.
 
-Bei beiden Atlas-Wegen wird das eigentliche Playbook **im laufenden Windows**
-angewendet. Unterstützt werden x64 Windows 11 Pro 24H2/25H2, Builds 26100/26200.
-Andere Editionen/Builds werden abgewiesen. Vorhandene VM-Festplatten werden nicht
-nachträglich umgebaut. Bei benutzerdefinierten ISOs bleibt die automatische
-Atlas-Einrichtung aus; eine mit AME Wizard vorbereitete ISO lässt sich über
-**Custom ISO** wählen. Deren eigene OOBE muss mit Dockurs unbeaufsichtigter
-Installation kompatibel sein; diese Kombination ist nicht mit Windows getestet.
+Die eigene ISO wird nur lesbar als `/boot.iso` eingebunden. Dockur extrahiert
+sie in eine Arbeitskopie, ergänzt Treiber und die unbeaufsichtigte Installation
+und baut daraus die tatsächlich gebootete ISO. WinBoat ändert die ausgewählte
+Originaldatei nicht. Vorhandene VM-Festplatten werden nicht nachträglich auf
+Atlas umgestellt; diese Funktion ist für neue VMs vorgesehen.
 
-## Was aus AME übernommen wird
+## ISO injection mit AMEs OOBE (experimentell, bevorzugt)
 
-Die Linux-Implementierung unter `resources/atlas-tools/` orientiert sich am
-[AME-ISO-Pfad in AmeliorationUtil.cs, Version 0.8.4](https://github.com/Ameliorated-LLC/trusted-uninstaller-cli/blob/0.8.4/TrustedUninstaller.Shared/AmeliorationUtil.cs):
-WIM-/ESD-Unterscheidung, Medieneinbettung vor dem ISO-Neubau und anschließende
-Einrichtung im Gast. Sie nutzt das bereits im Dockur-Image vorhandene `wimlib`.
-Es wird nur der passende Pro-Index geändert; bestehende Image-Indizes, Namen,
-Windows-Dateien und die BIOS-/UEFI-Erstellung durch Dockur bleiben erhalten.
+1. Atlas und die gewünschte ISO auswählen. Ohne Custom ISO wird Windows 11 Pro
+   wie bisher von Dockur bezogen.
+2. WinBoat prüft das mitgelieferte Playbook und lädt den festgelegten AME Wizard
+   herunter. Die unveränderten OOBE-Binärdateien werden aus dessen .NET-Ressourcen
+   gelesen; auf Linux wird kein Windows-Programm ausgeführt.
+3. In der Pro-Edition werden die Offline-Hives SOFTWARE/SYSTEM vorbereitet:
+   AMEs temporäre Defender-Vorbereitung, der Dienst `ameoobe` und die BitLocker-
+   Einstellung. Die ursprünglichen Sicherheitswerte werden zur Wiederherstellung
+   gespeichert. Die WinPE-SYSTEM-Hives erhalten AMEs Hardwareanforderungswerte.
+4. AME Client, OOBE-Konfiguration und vollständiges Playbook werden in den
+   Installationsindex eingebettet. Die originale `msoobe.exe` bleibt als
+   `msoobeext.exe` erhalten; der originale AME-Shim übernimmt ihren Platz.
+   `iso.conf` und `oobe.conf` entsprechen AMEs Datenformaten.
+5. Die Antwortdateien wählen Pro aus und überlassen AME die Benutzererstellung.
+   `SetupComplete.cmd` übernimmt die Installation des WinBoat-Gastdienstes;
+   ein vorhandener WIM-SetupComplete-Hook wird vorher ausgeführt.
+6. Beim ersten Start läuft **AMEs eigene OOBE**. Deren Windows-Oberfläche im
+   Browser/VM-Fenster verfolgen und gegebenenfalls Eingaben abschließen. Erst
+   dort wird das Atlas-Playbook angewendet; eine fertig gebaute ISO bedeutet
+   noch keinen erfolgreichen Playbook-Lauf.
+7. Eine SYSTEM-Aufgabe beobachtet AMEs frischen Applied-Playbook-Eintrag samt
+   Version, ErrorLevel und ausgewählten Optionen. Sie stellt unveränderte
+   temporäre Sicherheitswerte wieder her. Danach folgt Helios, falls ausgewählt,
+   einschließlich seiner eigenen begrenzten Neustarts.
 
-Dies ist eine **WinBoat-Portierung der Medieneinbettung**, keine vollständige
-Portierung des AME-ISO-Backends. Dessen Windows-Registry-/DISM-Aktionen,
-Offline-Playbook-Ausführung und Austausch von `msoobe.exe` durch AME Client sind
-nicht implementiert. Deshalb bleibt die normale Windows-OOBE erhalten und die
-ISO enthält zunächst die Installationsdateien, kein bereits angewendetes Atlas.
-Der Marker `winboat-atlas-iso.json` beschreibt ausdrücklich `playbookApplied=false`.
-Die Original-AME-CLI wird unverändert verwendet; es gibt keine erfundenen
-`--iso`-/`--silent`-Argumente.
+WinBoat wählt `defender-enable`, `mitigations-default` und `auto-updates-default`.
+Bereits mit AME injizierte ISOs sowie kollidierende OEM-Panther-Antwortdateien
+oder OEM-SetupComplete-Hooks werden abgewiesen, statt sie zu überschreiben.
+Eigene unbeaufsichtigte Installationsdateien benötigen einen regulären
+Windows-PE-/OSImage-Abschnitt. Unbekannte Medien dürfen bei ausgewähltem Atlas
+nicht stillschweigend ohne Atlas gebootet werden.
 
-## Ablauf im Windows-Gast
+## DISM und Offline-Grenzen
 
-1. WinBoat installiert seinen Gastdienst und registriert eine erhöhte Aufgabe
-   `WinBoatAtlasProvisioning` für den gewählten Windows-Benutzer.
-2. Falls Helios ausgewählt ist, wartet Atlas auf dessen abgeschlossene Einrichtung.
-3. Im Windows-Fenster anmelden, auch nach Helios-Neustarts. Die Aufgabe startet
-   AME CLI automatisch; ohne angemeldeten Benutzer kann sie nicht interaktiv laufen.
-4. AME kann das vorübergehende Ausschalten von Windows-Sicherheitsschaltern und
-   einen Vorbereitungsneustart verlangen. Anweisungen in der Windows-Konsole
-   befolgen. WinBoat automatisiert diese Eingaben nicht und umgeht keine Prüfungen.
-5. Nach einem angeforderten Neustart erneut anmelden. Die Aufgabe versucht die
-   Einrichtung höchstens einmal pro Windows-Boot und höchstens auf drei Boots.
-6. Als Playbook-Optionen werden `defender-enable`, `mitigations-default` und
-   `auto-updates-default` übergeben. Bei Abbruch muss ein gegebenenfalls manuell
-   abgeschalteter Schutz in Windows wieder eingeschaltet werden.
-7. WinBoat meldet Erfolg erst, wenn AME einen frischen Applied-Playbook-Eintrag
-   mit Version `0.5.0` und `ErrorLevel=0` schreibt. Exitcode 0 allein genügt nicht.
-   Anschließend Windows vor der Benutzung einmal neu starten.
+Die Portierung unter `resources/atlas-tools/` folgt dem
+[ISO-Pfad von AME 0.8.4](https://github.com/Ameliorated-LLC/trusted-uninstaller-cli/blob/0.8.4/TrustedUninstaller.Shared/AmeliorationUtil.cs).
+`wimlib` übernimmt die WIM-/ESD-Arbeit, `libhivex` die Offline-Registry.
+Das festgelegte Atlas-Profil verlangt `DefenderToggled`, nicht `DefenderDisabled`.
+Deshalb ist AMEs bedingtes Offline-DISM-NoDefender-CAB hier nicht erforderlich.
+Andere Playbooks mit dieser Anforderung werden ausdrücklich nicht unterstützt.
 
-Status: `C:\ProgramData\WinBoat\Atlas\status.json`, Versuchsgrenze: `attempts.json`.
-AME-Dateien und Logs: `C:\ProgramData\WinBoat\Atlas\cli`.
-Die Gast-API `/provisioning/atlas` liest nur den lokalen Status. WinBoat wartet
-bis zu zwei Stunden und erklärt eine ausstehende Benutzereingabe nicht zum Erfolg.
+Atlas-eigene DISM-Befehle wie DirectPlay, Capability-Entfernung und Component-
+Cleanup laufen **nativ im Windows-Gast durch das originale Playbook während
+AME OOBE**. Linux emuliert keine Windows-CBS-/DISM-Paketinstallation. Die
+Windows-Anwendung des Playbooks ist weiterhin online; Atlas kann weitere
+Dateien aus dem Internet beziehen. `playbookApplied=false` im ISO-Marker ist
+absichtlich kein Erfolgsnachweis.
 
-## Downloads, Speicher und Grenzen
+## Apply after installation
 
-Festgelegt sind AME CLI `0.8.4` und Atlas `0.5.0-hotfix`.
-URLs und SHA-256-Werte stehen in `src/shared/atlas.ts`; der Windows-Starter prüft
-die beiden Archive erneut vor der Ausführung. Downloads erfolgen erst bei
-ausgewähltem Atlas; für den normalen WinBoat-Build werden sie nicht benötigt.
-Ein GitHub-Actions-Token ist nicht nötig. Atlas kann bei der Anwendung weitere
-Software aus dem Internet beziehen. Die vollständige Einrichtung ist nicht offline.
+Im zweiten Modus prüft WinBoat ebenfalls die gewählte ISO und setzt den
+Pro-Index. Das Installations-WIM und die normale Windows-OOBE bleiben dabei
+unverändert. Nach Windows und gegebenenfalls Helios startet eine erhöhte
+interaktive Aufgabe die originale AME CLI. In Windows anmelden und ihre
+Vorbereitungs-/Neustartaufforderungen befolgen; WinBoat speist keine Antworten
+in die CLI ein. Höchstens ein Versuch je Boot, auf höchstens drei Boots.
 
-Für den ISO-/ESD-Neubau zusätzlich zur VM-Festplatte mindestens 20 GB freien
-temporären Speicher einplanen, bei großen/mehrsprachigen Images entsprechend mehr.
-Die fertige Installations-ISO liegt im VM-Speicherordner; Windows wird daraus
-automatisch installiert. Die Daten gehören nicht ins verteilte WinBoat-AppImage.
+Die festgelegte CLI 0.8.4 schreibt bei Erfolg keinen GUI-Applied-Eintrag.
+Deshalb prüft WinBoat zusätzlich ihre abschließende Erfolgsmeldung im frischen
+Konsolenprotokoll und den Prozess-Exitcode. Vorbereitungsende oder Exitcode 0
+allein gelten nicht als abgeschlossener Playbook-Lauf. Protokoll:
+`C:\ProgramData\WinBoat\Atlas\cli-console.txt`.
 
-Geprüft sind echte WIM-Einbettung und ESD-Konvertierung an synthetischen Images,
-Editions-/Build-Abweisung, Container-Hooks, Prüfsummen und Statusprüfung. Eine
-vollständige Windows-/Atlas-/Helios-Installation und deren Gaming-Kompatibilität
-sind in der Cloud ohne passende Windows-/GPU-Testumgebung nicht nachgewiesen.
+## Mitgelieferte Dateien, Bau und Status
 
-Offizielle Anleitungen:
-[Atlas ISO-Injection](https://docs.atlasos.net/getting-started/install/install-iso-injection/),
-[AME CLI](https://github.com/Ameliorated-LLC/trusted-uninstaller-cli#cli-usage).
+**Atlas 0.5.0-hotfix ist vollständig als offizielles `AtlasPlaybook.apbx` in Git
+und im AppImage enthalten**, unter `resources/atlas/` einschließlich GPL-Lizenz
+und Herkunftsbeleg. AME Wizard/CLI 0.8.4 werden nur für die ausgewählte Methode
+von offiziellen Releases bezogen. URLs und SHA-256-Werte stehen in
+`src/shared/atlas.ts`; OOBE-Ressourcen werden zusätzlich separat geprüft.
+Ein GitHub-Actions-Token ist nicht nötig. AMEs OOBE-Client wird unverändert
+verwendet; dessen Quellcode ist nicht Teil der öffentlichen CLI-Portierung.
+
+`./scripts/build-helios.sh` baut das lokale Hilfsimage
+`winboat/atlas:0.5.0-hotfix`, das aktualisierte Helios-Image mit Offline-Werkzeugen
+und das AppImage. Nur das AppImage zu ersetzen aktualisiert vorhandene
+Docker-Images nicht. Alte Helios-Images erfordern einen Neubau ohne `--skip-host`.
+
+Zusätzlich zur VM mindestens 20 GB temporären Speicher für WIM-/ISO-Neubau
+vorsehen, für große/mehrsprachige ISOs mehr. Unbeaufsichtigte Installationsmedien
+enthalten die gewählten Windows-Anmeldedaten und sollten privat bleiben.
+
+Status: `C:\ProgramData\WinBoat\Atlas\status.json`, API `/provisioning/atlas`.
+OOBE-Dateien/AME-Logs: `C:\ProgramData\AME\OOBE`.
+WinBoat wartet auf einen überprüften Abschluss, nicht nur auf kopierte Dateien.
+
+Geprüft: echte WIM-/ESD-/Hive-Bearbeitung mit synthetischen Windows-Dateien,
+Pro-Auswahl bei mehreren Editionen, unveränderte andere Editionen, beide Modi,
+Konflikt-/Build-Abweisung, Original-AME-/Atlas-Ressourcen, PowerShell-Logik und
+Paketbau. Eine vollständige Windows-/AME-OOBE-/Helios-Installation wurde in der
+Cloud ohne passende Windows-/GPU-VM nicht ausgeführt. Der ISO-Modus bleibt
+experimentell.

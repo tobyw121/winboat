@@ -70,6 +70,9 @@ fi
 mkdir -p dist
 temporary=$(mktemp -d "$root/dist/.helios-build.XXXXXX")
 trap 'rm -rf -- "$temporary"' EXIT
+atlas_image=winboat/atlas:0.5.0-hotfix
+docker buildx build "${build_args[@]}" --load --target atlas-runtime \
+    -f helios/host/Dockerfile -t "$atlas_image" .
 if ! "$skip_host"; then
     docker buildx build "${build_args[@]}" --load -f helios/host/Dockerfile \
         --build-arg "HELIOS_BUILD_JOBS=$jobs" -t "$image" .
@@ -80,6 +83,8 @@ display_version=$(sed -n "s/^export const HELIOS_DISPLAY_VERSION = '\([^']*\)';$
 [[ "$display_version" =~ ^dbus-v[0-9]+$ ]] || die 'Invalid local display capability.'
 actual_display=$(docker image inspect --format '{{ index .Config.Labels "org.winboat.helios.display" }}' "$image")
 [[ "$actual_display" == "$display_version" ]] || die 'The Helios image lacks the required local display protocol. Rebuild without --skip-host.'
+atlas_tools=$(docker image inspect --format '{{ index .Config.Labels "org.winboat.atlas.iso" }}' "$image")
+[[ "$atlas_tools" == ame-oobe-v1 ]] || die 'The Helios image lacks the required AME offline tools. Rebuild without --skip-host.'
 docker run --rm --network none --entrypoint /opt/helios/check-runtime.sh "$image" \
     || die 'Helios OpenGL runtime is missing or incomplete. Rebuild the host image without --skip-host.'
 # Exercise actual QEMU/memfd/QMP without pretending to test a GPU or Windows.

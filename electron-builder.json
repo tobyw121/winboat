@@ -52,7 +52,12 @@
     {
       "from": "./resources/atlas-tools",
       "to": "atlas-tools",
-      "filter": ["entry.sh", "inject.sh"]
+      "filter": ["entry.sh", "inject.sh", "*.py"]
+    },
+    {
+      "from": "./resources/atlas",
+      "to": "atlas",
+      "filter": ["AtlasPlaybook.apbx", "LICENSE", "atlas-build.json"]
     },
     {
       "from": "./resources/vm-profile",
