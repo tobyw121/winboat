@@ -623,11 +623,11 @@
                         <!-- Installing -->
                         <div v-if="installState !== InstallStates.COMPLETED && installState !== InstallStates.INSTALL_ERROR" class="flex flex-col h-full items-center justify-center gap-4">
                             <x-throbber class="size-16"></x-throbber>
-                            <x-label v-if="installState !== InstallStates.MONITORING_PREINSTALL && installState !== InstallStates.INSTALLING_HELIOS" class="text-lg text-gray-400 text-center">
+                            <x-label v-if="installState !== InstallStates.MONITORING_PREINSTALL && installState !== InstallStates.INSTALLING_HELIOS && installState !== InstallStates.INSTALLING_ATLAS" class="text-lg text-gray-400 text-center">
                                 {{ installState }}...
                             </x-label>
                             <x-label v-else class="text-lg text-gray-400 text-center">
-                                {{ preinstallMsg }}
+                                {{ preinstallMsg || installState }}
                             </x-label>
                         </div>
 

@@ -72,7 +72,7 @@ try {
         $action = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$script`""
         $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 2) -StartWhenAvailable
         Register-ScheduledTask -TaskName $taskName -Action $action -Settings $settings -Trigger (New-ScheduledTaskTrigger -AtStartup) -User SYSTEM -RunLevel Highest -Force | Out-Null
-        Publish-AtlasOOBE 'running' 'AME OOBE is applying Atlas. Complete its Windows setup screens; Helios follows afterward.'
+        Publish-AtlasOOBE 'waiting' 'Waiting for AME setup to finish in the Windows console. Atlas completion has not been confirmed yet.'
         Start-ScheduledTask -TaskName $taskName
         exit 0
     }

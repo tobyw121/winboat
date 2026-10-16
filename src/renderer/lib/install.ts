@@ -465,13 +465,17 @@ export class InstallManager {
 
     async monitorAtlas() {
         this.changeState(InstallStates.INSTALLING_ATLAS);
+        this.setPreinstallMsg('Waiting for Atlas status from the Windows guest service...');
         const port = this.portMgr.value!.getHostPort(GUEST_API_PORT);
         const deadline = Date.now() + 120 * 60 * 1000;
         while (Date.now() < deadline) {
             await this.checkContainer();
             let response;
             try { response = await nodeFetch(`http://127.0.0.1:${port}/provisioning/atlas`, { timeout: 5000 }); }
-            catch { await this.sleep(5000); continue; }
+            catch {
+                this.setPreinstallMsg('Windows guest service is unreachable. Waiting for its return after setup or restart...');
+                await this.sleep(5000); continue;
+            }
             if (!response.ok) throw new Error(`Atlas status API returned HTTP ${response.status}. Inspect the Windows console.`);
             const progress = validateAtlasProgress(await response.json());
             this.setPreinstallMsg(progress.message);
