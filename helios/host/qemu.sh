@@ -1,7 +1,8 @@
 #!/bin/sh
 # Use the paired renderer even when the container has a distro renderer too.
 export LD_LIBRARY_PATH=/opt/helios/renderer/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
-export VIRGL_RENDER_SERVER_PATH=/opt/helios/renderer/libexec/virgl_render_server
+# virglrenderer reads this exact name; its compiled-in prefix is a build path.
+export RENDER_SERVER_EXEC_PATH=/opt/helios/renderer/libexec/virgl_render_server
 if [ "${HELIOS_GPU_VENDOR:-}" = nvidia ]; then
     if [ -z "${VK_DRIVER_FILES:-}" ]; then
         for driver in /usr/share/vulkan/icd.d/nvidia_icd.json /etc/vulkan/icd.d/nvidia_icd.json; do

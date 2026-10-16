@@ -1,5 +1,22 @@
 # Validation record
 
+## Renderer-server launcher repair, 16 October 2026 (UTC)
+
+- Reproduced the missing PID file with the actual paired renderer library:
+  the old wrapper's `VIRGL_RENDER_SERVER_PATH` is ignored, the renderer child
+  fails to exec its compiled-in build path and executes inherited exit handlers.
+  The probe returned `init=0 server=0 pidfile=0`, despite its parent still running.
+- The corrected `RENDER_SERVER_EXEC_PATH` starts the installed server and keeps
+  the parent's PID marker. `npm run test:helios:host` passed, including that real
+  fork/exec regression, both display argument checks, the HTTP setup transition,
+  runtime loaders and the shared-memfd QMP/TCG check.
+- Repaired runtime image: capability `glvnd-v2`, ID
+  `sha256:20d132e5d66384fbaa609a7f392beef360712abd727fbf0d2e49b317f85bd879`.
+  Paired QEMU/renderer binaries were reused; the launcher layer was rebuilt.
+- All 27 Helios tests and seven build-update tests passed. Renderer Vue type
+  checking and the production renderer/main build passed. No AppImage was
+  repackaged for this repair, and no Windows, physical GPU or KVM run is claimed.
+
 Baseline builds verified in this cloud workspace on 16 October 2026:
 
 - 8 Helios TypeScript tests and 5 existing GPU tests passed, with no skips.

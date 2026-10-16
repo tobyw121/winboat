@@ -42,6 +42,19 @@ try {
 const libraries = docker(['run', '--rm', '-e', 'LD_LIBRARY_PATH=/opt/helios/renderer/lib', '--entrypoint', 'sh', HELIOS_IMAGE, '-c',
     'ldd /opt/helios/qemu/bin/qemu-system-x86_64; ldd /opt/helios/renderer/lib/libvirglrenderer.so.1; ldd /opt/helios/renderer/libexec/virgl_render_server']);
 assert.ok(!libraries.includes('not found'), libraries);
+// Replace QEMU only inside this disposable container with a fork/exec probe.
+// The actual installed wrapper must supply both the loader and server paths.
+const probe = fs.mkdtempSync(path.join(os.tmpdir(), 'winboat-render-server-'));
+try {
+    fs.copyFileSync(new URL('../../tests/helios-render-server.c', import.meta.url), path.join(probe, 'probe.c'));
+    docker(['run', '--rm', '--network', 'none', '-v', `${probe}:/test`, '--entrypoint', 'cc',
+        'golang:1.25-bookworm', '-Wall', '-Wextra', '-Werror', '/test/probe.c', '-ldl', '-o', '/test/probe']);
+    console.log(docker(['run', '--rm', '--network', 'none',
+        '-v', `${probe}/probe:/opt/helios/qemu/bin/qemu-system-x86_64:ro`,
+        '--entrypoint', 'qemu-system-x86_64', HELIOS_IMAGE]).trim());
+} finally {
+    fs.rmSync(probe, { recursive: true });
+}
 const commands = ['qmp_capabilities', 'query-status', 'query-memory-size-summary', 'quit']
     .map(execute => JSON.stringify({ execute })).join('\n') + '\n';
 const output = docker(['run', '--rm', '-i', '--entrypoint', 'qemu-system-x86_64', HELIOS_IMAGE,

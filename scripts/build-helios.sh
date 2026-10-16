@@ -79,6 +79,10 @@ if ! "$skip_host"; then
 fi
 actual=$(docker image inspect --format '{{ index .Config.Labels "org.winboat.helios.revision" }}' "$image") || die "Missing host image $image."
 [[ "$actual" == "$revision" ]] || die 'The local Helios image has the wrong revision.'
+runtime_version=$(sed -n "s/^export const HELIOS_RUNTIME_VERSION = '\([^']*\)';$/\1/p" src/shared/helios.ts)
+[[ "$runtime_version" =~ ^glvnd-v[0-9]+$ ]] || die 'Invalid Helios runtime capability.'
+actual_runtime=$(docker image inspect --format '{{ index .Config.Labels "org.winboat.helios.runtime" }}' "$image")
+[[ "$actual_runtime" == "$runtime_version" ]] || die 'The Helios image lacks the current renderer-server launcher. Rebuild without --skip-host.'
 display_version=$(sed -n "s/^export const HELIOS_DISPLAY_VERSION = '\([^']*\)';$/\1/p" src/shared/helios-display.ts)
 [[ "$display_version" =~ ^dbus-v[0-9]+$ ]] || die 'Invalid local display capability.'
 actual_display=$(docker image inspect --format '{{ index .Config.Labels "org.winboat.helios.display" }}' "$image")

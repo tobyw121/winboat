@@ -90,6 +90,23 @@ zusätzlich zu EGL/Mesa. Der Build lädt GL/OpenGL/EGL ausdrücklich mit `dlopen
 ein einfaches `ldd` auf QEMU erkennt diese dynamisch geladenen Abhängigkeiten nicht.
 `--skip-host` lehnt Images ohne diese Runtime-Prüfung ab.
 
+### QEMU läuft, aber `qemu.pid` wurde gelöscht
+
+Die Runtime `glvnd-v2` korrigiert zusätzlich den Pfad des Renderer-Servers:
+Virglrenderer erwartet `RENDER_SERVER_EXEC_PATH`, nicht
+`VIRGL_RENDER_SERVER_PATH`. Ohne die richtige Variable versucht der ausgelagerte
+Prozess einen nicht vorhandenen Build-Pfad zu starten. Sein fehlgeschlagenes
+`exec` führt die geerbten QEMU-Exit-Handler aus und löscht die PID-Datei des
+weiter laufenden QEMU. Das wurde mit der tatsächlichen gepaarten Bibliothek
+reproduziert; mit dem korrigierten Wrapper startet der Server und die Datei bleibt.
+Die Boot-Prüfung kann danach unabhängig davon noch auf fehlenden seriellen Text
+reagieren; ein laufender QEMU-Prozess beweist keine erfolgreiche Windows-Installation.
+
+`npm run test:helios:host` prüft jetzt den tatsächlichen Fork/Exec des Servers
+durch den installierten Wrapper, einschließlich des erhaltenen PID-Markers.
+Dafür kompiliert es einen kleinen Test im bereits verwendeten Go-Build-Image.
+Ein altes Image wird bei `--skip-host` anhand der Runtime-Version abgelehnt.
+
 Ein bereits gebautes, passendes Helios-Image lässt sich ohne erneute
 QEMU-/Renderer-Kompilierung reparieren. Im WinBoat-Checkout ausführen:
 
