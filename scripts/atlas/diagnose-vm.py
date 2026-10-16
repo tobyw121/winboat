@@ -71,6 +71,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--container', default='WinBoat')
     parser.add_argument('--update-guest', action='store_true')
+    parser.add_argument('--recover-oobe', action='store_true',
+                        help='Repair verified setup-account access and REBOOT Windows into OOBE using Sysprep; no password reset')
     args = parser.parse_args()
     base, oem = endpoint_and_oem(args.container)
     # This opener only talks to the local published guest port, never a proxy.
@@ -119,6 +121,11 @@ def main():
             raise RuntimeError('Run again with --update-guest to install the fixed diagnostic collector.') from error
         raise
     diagnostics['atlasStatus'] = get('/provisioning/atlas')
+    try:
+        diagnostics['recoveryStatus'] = get('/provisioning/atlas/recovery')
+    except urllib.error.HTTPError as error:
+        if error.code != 404:
+            raise
     folder = Path.home() / '.winboat/diagnostics'
     folder.mkdir(parents=True, exist_ok=True, mode=0o700)
     output = folder / (dt.datetime.now().strftime('atlas-%Y%m%d-%H%M%S-%f') + '.json')
@@ -127,6 +134,20 @@ def main():
         json.dump(diagnostics, stream, indent=2)
     print(json.dumps(diagnostics, indent=2))
     print(f'Recording: {output}')
+    if args.recover_oobe:
+        print('Requesting guarded OOBE recovery. Windows will REBOOT; passwords are not reset.', flush=True)
+        request = urllib.request.Request(base + '/provisioning/atlas/recovery', data=b'',
+            headers={'X-WinBoat-Recovery': 'restart-oobe'}, method='POST')
+        try:
+            with opener.open(request, timeout=100) as response:
+                result = json.load(response)
+        except urllib.error.HTTPError as error:
+            if error.code == 404:
+                raise RuntimeError('Install the recovery service with --update-guest first.') from error
+            result = json.load(error)
+            raise RuntimeError(result.get('message', result.get('error', 'Recovery was refused.'))) from error
+        print(json.dumps(result, indent=2))
+        print('Watch the Windows console. To check Sysprep progress, run this helper again without --recover-oobe.')
 
 
 if __name__ == '__main__':

@@ -29,6 +29,20 @@ function Convert-AtlasRegistryBackup($Entry) {
     }
 }
 
+function Grant-AtlasSetupAccountAccess {
+    # The GUI runs in the temporary user's session and reads oobe.conf itself.
+    # Keep the observer/admin scripts private; grant only this setup SID RX.
+    $folder = Join-Path $env:ProgramData 'AME\OOBE'
+    if (-not (Test-Path -LiteralPath $folder -PathType Container)) { return $false }
+    $accounts = @(Get-CimInstance Win32_UserAccount -Filter "LocalAccount=True AND Name='defaultuser0'")
+    if ($accounts.Count -ne 1 -or $accounts[0].Disabled) { return $false }
+    $sid = [string]$accounts[0].SID
+    if ($sid -notmatch '^S-1-5-21-\d+-\d+-\d+-\d+$') { throw 'Unexpected Windows setup account SID.' }
+    & icacls.exe $folder /grant:r (('*{0}:(OI)(CI)RX' -f $sid)) | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot grant the temporary setup account access to AME.' }
+    return $true
+}
+
 function Restore-AtlasPreparation([string]$BackupPath) {
     foreach ($entry in (Get-Content -LiteralPath $BackupPath -Raw | ConvertFrom-Json)) {
         # Restore only the six known preparation values, and only if unchanged by AME.
@@ -65,6 +79,7 @@ try {
             & icacls.exe $folder /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
             if ($LASTEXITCODE -ne 0) { throw 'Cannot protect AME setup files.' }
         }
+        Grant-AtlasSetupAccountAccess | Out-Null
         foreach ($name in @('Start-AtlasOOBE.ps1', 'Start-AtlasProvisioning.ps1')) {
             Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $root -Force
         }
@@ -78,7 +93,10 @@ try {
     }
     $created = [DateTime]::Parse($mode.createdAtUtc).ToUniversalTime()
     $deadline = [DateTime]::UtcNow.AddMinutes(110)
+    $setupAccessGranted = $false
     do {
+        # On a fresh boot the temporary account may be created after this task.
+        if (-not $setupAccessGranted) { $setupAccessGranted = Grant-AtlasSetupAccountAccess }
         $applied = Get-ItemProperty 'HKLM:\SOFTWARE\AME\Playbooks\Applied\{00000000-0000-4000-6174-6C6173203A33}' -ErrorAction SilentlyContinue
         if (Test-AtlasOOBEApplied $applied $created) { break }
         if ($null -ne $applied -and $null -ne $applied.PSObject.Properties['ErrorLevel'] -and [int]$applied.ErrorLevel -ne 0) {

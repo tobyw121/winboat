@@ -176,3 +176,40 @@ hexadezimale HRESULTs werden getrennt von vertraulichen Meldungstexten gefiltert
 Nach einem Git-Pull erneut `--update-guest` verwenden, um diese Skriptversion auf
 der bestehenden VM zu installieren. Die Abfrage verändert weder Konten noch
 Windows-Einrichtungszustände oder AME-Berechtigungen.
+
+### `defaultuser0`: AME-Dienst beendet sich ohne Oberfläche
+
+Ein Fehler in der bisherigen Registrierung hat auch dem AME-Laufzeitordner
+ausschließlich SYSTEM-/Administratorrechte gegeben. Der GUI-Client liest seine
+Konfiguration selbst im Einrichtungskonto; diesem fehlte der erforderliche
+Zugriff. Die Registrierung und der persistente Beobachter gewähren jetzt nur
+der SID des lokalen, aktiven `defaultuser0` Lese-/Ausführungsrechte auf AME.
+Der private WinBoat-Verwaltungsordner bleibt auf SYSTEM/Administratoren beschränkt.
+Diese Korrektur ist beim nächsten Paketbau auch in neuen Installationen enthalten.
+
+Eine bereits abgebrochene OOBE kann gezielt wieder aufgenommen werden:
+
+```bash
+git pull --ff-only origin work
+python3 scripts/atlas/diagnose-vm.py --update-guest --recover-oobe
+```
+
+**Dieser zusätzliche Schalter startet Windows neu.** Der feste Gastvorgang prüft
+Original-Shim, AME-Shell, Einrichtungskonto, beendeten AME-Dienst und abgeschlossene
+Windows-Setup-Zustände. Existieren der konfigurierte Benutzer oder ein angewendetes
+Playbook bereits, wird der Wiederanlauf abgewiesen. Ebenso wird er bei aktiven
+AME-/Setup-Prozessen abgewiesen. Es werden keine Passwörter gesetzt/zurückgesetzt,
+keine Konten gelöscht und keine Datenträger neu angelegt.
+
+Vor der Änderung wird die AME-Verzeichnis-ACL privat gesichert. Danach werden
+Zugriff und Beobachter erneuert. Eine einmal auf Anforderung gestartete SYSTEM-
+Aufgabe führt nach 15 Sekunden Windows' `Sysprep.exe /oobe /reboot /quiet` aus.
+Es gibt keinen automatischen erneuten Reparaturversuch. Der Endpunkt verlangt
+einen expliziten Recovery-Header und erlaubt nur einen gleichzeitigen Aufruf.
+
+Nach dem Wiederanlauf die Windows-Konsole öffnen. Weitere Statusabfragen:
+`python3 scripts/atlas/diagnose-vm.py` (ohne Reparaturschalter). `recoveryStatus`
+enthält auch einen Sysprep-Fehlerstatus, Exitcode und gefilterte Fehlercodes, falls
+Windows den Vorgang ablehnt. Geprüft sind Berechtigungslogik, Abbruchbedingungen,
+HTTP-Aufruf, Fehlerbehandlung und Windows-Gastdienst-Build; ein echter Sysprep-/
+AME-Wiederanlauf lässt sich in der Cloud ohne Windows-VM nicht testen.

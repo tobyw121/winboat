@@ -87,10 +87,16 @@ class UpdatePayloadTests(unittest.TestCase):
             def do_GET(self):
                 requests.append(self.path)
                 data = {'/version': {'version': 'test'}, '/provisioning/atlas': {'status': 'waiting'},
+                        '/provisioning/atlas/recovery': {'status': 'not-requested'},
                         '/provisioning/atlas/diagnostics': {'service': [{'State': 'Stopped'}], 'startup': ['WNF Wait']}}
                 self.send_response(200)
                 self.end_headers()
                 self.wfile.write(json.dumps(data[self.path]).encode())
+            def do_POST(self):
+                requests.append(self.path + ':POST')
+                self.send_response(202 if self.headers.get('X-WinBoat-Recovery') == 'restart-oobe' else 400)
+                self.end_headers()
+                self.wfile.write(b'{"status":"queued"}')
             def log_message(self, *args):
                 pass
         server = ThreadingHTTPServer(('127.0.0.1', 0), GuestAPI)
@@ -98,16 +104,20 @@ class UpdatePayloadTests(unittest.TestCase):
         thread.start()
         try:
             base = f'http://127.0.0.1:{server.server_port}'
-            with patch.object(helper, 'endpoint_and_oem', return_value=(base, self.oem)), \
-                 patch.object(helper.Path, 'home', return_value=self.root), \
-                 patch('sys.argv', ['diagnose-vm.py']), contextlib.redirect_stdout(io.StringIO()):
-                helper.main()
-            output, = (self.root / '.winboat/diagnostics').glob('atlas-*.json')
-            result = json.loads(output.read_text())
-            self.assertEqual(result['startup'], ['WNF Wait'])
-            self.assertEqual(result['atlasStatus']['status'], 'waiting')
-            self.assertEqual(output.stat().st_mode & 0o777, 0o600)
-            self.assertEqual(requests, ['/version', '/provisioning/atlas/diagnostics', '/provisioning/atlas'])
+            for recover in [False, True]:
+                requests.clear()
+                argv = ['diagnose-vm.py'] + (['--recover-oobe'] if recover else [])
+                with patch.object(helper, 'endpoint_and_oem', return_value=(base, self.oem)), \
+                     patch.object(helper.Path, 'home', return_value=self.root), \
+                     patch('sys.argv', argv), contextlib.redirect_stdout(io.StringIO()):
+                    helper.main()
+                output = sorted((self.root / '.winboat/diagnostics').glob('atlas-*.json'))[-1]
+                result = json.loads(output.read_text())
+                self.assertEqual(result['startup'], ['WNF Wait'])
+                self.assertEqual(result['atlasStatus']['status'], 'waiting')
+                self.assertEqual(output.stat().st_mode & 0o777, 0o600)
+                expected = ['/version', '/provisioning/atlas/diagnostics', '/provisioning/atlas', '/provisioning/atlas/recovery']
+                self.assertEqual(requests, expected + (['/provisioning/atlas/recovery:POST'] if recover else []))
         finally:
             server.shutdown()
             server.server_close()
