@@ -27,6 +27,11 @@ netsh advfirewall firewall add rule name="Allow WinBoat API 7148" dir=in action=
 "%NSSM_PATH%" start WinBoatGuestServer
 
 :: Helios is provisioned only when explicitly selected in WinBoat.
+:: Register before Helios so Atlas survives its reboots and waits for completion.
+if exist "%OEM_DIR%\atlas-enabled" (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%INSTALL_DIR%\scripts\Start-AtlasProvisioning.ps1" -Register -BundlePath "%INSTALL_DIR%\atlas"
+    if errorlevel 1 exit /b 1
+)
 if exist "%OEM_DIR%\helios-enabled" (
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%INSTALL_DIR%\scripts\Start-HeliosProvisioning.ps1" -BundlePath "%INSTALL_DIR%\helios"
     if errorlevel 1 exit /b 1

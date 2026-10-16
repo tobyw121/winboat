@@ -233,6 +233,7 @@ func main() {
 	r.HandleFunc("/apps", getApps).Methods("GET")
 	r.HandleFunc("/health", getHealth).Methods("GET")
 	r.HandleFunc("/graphics/helios", getHeliosStatus).Methods("GET")
+	r.HandleFunc("/provisioning/atlas", getAtlasStatus).Methods("GET")
 	r.HandleFunc("/version", getVersion).Methods("GET")
 	r.HandleFunc("/metrics", getMetrics).Methods("GET")
 	r.HandleFunc("/rdp/status", getRdpConnectedStatus).Methods("GET")

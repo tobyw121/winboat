@@ -62,6 +62,12 @@ jobs:
         shell: pwsh
         working-directory: .
         run: ./scripts/helios/windows/Initialize-Sources.ps1 -RepoRoot $env:GITHUB_WORKSPACE -Component driver
+      - name: Check Atlas provisioning result validation (PowerShell 7)
+        shell: pwsh
+        run: ./tests/atlas-windows.test.ps1
+      - name: Check Atlas provisioning result validation (Windows PowerShell)
+        shell: powershell
+        run: ./tests/atlas-windows.test.ps1
       - name: Check registry snapshot preservation (PowerShell 7)
         shell: pwsh
         run: ./packaging/windows/Test-HeliosRegistrySnapshots.ps1
