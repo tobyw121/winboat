@@ -129,3 +129,28 @@ Die VM behält ihren eigenen PID-Namespace. QEMU läuft als root, der Viewer als
 Desktop-UID. Der Test verlangt erfolgreiche Registrierung, Softwareframes
 und ausgeführte Fensterausgaben. Der Test nutzt keine GPU, kein KVM und kein
 Windows. Er bestätigt keinen physischen DMA-BUF-Import oder Gamingbetrieb.
+
+## VM endet direkt nach dem Start
+
+Dockur kann beim Ende von QEMU `Shutdown completed` und Docker-Exitcode 0
+melden. Das belegt noch keine erfolgreiche Windows-Installation. Die Dateien
+unter `/run/shm` sind nach dem Container-Ende möglicherweise nicht mehr lesbar.
+Für einen Mitschnitt auf dem Linux-Host im Repository ausführen:
+
+```bash
+python3 scripts/helios/diagnose-vm.py
+```
+
+Das Skript startet einen gestoppten Container `WinBoat` oder hängt sich an einen
+laufenden Container an. Es sammelt für höchstens 120 Sekunden Docker-Ausgaben,
+Snapshots der QEMU-Protokolle und Ereignisse vom veröffentlichten QMP-Port
+7149 (Host-Port wird aus Docker ermittelt). Über QMP sendet es ausschließlich
+die Protokollfreigabe und `query-status`. Es stoppt die VM am Ende nicht.
+Die Ausgabe nennt den privaten Diagnoseordner unter `~/.winboat/diagnostics/`
+und zeigt die letzten Protokollzeilen sowie Ereignisse wie `SHUTDOWN`/`RESET`.
+Passwörter aus Dockers `Config.Env` werden nicht abgefragt oder exportiert.
+
+`--container NAME`, `--seconds 180` und `--output /ein/neuer/ordner` passen den
+Mitschnitt an. Dafür sind Python 3 und die lokale Docker-CLI erforderlich.
+Der Recorder wurde mit einem echten QEMU/TCG-Container und kontrolliertem
+`host-signal`-Shutdown geprüft; ein Windows-/GPU-Lauf ist eine gesonderte Prüfung.
