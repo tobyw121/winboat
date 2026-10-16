@@ -138,3 +138,30 @@ Konflikt-/Build-Abweisung, Original-AME-/Atlas-Ressourcen, PowerShell-Logik und
 Paketbau. Eine vollständige Windows-/AME-OOBE-/Helios-Installation wurde in der
 Cloud ohne passende Windows-/GPU-VM nicht ausgeführt. Der ISO-Modus bleibt
 experimentell.
+
+### Hängende AME-OOBE ohne Eingabeaufforderung untersuchen
+
+Wenn Umschalt+F10 nicht funktioniert, kann der bereits erreichbare WinBoat-
+Gastdienst feste Diagnosen liefern. Im Repository auf dem Linux-Host ausführen:
+
+```bash
+git pull --ff-only origin work
+python3 scripts/atlas/diagnose-vm.py --update-guest
+```
+
+Benötigt Python 3, Docker mit Buildx und den ursprünglichen `/oem`-Bind-Mount.
+Das Skript baut nur den Windows-Gastdienst und überträgt ihn über dessen
+bestehenden Update-Endpunkt. Der Updater sichert das bisherige Programmverzeichnis
+und startet den WinBoat-Gastdienst neu. Windows und AME werden nicht neu gestartet.
+Vorhandene Helios-Installationsdateien bleiben im Update-Paket enthalten; fehlt
+ein benötigtes OEM-Paket, wird kein Update übertragen. Dieser Helfer unterstützt
+den ISO-/OOBE-Modus.
+
+Anschließend liefert `/provisioning/atlas/diagnostics` AME-Dienststatus,
+Prozessnamen, ausgewählte Setup-Zustände, Dateivorhandensein und fest gefilterte
+Startmarkierungen aus `C:\ProgramData\AME\Logs\Log.yml`. Die Abfrage liest weder
+`oobe.conf` noch Prozessbefehlszeilen aus und gibt keine vollständigen Logs aus.
+Die Ausgabe wird privat unter `~/.winboat/diagnostics/atlas-*.json` gespeichert.
+Bei weiteren Abfragen genügt `python3 scripts/atlas/diagnose-vm.py`.
+Ein `waiting`- oder älterer `running`-Status allein beweist keinen laufenden
+Playbook-Durchlauf. Der Diagnoseweg repariert einen blockierten AME-Client nicht.
