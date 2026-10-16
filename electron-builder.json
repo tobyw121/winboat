@@ -50,6 +50,11 @@
   ],
   "extraResources": [
     {
+      "from": "./resources/atlas-tools",
+      "to": "atlas-tools",
+      "filter": ["entry.sh", "inject.sh"]
+    },
+    {
       "from": "./resources/vm-profile",
       "to": "vm-profile",
       "filter": ["entry.sh", "config.sh"]

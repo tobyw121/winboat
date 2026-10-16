@@ -2,6 +2,8 @@ import { configureHelios, validateHeliosProgress } from '../../shared/helios';
 import { requireHelios, heliosBundlePath } from './helios';
 import { configureVmIdentity } from '../../shared/vm-identity';
 import { loadOrCreateVmIdentity } from '../../shared/vm-identity-store';
+import { validateAtlasSelection, validateAtlasProgress, configureAtlasIso } from '../../shared/atlas';
+import { stageAtlasBundle } from '../../shared/atlas-bundle';
 import { type ComposeConfig, type InstallConfiguration } from "../../types";
 import {
     GUEST_API_PORT,
@@ -80,6 +82,8 @@ export const InstallStates = {
     MONITORING_PREINSTALL: 'Monitoring Preinstall',
     INSTALLING_WINDOWS: 'Installing Windows',
     INSTALLING_HELIOS: 'Installing Helios graphics driver',
+    PREPARING_ATLAS: 'Downloading AME CLI and Atlas playbook',
+    INSTALLING_ATLAS: 'Applying Atlas in Windows (check the Windows console)',
     COMPLETED: 'Completed',
     INSTALL_ERROR: 'Install Error'
 } as const;
@@ -124,6 +128,11 @@ export class InstallManager {
     }
 
     async createComposeFile() {
+        validateAtlasSelection(this.conf.atlasEnabled, this.conf.windowsVersion, this.conf.customIsoPath);
+        if (this.conf.atlasEnabled && fs.existsSync(this.conf.installFolder) &&
+            fs.readdirSync(this.conf.installFolder).some(name => /^(data.*|windows|system)\.(img|qcow2?|raw|vhdx?|vmdk)$/i.test(name))) {
+            throw new Error('Atlas setup is available for a new VM only. Select a new installation directory. Existing disks will not be modified.');
+        }
         this.changeState(InstallStates.CREATING_COMPOSE_FILE);
 
         // Ensure the .winboat directory exists
@@ -158,6 +167,9 @@ export class InstallManager {
             const hardwareIdentity = loadOrCreateVmIdentity(fs, this.conf.installFolder,
                 os.cpus()[0]?.model || '');
             composeContent.services.windows = configureVmIdentity(composeContent.services.windows, hardwareIdentity, this.conf.reduceCpuMarkers);
+        }
+        if (this.conf.atlasEnabled && this.conf.atlasMode === 'iso') {
+            composeContent.services.windows = configureAtlasIso(composeContent.services.windows);
         }
 
         // Boot image mapping
@@ -251,6 +263,13 @@ export class InstallManager {
                 copyRecursive(srcPath, destPath);
             });
             const profileTools = path.join(oemPath, '.winboat-hardware');
+            const atlasTools = path.join(oemPath, '.winboat-atlas');
+            if (this.conf.atlasEnabled && this.conf.atlasMode === 'iso') {
+                const source = remote.app.isPackaged ? path.join(process.resourcesPath, 'atlas-tools')
+                    : path.join(remote.app.getAppPath(), '..', '..', 'resources', 'atlas-tools');
+                fs.mkdirSync(atlasTools, { recursive: true });
+                for (const file of ['entry.sh', 'inject.sh']) fs.copyFileSync(path.join(source, file), path.join(atlasTools, file));
+            } else fs.rmSync(atlasTools, { recursive: true, force: true });
             if (this.conf.hardwareIdentityEnabled) {
                 const source = remote.app.isPackaged ? path.join(process.resourcesPath, 'vm-profile')
                     : path.join(remote.app.getAppPath(), '..', '..', 'resources', 'vm-profile');
@@ -295,6 +314,24 @@ export class InstallManager {
             throw e;
         }
         logger.info('Container started successfully.');
+    }
+
+    async prepareAtlas() {
+        const target = path.join(WINBOAT_DIR, 'oem', 'atlas');
+        fs.rmSync(path.join(WINBOAT_DIR, 'oem', 'atlas-enabled'), { force: true });
+        if (!this.conf.atlasEnabled) {
+            fs.rmSync(target, { recursive: true, force: true });
+            return;
+        }
+        this.changeState(InstallStates.PREPARING_ATLAS);
+        const crypto: typeof import('crypto') = require('crypto');
+        await stageAtlasBundle(fs, path, data => crypto.createHash('sha256').update(data).digest('hex'),
+            target, this.conf.username, this.conf.heliosEnabled, async url => {
+                const response = await nodeFetch(url, { timeout: 180000, size: 128 * 1024 * 1024 });
+                if (!response.ok) throw new Error(`Atlas download failed: HTTP ${response.status}. Check your network and try again.`);
+                return response.buffer();
+            }, msg => this.setPreinstallMsg(msg), this.conf.atlasMode);
+        fs.writeFileSync(path.join(WINBOAT_DIR, 'oem', 'atlas-enabled'), '1');
     }
 
     async monitorContainerPreinstall() {
@@ -379,16 +416,35 @@ export class InstallManager {
         throw new Error('Helios installation timed out. Inspect C:\\ProgramData\\Helios\\logs\\setup.log in Windows.');
     }
 
+    async monitorAtlas() {
+        this.changeState(InstallStates.INSTALLING_ATLAS);
+        const port = this.portMgr.value!.getHostPort(GUEST_API_PORT);
+        const deadline = Date.now() + 120 * 60 * 1000;
+        while (Date.now() < deadline) {
+            let response;
+            try { response = await nodeFetch(`http://127.0.0.1:${port}/provisioning/atlas`, { timeout: 5000 }); }
+            catch { await this.sleep(5000); continue; }
+            if (!response.ok) throw new Error(`Atlas status API returned HTTP ${response.status}. Inspect the Windows console.`);
+            const progress = validateAtlasProgress(await response.json());
+            this.setPreinstallMsg(progress.message);
+            if (progress.status === 'finished') return;
+            await this.sleep(5000);
+        }
+        throw new Error('Atlas setup is still pending. Open the Windows console and inspect C:\\ProgramData\\WinBoat\\Atlas\\status.json.');
+    }
+
     async install() {
         logger.info('Starting installation...');
 
         try {
             await this.createComposeFile();
             this.createOEMAssets();
+            await this.prepareAtlas();
             await this.startContainer();
             await this.monitorContainerPreinstall();
             await this.monitorAPIHealth();
             if (this.conf.heliosEnabled) await this.monitorHelios();
+            if (this.conf.atlasEnabled) await this.monitorAtlas();
             this.changeState(InstallStates.COMPLETED);
 
             logger.info('Installation completed successfully.');

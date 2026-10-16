@@ -176,7 +176,7 @@
                     </div>
     
                     <!-- Windows Configuration -->
-                    <div v-if="currentStep.id === StepID.WINDOWS_CONFIG" class="step-block">
+                    <div v-if="currentStep.id === StepID.WINDOWS_CONFIG" class="step-block !h-auto min-h-full py-4">
                         <h1 class="text-3xl font-semibold">{{ currentStep.title }}</h1>
                         <p class="text-lg text-gray-400">
                             Pick the version of Windows you want to install, and the language you'd like to use.
@@ -190,7 +190,7 @@
                                 id="select-edition"
                                 @change="(e: any) => windowsVersion = e.detail.newValue"
                                 class="w-64"
-                                :disabled="!!customIsoPath"
+                                :disabled="!!customIsoPath || atlasEnabled"
                             >
                                 <x-menu>
                                     <x-menuitem
@@ -232,6 +232,24 @@
                             </x-select>
                         </div>
                         <div class="mt-4">
+                            <label for="select-install-mode" class="text-sm text-neutral-400">Installation mode</label>
+                            <x-select id="select-install-mode" class="w-full" :disabled="!!customIsoPath"
+                                @change="(e: any) => selectInstallMode(e.detail.newValue)">
+                                <x-menu>
+                                    <x-menuitem value="standard" :toggled="!atlasEnabled"><x-label>Standard Windows</x-label></x-menuitem>
+                                    <x-menuitem value="atlas-iso" :toggled="atlasEnabled && atlasMode === 'iso'"><x-label>Windows 11 Pro + AtlasOS: ISO injection (experimental)</x-label></x-menuitem>
+                                    <x-menuitem value="atlas-live" :toggled="atlasEnabled && atlasMode === 'live'"><x-label>Windows 11 Pro + AtlasOS: apply after installation</x-label></x-menuitem>
+                                </x-menu>
+                            </x-select>
+                            <p v-if="atlasEnabled" class="text-sm text-gray-400">
+                                Atlas 0.5.0 is applied inside Windows after installation and Helios setup.
+                                Requires Windows 11 24H2/25H2 Pro. Follow AME preparation prompts in the Windows console;
+                                restarts may be needed. Defender, CPU mitigations and automatic updates are selected to stay enabled.
+                                <span v-if="atlasMode === 'iso'">WinBoat embeds AME/Atlas into the Windows WIM before boot; the playbook runs in the guest. This uses standard Windows setup, not AME's custom OOBE. Extra disk space is needed to rebuild the ISO.</span>
+                                <a href="https://docs.atlasos.net/getting-started/" @click="openAnchorLink" class="underline">Atlas guide</a>
+                            </p>
+                        </div>
+                        <div>
                             <div class="flex flex-col gap-2">
                                 <label for="select-iso" class="text-xs text-neutral-400">Custom ISO (Optional)</label>
                                 <div class="flex items-center gap-2">
@@ -554,6 +572,10 @@
                                     <span class="text-base text-white">{{ windowsLanguage }}</span>
                                 </div>
                                 <div class="flex flex-col">
+                                    <span class="text-sm text-gray-400">AtlasOS</span>
+                                    <span class="text-base text-white">{{ atlasEnabled ? (atlasMode === 'iso' ? 'WIM injection + AME CLI' : 'AME CLI after Windows setup') : 'Disabled' }}</span>
+                                </div>
+                                <div class="flex flex-col">
                                     <span class="text-sm text-gray-400">CPU Cores</span>
                                     <span class="text-base text-white">{{ cpuCores }} Cores</span>
                                 </div>
@@ -764,6 +786,8 @@ const homeFolderSharing = ref(false);
 const heliosEnabled = ref(true);
 const hardwareIdentityEnabled = ref(true);
 const reduceCpuMarkers = ref(true);
+const atlasEnabled = ref(false);
+const atlasMode = ref<'iso' | 'live'>('iso');
 const heliosSupportAvailable = ref(checkHeliosSupport());
 const installState = ref<InstallState>(InstallStates.IDLE);
 const preinstallMsg = ref("");
@@ -855,9 +879,16 @@ function selectIsoFile() {
         customIsoFileName.value = path.basename(result.filePaths[0]);
         windowsLanguage.value = 'English'; // Language can't be custom
         windowsVersion.value = 'custom';
+        atlasEnabled.value = false;
         console.log('ISO path updated:', customIsoPath.value);
       }
     });
+}
+
+function selectInstallMode(mode: string) {
+    atlasEnabled.value = mode === 'atlas-iso' || mode === 'atlas-live';
+    atlasMode.value = mode === 'atlas-live' ? 'live' : 'iso';
+    if (atlasEnabled.value) windowsVersion.value = '11';
 }
 
 function deselectIsoFile() {
@@ -942,6 +973,8 @@ function install() {
         heliosEnabled: heliosEnabled.value && heliosSupportAvailable.value,
         hardwareIdentityEnabled: hardwareIdentityEnabled.value,
         reduceCpuMarkers: reduceCpuMarkers.value,
+        atlasEnabled: atlasEnabled.value,
+        atlasMode: atlasMode.value,
         ...(customIsoPath.value ? { customIsoPath: customIsoPath.value } : {}),
     };
 

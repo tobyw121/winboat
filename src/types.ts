@@ -26,6 +26,8 @@ export type InstallConfiguration = {
     heliosEnabled: boolean;
     hardwareIdentityEnabled: boolean;
     reduceCpuMarkers: boolean;
+    atlasEnabled: boolean;
+    atlasMode: 'iso' | 'live';
 }
 
 export type WinApp = {
