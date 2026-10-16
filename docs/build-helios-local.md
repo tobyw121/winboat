@@ -46,13 +46,21 @@ cd winboat
 
 Der Standardablauf:
 
-1. Docker und Plugins prüfen.
+1. Auf Branch `work` automatisch `git pull --ff-only origin work` ausführen,
+   danach Docker und Plugins prüfen.
 2. Helios aus `helios/upstream/` und den festgelegten Abhängigkeiten kompilieren.
 3. Image-Identität und QEMU-Steuerung mit gemeinsamem memfd-Speicher prüfen.
 4. Den vollständig im Git-Repository enthaltenen Windows-Installer unter
    `resources/helios/` gegen Receipt und festgelegte SHA-256-Prüfsumme prüfen.
 5. WinBoat-Tests, Gaststatus-Tests und Vue-Typprüfung ausführen.
 6. Windows-Gastserver und Linux-AppImage bauen und nach `dist/` exportieren.
+
+Das Update läuft auch bei `--skip-host` und den anderen Build-Optionen. Bei
+Git-/Netzwerkfehlern oder nicht per Fast-Forward integrierbaren Änderungen
+beginnt kein Build. Das Skript wechselt keine Branches und führt weder Stash
+noch Reset aus. Lokale Änderungen, die mit dem Update kollidieren, müssen zuerst
+selbst aufgelöst werden. Ändert der Pull den Commit, startet das aktualisierte
+Build-Skript mit denselben Optionen neu. `--help` zeigt nur die Hilfe an.
 
 `HeliosSetup.exe` und `helios-build.json` werden mit WinBoat geklont. Für den
 Installer werden weder GitHub-Token noch Actions-Artefakt-Download benötigt.

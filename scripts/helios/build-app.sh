@@ -8,6 +8,7 @@ case "${1:-AppImage}" in
     *) echo 'Expected package target AppImage or all.' >&2; exit 2 ;;
 esac
 python3 scripts/helios/verify-source.py
+python3 tests/helios-build-update.test.py
 npm run helios:stage -- resources/helios
 npm run test:helios
 npm run test:virgl

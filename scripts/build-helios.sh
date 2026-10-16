@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Build both components on the host Docker daemon. No Docker socket in builders.
 set -euo pipefail
+original_args=("$@")
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
 usage() {
@@ -14,6 +15,7 @@ Usage: ./scripts/build-helios.sh [options]
   -h, --help            Show this help.
 
 Requires Linux x86_64, Bash, Git, Docker Engine, Compose v2 and Buildx.
+Every build first runs git pull --ff-only origin work on the work branch.
 Set HELIOS_BUILD_JOBS to a positive integer (default 4).
 Optional HELIOS_PROXY_CA: trusted CA bundle passed as a BuildKit secret.
 HELP
@@ -38,7 +40,16 @@ while (($#)); do
     esac
 done
 [[ $(uname -s) == Linux && $(uname -m) == x86_64 ]] || die 'Only Linux x86_64 is supported.'
-for command in docker git; do command -v "$command" >/dev/null || die "Install $command first; see docs/build-helios-local.md."; done
+command -v git >/dev/null || die 'Install Git first; see docs/build-helios-local.md.'
+[[ $(git branch --show-current) == work ]] || die 'Check out the work branch before building; no branch was changed automatically.'
+previous_commit=$(git rev-parse HEAD)
+echo 'Updating WinBoat: git pull --ff-only origin work'
+git pull --ff-only origin work || die 'Update failed. Resolve the Git error before building; local changes were not stashed or reset.'
+if [[ $(git rev-parse HEAD) != "$previous_commit" ]]; then
+    # Run the updated build instructions as well as building the updated sources.
+    exec bash "$root/scripts/build-helios.sh" "${original_args[@]}"
+fi
+command -v docker >/dev/null || die 'Install Docker first; see docs/build-helios-local.md.'
 export BUILDX_CONFIG=${BUILDX_CONFIG:-${XDG_CACHE_HOME:-${TMPDIR:-/tmp}}/winboat-buildx-$(id -u)}
 mkdir -p "$BUILDX_CONFIG"
 docker info >/dev/null || die 'Docker Engine is not accessible to this user.'
