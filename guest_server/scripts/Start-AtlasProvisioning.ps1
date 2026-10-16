@@ -15,6 +15,11 @@ function Test-AtlasApplied($Applied, [DateTime]$StartedAt) {
     } catch { return $false }
 }
 
+function Test-AtlasCliCompleted([int]$ExitCode, [string]$Output) {
+    if ($ExitCode -ne 0 -or $Output -match '(?m)^\s*(Playbook completed with errors\.|Fatal Playbook Error:|YAML Error:)') { return $false }
+    return $Output -match '(?m)^\s*Playbook completed successfully\.\s*$'
+}
+
 function Assert-AtlasMedia([string]$Folder) {
     $hashes = @{
         'CLI-Standalone.zip' = '70e4946b52c9384ca88730c0dd25646defc63affdef7acadd69cb6317f21825a'
@@ -112,11 +117,19 @@ try {
     # Pass explicit options: AME CLI does not merge them with radio-page defaults.
     $started = [DateTime]::UtcNow
     Publish-Atlas 'running' 'AME CLI is running in Windows. Follow preparation prompts and log in after any restart. Atlas has not finished yet.'
-    $arguments = @('"' + $playbook + '"') + $options
-    $process = Start-Process -FilePath (Join-Path $cli 'TrustedUninstaller.CLI.exe') -WorkingDirectory $cli -ArgumentList $arguments -Wait -PassThru
-    if ($process.ExitCode -ne 0) { throw "AME CLI exited with code $($process.ExitCode). Inspect the Windows AME logs in $cli." }
+    $consoleLog = Join-Path $root 'cli-console.txt'
+    Push-Location $cli
+    try {
+        # Preserve interactive stdin and show prompts while recording the fresh result.
+        & (Join-Path $cli 'TrustedUninstaller.CLI.exe') $playbook @options 2>&1 | Tee-Object -FilePath $consoleLog
+        $cliExitCode = $LASTEXITCODE
+    } finally { Pop-Location }
+    if ($cliExitCode -ne 0) { throw "AME CLI exited with code $cliExitCode. Inspect the Windows AME logs in $cli." }
+    $output = Get-Content -LiteralPath $consoleLog -Raw
+    if ($output -match '(?m)^\s*Playbook completed with errors\.') { throw 'AME CLI reported playbook errors.' }
     $applied = Get-ItemProperty 'HKLM:\SOFTWARE\AME\Playbooks\Applied\{00000000-0000-4000-6174-6C6173203A33}' -ErrorAction SilentlyContinue
-    if (-not (Test-AtlasApplied $applied $started)) {
+    # Upstream CLI 0.8.4 does not write the GUI's success registry record.
+    if (-not (Test-AtlasCliCompleted $cliExitCode $output) -and -not (Test-AtlasApplied $applied $started)) {
         # Preparation can exit 0 before reboot; a completed playbook can also report errors with exit 0.
         if ($null -ne $applied -and $null -ne $applied.PSObject.Properties['ErrorLevel'] -and [int]$applied.ErrorLevel -ne 0) {
             throw 'AME recorded Atlas playbook errors. A zero CLI exit code does not mean success.'

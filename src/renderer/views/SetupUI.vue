@@ -233,19 +233,19 @@
                         </div>
                         <div class="mt-4">
                             <label for="select-install-mode" class="text-sm text-neutral-400">Installation mode</label>
-                            <x-select id="select-install-mode" class="w-full" :disabled="!!customIsoPath"
+                            <x-select id="select-install-mode" class="w-full"
                                 @change="(e: any) => selectInstallMode(e.detail.newValue)">
                                 <x-menu>
                                     <x-menuitem value="standard" :toggled="!atlasEnabled"><x-label>Standard Windows</x-label></x-menuitem>
-                                    <x-menuitem value="atlas-iso" :toggled="atlasEnabled && atlasMode === 'iso'"><x-label>Windows 11 Pro + AtlasOS: ISO injection (experimental)</x-label></x-menuitem>
-                                    <x-menuitem value="atlas-live" :toggled="atlasEnabled && atlasMode === 'live'"><x-label>Windows 11 Pro + AtlasOS: apply after installation</x-label></x-menuitem>
+                                    <x-menuitem value="atlas-iso" :toggled="atlasEnabled && atlasMode === 'iso'"><x-label>{{ customIsoPath ? 'Custom ISO' : 'Windows 11 Pro' }} + AtlasOS: AME OOBE injection (experimental)</x-label></x-menuitem>
+                                    <x-menuitem value="atlas-live" :toggled="atlasEnabled && atlasMode === 'live'"><x-label>{{ customIsoPath ? 'Custom ISO' : 'Windows 11 Pro' }} + AtlasOS: apply after installation</x-label></x-menuitem>
                                 </x-menu>
                             </x-select>
                             <p v-if="atlasEnabled" class="text-sm text-gray-400">
-                                Atlas 0.5.0 is applied inside Windows after installation and Helios setup.
-                                Requires Windows 11 24H2/25H2 Pro. Follow AME preparation prompts in the Windows console;
-                                restarts may be needed. Defender, CPU mitigations and automatic updates are selected to stay enabled.
-                                <span v-if="atlasMode === 'iso'">WinBoat embeds AME/Atlas into the Windows WIM before boot; the playbook runs in the guest. This uses standard Windows setup, not AME's custom OOBE. Extra disk space is needed to rebuild the ISO.</span>
+                                Requires Windows 11 Pro x64 24H2/25H2 (26100/26200), including custom ISOs.
+                                Defender, CPU mitigations and automatic updates are selected to stay enabled after provisioning.
+                                <span v-if="atlasMode === 'iso'">WinBoat prepares the offline registry and injects AME's own OOBE. Atlas is applied during first setup, before Helios. Existing custom OOBE/answer files may be incompatible. Extra space is needed to rebuild the ISO.</span>
+                                <span v-else>Atlas runs after Windows and Helios setup. Follow AME preparation prompts in the Windows console; restarts may be needed.</span>
                                 <a href="https://docs.atlasos.net/getting-started/" @click="openAnchorLink" class="underline">Atlas guide</a>
                             </p>
                         </div>
@@ -573,7 +573,7 @@
                                 </div>
                                 <div class="flex flex-col">
                                     <span class="text-sm text-gray-400">AtlasOS</span>
-                                    <span class="text-base text-white">{{ atlasEnabled ? (atlasMode === 'iso' ? 'WIM injection + AME CLI' : 'AME CLI after Windows setup') : 'Disabled' }}</span>
+                                    <span class="text-base text-white">{{ atlasEnabled ? (atlasMode === 'iso' ? 'Offline preparation + AME OOBE' : 'AME CLI after Windows setup') : 'Disabled' }}</span>
                                 </div>
                                 <div class="flex flex-col">
                                     <span class="text-sm text-gray-400">CPU Cores</span>
@@ -879,7 +879,6 @@ function selectIsoFile() {
         customIsoFileName.value = path.basename(result.filePaths[0]);
         windowsLanguage.value = 'English'; // Language can't be custom
         windowsVersion.value = 'custom';
-        atlasEnabled.value = false;
         console.log('ISO path updated:', customIsoPath.value);
       }
     });
@@ -888,7 +887,7 @@ function selectIsoFile() {
 function selectInstallMode(mode: string) {
     atlasEnabled.value = mode === 'atlas-iso' || mode === 'atlas-live';
     atlasMode.value = mode === 'atlas-live' ? 'live' : 'iso';
-    if (atlasEnabled.value) windowsVersion.value = '11';
+    if (atlasEnabled.value && !customIsoPath.value) windowsVersion.value = '11';
 }
 
 function deselectIsoFile() {

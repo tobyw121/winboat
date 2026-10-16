@@ -2,7 +2,7 @@ import { configureHelios, validateHeliosProgress } from '../../shared/helios';
 import { requireHelios, heliosBundlePath } from './helios';
 import { configureVmIdentity } from '../../shared/vm-identity';
 import { loadOrCreateVmIdentity } from '../../shared/vm-identity-store';
-import { validateAtlasSelection, validateAtlasProgress, configureAtlasIso } from '../../shared/atlas';
+import { validateAtlasSelection, validateAtlasProgress, configureAtlasIso, ATLAS_ISO_LABEL, ATLAS_ISO_VERSION } from '../../shared/atlas';
 import { stageAtlasBundle } from '../../shared/atlas-bundle';
 import { containerInstallFailure } from '../../shared/install-container';
 import { type ComposeConfig, type InstallConfiguration } from "../../types";
@@ -84,7 +84,7 @@ export const InstallStates = {
     MONITORING_PREINSTALL: 'Monitoring Preinstall',
     INSTALLING_WINDOWS: 'Installing Windows',
     INSTALLING_HELIOS: 'Installing Helios graphics driver',
-    PREPARING_ATLAS: 'Downloading AME CLI and Atlas playbook',
+    PREPARING_ATLAS: 'Preparing AME and the bundled Atlas playbook',
     INSTALLING_ATLAS: 'Applying Atlas in Windows (check the Windows console)',
     COMPLETED: 'Completed',
     INSTALL_ERROR: 'Install Error'
@@ -172,13 +172,16 @@ export class InstallManager {
                 os.cpus()[0]?.model || '');
             composeContent.services.windows = configureVmIdentity(composeContent.services.windows, hardwareIdentity, this.conf.reduceCpuMarkers);
         }
-        if (this.conf.atlasEnabled && this.conf.atlasMode === 'iso') {
-            composeContent.services.windows = configureAtlasIso(composeContent.services.windows);
+        if (this.conf.atlasEnabled) {
+            composeContent.services.windows = configureAtlasIso(composeContent.services.windows, this.conf.atlasMode);
+            const { stdout } = await execFileAsync('docker', ['image', 'inspect', '--format',
+                `{{ index .Config.Labels "${ATLAS_ISO_LABEL}" }}`, composeContent.services.windows.image]);
+            if (stdout.trim() !== ATLAS_ISO_VERSION) throw new Error('The host image lacks AME OOBE/offline tools. Rebuild with scripts/build-helios.sh.');
         }
 
         // Boot image mapping
         if (this.conf.customIsoPath) {
-            composeContent.services.windows.volumes.push(`${this.conf.customIsoPath}:/boot.iso`);
+            composeContent.services.windows.volumes.push(`${this.conf.customIsoPath}:/boot.iso:ro`);
         }
 
         // Storage folder mapping
@@ -268,11 +271,11 @@ export class InstallManager {
             });
             const profileTools = path.join(oemPath, '.winboat-hardware');
             const atlasTools = path.join(oemPath, '.winboat-atlas');
-            if (this.conf.atlasEnabled && this.conf.atlasMode === 'iso') {
+            if (this.conf.atlasEnabled) {
                 const source = remote.app.isPackaged ? path.join(process.resourcesPath, 'atlas-tools')
                     : path.join(remote.app.getAppPath(), '..', '..', 'resources', 'atlas-tools');
                 fs.mkdirSync(atlasTools, { recursive: true });
-                for (const file of ['entry.sh', 'inject.sh']) fs.copyFileSync(path.join(source, file), path.join(atlasTools, file));
+                for (const file of ['entry.sh', 'inject.sh', 'inject.py', 'ame_assets.py', 'offline_registry.py']) fs.copyFileSync(path.join(source, file), path.join(atlasTools, file));
             } else fs.rmSync(atlasTools, { recursive: true, force: true });
             if (this.conf.hardwareIdentityEnabled) {
                 const source = remote.app.isPackaged ? path.join(process.resourcesPath, 'vm-profile')
@@ -351,12 +354,14 @@ export class InstallManager {
         }
         this.changeState(InstallStates.PREPARING_ATLAS);
         const crypto: typeof import('crypto') = require('crypto');
+        const bundledAtlas = remote.app.isPackaged ? path.join(process.resourcesPath, 'atlas')
+            : path.join(remote.app.getAppPath(), '..', '..', 'resources', 'atlas');
         await stageAtlasBundle(fs, path, data => crypto.createHash('sha256').update(data).digest('hex'),
             target, this.conf.username, this.conf.heliosEnabled, async url => {
-                const response = await nodeFetch(url, { timeout: 180000, size: 128 * 1024 * 1024 });
+                const response = await nodeFetch(url, { timeout: 300000, size: 192 * 1024 * 1024 });
                 if (!response.ok) throw new Error(`Atlas download failed: HTTP ${response.status}. Check your network and try again.`);
                 return response.buffer();
-            }, msg => this.setPreinstallMsg(msg), this.conf.atlasMode);
+            }, msg => this.setPreinstallMsg(msg), this.conf.atlasMode, bundledAtlas, this.conf.password);
         fs.writeFileSync(path.join(WINBOAT_DIR, 'oem', 'atlas-enabled'), '1');
     }
 
@@ -473,8 +478,9 @@ export class InstallManager {
             await this.startContainer();
             await this.monitorContainerPreinstall();
             await this.monitorAPIHealth();
+            if (this.conf.atlasEnabled && this.conf.atlasMode === 'iso') await this.monitorAtlas();
             if (this.conf.heliosEnabled) await this.monitorHelios();
-            if (this.conf.atlasEnabled) await this.monitorAtlas();
+            if (this.conf.atlasEnabled && this.conf.atlasMode === 'live') await this.monitorAtlas();
             this.changeState(InstallStates.COMPLETED);
 
             logger.info('Installation completed successfully.');

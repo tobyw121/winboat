@@ -2,6 +2,12 @@
 export const ATLAS_RELEASE = '0.5.0-hotfix';
 export const AME_RELEASE = '0.8.4';
 export type AtlasMode = 'iso' | 'live';
+export const ATLAS_IMAGE = `winboat/atlas:${ATLAS_RELEASE}`;
+export const ATLAS_ISO_LABEL = 'org.winboat.atlas.iso';
+export const ATLAS_ISO_VERSION = 'ame-oobe-v1';
+export const AME_WIZARD_ASSET = { name: 'AME-Beta-v0.8.4.exe',
+    sha256: 'a637f32b64e1493b315db9139065105656c84518dca20ce3b18c89750ee40c82',
+    url: 'https://github.com/Ameliorated-LLC/trusted-uninstaller-cli/releases/download/0.8.4/AME-Beta-v0.8.4.exe' } as const;
 export const ATLAS_OPTIONS = ['defender-enable', 'mitigations-default', 'auto-updates-default'] as const;
 export const ATLAS_ASSETS = [
     { name: 'CLI-Standalone.zip', sha256: '70e4946b52c9384ca88730c0dd25646defc63affdef7acadd69cb6317f21825a',
@@ -11,18 +17,23 @@ export const ATLAS_ASSETS = [
 ] as const;
 
 export function validateAtlasSelection(enabled: boolean, version: string, iso?: string) {
-    if (enabled && (version !== '11' || iso)) {
-        throw new Error('Automatic Atlas provisioning requires a fresh Windows 11 Pro download. Use Custom ISO for an AME-injected ISO.');
+    if (enabled && !((version === '11' && !iso) || (version === 'custom' && !!iso))) {
+        throw new Error('Atlas requires Windows 11 Pro or a custom Windows ISO. Custom ISO edition/build compatibility is checked before applying Atlas.');
     }
 }
 
-export function configureAtlasIso<T extends { entrypoint?: string[]; environment: Record<string, string> }>(service: T): T {
+export function configureAtlasIso<T extends { image?: string; pull_policy?: string; entrypoint?: string[]; environment: Record<string, string> }>(service: T, mode: AtlasMode = 'iso'): T {
     const result = JSON.parse(JSON.stringify(service)) as T;
     if (result.entrypoint && result.entrypoint.at(-1) !== '/oem/.winboat-hardware/entry.sh') {
         throw new Error('Atlas ISO injection cannot replace a custom container entrypoint.');
     }
     result.entrypoint = ['/usr/bin/tini', '-s', '--', '/bin/bash', '/oem/.winboat-atlas/entry.sh'];
     result.environment.WINBOAT_ATLAS_ISO = '1';
+    result.environment.WINBOAT_ATLAS_MODE = mode;
+    if (result.environment.HELIOS !== '1' && result.image) {
+        result.image = ATLAS_IMAGE;
+        result.pull_policy = 'never';
+    }
     return result;
 }
 
