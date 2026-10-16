@@ -15,20 +15,21 @@ function docker(args: string[], input?: string): string {
 }
 assert.equal(docker(['image', 'inspect', '--format', `{{ index .Config.Labels "${HELIOS_LABEL}" }}`, HELIOS_IMAGE]).trim(), HELIOS_REVISION);
 assert.equal(docker(['image', 'inspect', '--format', `{{ index .Config.Labels "${HELIOS_DISPLAY_CAPABILITY}" }}`, HELIOS_IMAGE]).trim(), HELIOS_DISPLAY_VERSION);
+const startup = fs.readFileSync(new URL('../../tests/helios-startup.sh', import.meta.url), 'utf8');
 // A null character-device fixture exercises argument generation, never GPU rendering.
-const display = docker(['run', '--rm', '--device', '/dev/null:/dev/dri/renderD128',
+const display = docker(['run', '--rm', '-i', '--network', 'none', '--device', '/dev/null:/dev/dri/renderD128',
     '-e', 'RENDERNODE=/dev/dri/renderD128', '-e', 'RAM_SIZE=128M', '-e', 'VNC_PORT=5900', '-e', 'WSS_PORT=5700',
-    '--entrypoint', 'bash', HELIOS_IMAGE, '-c', 'source /run/display.sh; printf "%s" "$DISPLAY_OPTS"']);
+    '--entrypoint', 'bash', HELIOS_IMAGE, '-s'], startup);
 assert.ok(display.includes('venus=on,blob=on'));
 assert.ok(display.includes('memory-backend-memfd,id=helios-ram,size=128M,share=on'));
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'winboat-display-args-'));
 const socket = net.createServer();
 await new Promise<void>((resolve, reject) => { socket.once('error', reject); socket.listen(path.join(temporary, 'bus'), resolve); });
 try {
-    const local = docker(['run', '--rm', '--device', '/dev/null:/dev/dri/renderD128',
+    const local = docker(['run', '--rm', '-i', '--network', 'none', '--device', '/dev/null:/dev/dri/renderD128',
         '-v', `${temporary}:/run/helios-display:ro`, '-e', 'HELIOS_DISPLAY=dbus',
         '-e', 'RAM_SIZE=128M', '-e', 'VNC_PORT=5900', '-e', 'WSS_PORT=5700',
-        '--entrypoint', 'bash', HELIOS_IMAGE, '-c', 'source /run/display.sh; printf "%s" "$DISPLAY_OPTS"']);
+        '--entrypoint', 'bash', HELIOS_IMAGE, '-s'], startup);
     assert.ok(local.includes('dbus,addr=unix:path=/run/helios-display/bus,gl=on,rendernode=/dev/dri/renderD128'));
     assert.ok(local.includes('-vnc :0,websocket=5700'));
     assert.ok(local.includes('venus=on,blob=on'));
@@ -48,4 +49,4 @@ const messages = output.split('\n').filter(line => line.startsWith('{')).map(lin
 assert.ok(!messages.some(message => 'error' in message), output);
 assert.ok(messages.some(message => message.return?.['base-memory'] === 128 * 1024 * 1024), output);
 assert.ok(messages.some(message => message.event === 'SHUTDOWN' && message.data.reason === 'host-qmp-quit'), output);
-console.log('Helios image identity, display arguments, runtime libraries and shared-memory QMP/TCG control smoke passed. GPU/Windows tests remain separate.');
+console.log('Helios image identity, dockur network/config startup, HTTP preinstall completion, display arguments, runtime libraries and shared-memory QMP/TCG control smoke passed. GPU/Windows tests remain separate.');

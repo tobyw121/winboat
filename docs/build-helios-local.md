@@ -86,6 +86,33 @@ an `helios/host/` nicht ein. Nach Host-Änderungen immer ohne `--skip-host` baue
 Ergebnisse werden erst nach erfolgreichem Build und Prüfsummenprüfung übernommen.
 Ältere Pakete in `dist/` bleiben erhalten; `SHA256SUMS` gehört zum letzten Lauf.
 
+### Container startet wiederholt mit `DISPLAY: unbound variable`
+
+Ältere Helios-Images initialisieren zwar die QEMU-Anzeige, lassen aber die von
+`network.sh` und `config.sh` benötigte dockur-Variable `DISPLAY` offen. Der
+Container bricht dadurch nach der ISO-Vorbereitung ab; WinBoat kann anschließend
+`ECONNREFUSED` für den Webserver auf Port 8006 anzeigen. Der korrigierte Adapter
+setzt dockurs Konsolenmodus auf `web`, auch beim optionalen D-Bus-Viewer.
+
+WinBoat schließen, den Checkout aktualisieren und beide Komponenten neu bauen:
+
+```bash
+git pull --ff-only origin work
+./scripts/build-helios.sh
+docker compose -f "$HOME/.winboat/docker-compose.yml" up -d --force-recreate
+docker logs --tail 80 WinBoat
+```
+
+`docker restart` allein verwendet weiterhin das alte Image des bestehenden
+Containers. Die Neuerstellung mit derselben Compose-Datei behält die
+Speicherzuordnung, heruntergeladene ISO und Windows-Disk bei. Weder das
+Installationsverzeichnis löschen noch `docker compose down -v` ausführen.
+Danach die neue AppImage starten und den Installationsstatus prüfen.
+
+`npm run test:helios:host` prüft beide Anzeigemodi gegen die tatsächlichen
+Netzwerk-/Konfigurationsskripte des gebauten Images und den HTTP-Wechsel von
+200 auf 404 für `msg.html`. Dieser Test benötigt keine Windows-ISO oder GPU.
+
 ## Windows-Installer aus den eingebetteten Quellen neu bauen
 
 Der vollständige Installer und seine Treiber werden durch WinBoats eigenen

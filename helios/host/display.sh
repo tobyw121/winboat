@@ -7,6 +7,10 @@ set -Eeuo pipefail
 [[ "$HELIOS" == 1 ]] || { echo 'Use the standard Windows image when Helios is disabled.' >&2; exit 1; }
 [[ "$RENDERNODE" =~ ^/dev/dri/renderD[0-9]+$ ]] || { echo 'Invalid DRM render node.' >&2; exit 1; }
 [[ -c "$RENDERNODE" && -r "$RENDERNODE" && -w "$RENDERNODE" ]] || { echo "Helios cannot access $RENDERNODE" >&2; exit 1; }
+# dockur's network/config stages use DISPLAY independently of QEMU's backend:
+# reserve the console ports and remove msg.html when preinstallation finishes.
+# Keep Browser Display available in both the EGL and native D-Bus modes.
+DISPLAY=web
 # Headless EGL creates the host rendering context; VNC/WebSocket carries the
 # Helios scanout. No extra standard VGA adapter or full GPU passthrough.
 case "${HELIOS_DISPLAY:-novnc}" in
