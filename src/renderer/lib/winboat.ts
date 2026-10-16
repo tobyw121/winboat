@@ -1,4 +1,5 @@
 import { requireHelios } from './helios';
+import { prepareLocalDisplay, launchLocalDisplay } from './helios-display';
 import { ref, type Ref } from "vue";
 import { WINBOAT_DIR, GUEST_API_PORT, GUEST_RDP_PORT, GUEST_QMP_PORT, GUEST_NOVNC_PORT } from "./constants";
 import type { ComposeConfig, GuestServerUpdateResponse, GuestServerVersion, Metrics, WinApp, CustomAppCallbacks } from "../../types";
@@ -487,6 +488,7 @@ export class Winboat {
         try {
             const compose = this.parseCompose();
             if (compose.services.windows.environment.HELIOS === '1') await requireHelios();
+            await prepareLocalDisplay(compose);
             this.portMgr.value = await PortManager.parseCompose(compose);
 
             if(!this.portMgr.value!.composeFormat.every((elem) => compose.services.windows.ports.includes(elem))) {
@@ -555,6 +557,7 @@ export class Winboat {
 
     async replaceCompose(composeConfig: ComposeConfig) {
         if (composeConfig.services.windows.environment.HELIOS === '1') await requireHelios();
+        await prepareLocalDisplay(composeConfig);
         logger.info("Going to replace compose config");
         this.containerActionLoading.value = true;
 
@@ -641,7 +644,14 @@ export class Winboat {
         const compose = this.parseCompose();
         if (app.Path === InternalApps.WINDOWS_DESKTOP && compose.services.windows.environment.HELIOS === '1') {
             // Keep games on the Helios console adapter, not an RDP virtual display.
-            customAppCallbacks[CustomAppCommands.NOVNC_COMMAND]!(this);
+            const fallback = (message: string) => {
+                logger.warn(`Local Helios display: ${message}`);
+                customAppCallbacks[CustomAppCommands.NOVNC_COMMAND]!(this);
+            };
+            if (compose.services.windows.environment.HELIOS_DISPLAY === 'dbus') {
+                try { await launchLocalDisplay(fallback); }
+                catch (error) { fallback(error instanceof Error ? error.message : String(error)); }
+            } else customAppCallbacks[CustomAppCommands.NOVNC_COMMAND]!(this);
             this.appMgr?.incrementAppUsage(app);
             this.appMgr?.writeToDisk();
             return;

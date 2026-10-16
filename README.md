@@ -68,6 +68,26 @@ You can download the latest Linux builds under the [Releases](https://github.com
 - Any rootless containerization solution is currently **unsupported**
 
 ## Building WinBoat
+
+### Build this branch with Helios
+
+WinBoat and the pinned Helios root sources are included in this repository
+(`helios/upstream/`). On a Linux x86_64 host with Docker Engine, Compose v2 and
+Buildx, build both with:
+
+```bash
+./scripts/build-helios.sh
+```
+
+This builds the Helios host image and a WinBoat AppImage with the verified
+Windows installer. Add `--all-packages` for DEB, RPM and tar.gz or
+`--installer-dir /path/to/artifact` for a Windows installer built by CI.
+See [the complete local build instructions](docs/build-helios-local.md).
+The optional [native Helios desktop](docs/helios-local-display.md) is built into
+the application and can be enabled in Settings; the default remains Browser Display.
+
+### Build with a local Node.js/Go toolchain
+
 - For building you need to have NodeJS and Go installed on your system
 - Clone the repo (`git clone https://github.com/TibixDev/WinBoat`)
 - Install the dependencies (`npm i`)

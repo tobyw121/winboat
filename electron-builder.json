@@ -52,6 +52,11 @@
   ],
   "extraResources": [
     {
+      "from": "./build/native",
+      "to": "native",
+      "filter": ["winboat-helios-viewer"]
+    },
+    {
       "from": "./guest_server",
       "to": "guest_server",
       "filter": [

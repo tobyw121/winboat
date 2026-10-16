@@ -1,0 +1,235 @@
+--- a/ui/dbus-console.c
++++ b/ui/dbus-console.c
+@@ -252,13 +252,40 @@
+ }
+ #endif
+ 
+-static gboolean
+-dbus_console_register_listener(DBusDisplayConsole *ddc,
++#ifdef G_OS_UNIX
++/* Bind the delegated listener socket to the authenticated display-bus caller.
++ * Container QEMU and the desktop viewer need not have the same effective UID.
++ * EXTERNAL still has to match the socket credentials and this registered UID.
++ */
++static gboolean dbus_listener_mechanism(GDBusAuthObserver *observer,
++                                      const gchar *mechanism, gpointer opaque)
++{
++    return g_str_equal(mechanism, "EXTERNAL");
++}
++
++static gboolean dbus_listener_authorize(GDBusAuthObserver *observer,
++                                       GIOStream *stream,
++                                       GCredentials *credentials,
++                                       gpointer opaque)
++{
++    g_autoptr(GError) error = NULL;
++    uid_t uid;
++
++    if (!credentials) {
++        return FALSE;
++    }
++    uid = g_credentials_get_unix_user(credentials, &error);
++    return !error && uid == (uid_t)GPOINTER_TO_UINT(opaque);
++}
++#endif
++
++static gboolean
++dbus_console_register_listener_full(DBusDisplayConsole *ddc,
+                                GDBusMethodInvocation *invocation,
+ #ifdef G_OS_UNIX
+                                GUnixFDList *fd_list,
+ #endif
+-                               GVariant *arg_listener)
++                               GVariant *arg_listener, gboolean reverse)
+ {
+     const char *sender = g_dbus_method_invocation_get_sender(invocation);
+     GDBusConnection *listener_conn;
+@@ -266,15 +293,31 @@
+     g_autoptr(GSocket) socket = NULL;
+     g_autoptr(GSocketConnection) socket_conn = NULL;
+     g_autofree char *guid = g_dbus_generate_guid();
++    g_autoptr(GDBusAuthObserver) auth = NULL;
+     DBusDisplayListener *listener;
+     int fd;
++#ifdef G_OS_UNIX
++    g_autoptr(GUnixFDList) reverse_fds = NULL;
++#endif
+ 
+ #ifdef G_OS_WIN32
+     if (!dbus_win32_import_socket(invocation, arg_listener, &fd)) {
+         return DBUS_METHOD_INVOCATION_HANDLED;
+     }
+ #else
+-    fd = g_unix_fd_list_get(fd_list, g_variant_get_handle(arg_listener), &err);
++    if (reverse) {
++        int pair[2];
++        if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, pair) < 0) {
++            g_dbus_method_invocation_return_error(
++                invocation, DBUS_DISPLAY_ERROR, DBUS_DISPLAY_ERROR_FAILED,
++                "Couldn't create listener socket pair: %s", strerror(errno));
++            return DBUS_METHOD_INVOCATION_HANDLED;
++        }
++        fd = pair[0];
++        reverse_fds = g_unix_fd_list_new_from_array(&pair[1], 1);
++    } else {
++        fd = g_unix_fd_list_get(fd_list, g_variant_get_handle(arg_listener), &err);
++    }
+     if (err) {
+         g_dbus_method_invocation_return_error(
+             invocation,
+@@ -301,6 +344,49 @@
+     }
+     socket_conn = g_socket_connection_factory_create_connection(socket);
+ 
++#ifdef G_OS_UNIX
++    {
++        GDBusConnection *bus = g_dbus_method_invocation_get_connection(invocation);
++        guint32 uid = (guint32)-1;
++
++        if (sender) {
++            g_autoptr(GVariant) reply = g_dbus_connection_call_sync(
++                bus, "org.freedesktop.DBus", "/org/freedesktop/DBus",
++                "org.freedesktop.DBus", "GetConnectionUnixUser",
++                g_variant_new("(s)", sender), G_VARIANT_TYPE("(u)"),
++                G_DBUS_CALL_FLAGS_NONE, 5000, NULL, &err);
++            if (reply) {
++                g_variant_get(reply, "(u)", &uid);
++            }
++        } else {
++            GCredentials *credentials = g_dbus_connection_get_peer_credentials(bus);
++            if (credentials) {
++                uid = g_credentials_get_unix_user(credentials, &err);
++            } else {
++                g_set_error_literal(&err, G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED,
++                                    "Missing authenticated display peer credentials");
++            }
++        }
++        if (err) {
++            g_dbus_method_invocation_return_error(
++                invocation, DBUS_DISPLAY_ERROR, DBUS_DISPLAY_ERROR_FAILED,
++                "Cannot authenticate listener owner: %s", err->message);
++            return DBUS_METHOD_INVOCATION_HANDLED;
++        }
++        auth = g_dbus_auth_observer_new();
++        g_signal_connect(auth, "allow-mechanism",
++                         G_CALLBACK(dbus_listener_mechanism), NULL);
++        g_signal_connect(auth, "authorize-authenticated-peer",
++                         G_CALLBACK(dbus_listener_authorize), GUINT_TO_POINTER(uid));
++    }
++#endif
++
++#ifdef G_OS_UNIX
++    if (reverse) {
++        qemu_dbus_display1_console_complete_register_listener_reverse(
++            ddc->iface, invocation, reverse_fds, g_variant_new_handle(0));
++    } else
++#endif
+     qemu_dbus_display1_console_complete_register_listener(
+         ddc->iface, invocation
+ #ifdef G_OS_UNIX
+@@ -310,15 +396,20 @@
+ 
+     GDBusConnectionFlags flags =
+         G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_SERVER;
++#ifdef G_OS_UNIX
++    if (reverse) {
++        flags = G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT;
++    }
++#endif
+ #ifdef WIN32
+     flags |= G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_ALLOW_ANONYMOUS;
+ #endif
+ 
+     listener_conn = g_dbus_connection_new_sync(
+         G_IO_STREAM(socket_conn),
+-        guid,
++        reverse ? NULL : guid,
+         flags,
+-        NULL, NULL, &err);
++        auth, NULL, &err);
+     if (err) {
+         error_report("Failed to setup peer connection: %s", err->message);
+         return DBUS_METHOD_INVOCATION_HANDLED;
+@@ -337,6 +428,37 @@
+     trace_dbus_registered_listener(sender);
+     return DBUS_METHOD_INVOCATION_HANDLED;
+ }
++
++static gboolean
++dbus_console_register_listener(DBusDisplayConsole *ddc,
++                               GDBusMethodInvocation *invocation,
++#ifdef G_OS_UNIX
++                               GUnixFDList *fd_list,
++#endif
++                               GVariant *arg_listener)
++{
++    return dbus_console_register_listener_full(ddc, invocation,
++#ifdef G_OS_UNIX
++                                              fd_list,
++#endif
++                                              arg_listener, FALSE);
++}
++
++#ifdef G_OS_UNIX
++/* QEMU creates the socket pair so SO_PEERCRED identifies QEMU, not the viewer.
++ * Optional host-listener mode: QEMU is the authentication client. The host
++ * authenticates QEMU with its visible kernel credentials and display-bus UID.
++ * The original RegisterListener ABI and authentication direction stay intact.
++ */
++static gboolean
++dbus_console_register_listener_reverse(DBusDisplayConsole *ddc,
++                                       GDBusMethodInvocation *invocation,
++                                       GUnixFDList *fd_list)
++{
++    return dbus_console_register_listener_full(ddc, invocation, NULL,
++                                              NULL, TRUE);
++}
++#endif
+ 
+ static gboolean
+ dbus_kbd_press(DBusDisplayConsole *ddc,
+@@ -580,6 +702,10 @@
+     g_object_connect(ddc->iface,
+         "swapped-signal::handle-register-listener",
+         dbus_console_register_listener, ddc,
++#ifdef G_OS_UNIX
++        "swapped-signal::handle-register-listener-reverse",
++        dbus_console_register_listener_reverse, ddc,
++#endif
+         "swapped-signal::handle-set-uiinfo",
+         dbus_console_set_ui_info, ddc,
+         NULL);
+--- a/ui/dbus-display1.xml
++++ b/ui/dbus-display1.xml
+@@ -79,6 +79,16 @@
+       <arg type="h" name="listener" direction="in"/>
+       <?endif?>
+     </method>
++
++    <?if $(env.HOST_OS) != windows?>
++    <!-- Optional WinBoat extension: QEMU creates a socket pair and returns one
++         FD to the host, then authenticates as EXTERNAL client on the other end.
++         The host must verify the peer UID against the org.qemu bus owner.
++         QEMU-created FDs preserve SO_PEERCRED across the container boundary. -->
++    <method name="RegisterListenerReverse">
++      <arg type="h" name="listener" direction="out"/>
++    </method>
++    <?endif?>
+ 
+     <!--
+         SetUIInfo:
+--- a/ui/dbus-listener.c
++++ b/ui/dbus-listener.c
+@@ -880,6 +880,12 @@
+ 
+     ddl->ds = new_surface;
+     ddl->ds_share = SHARE_KIND_NONE;
++    /* A listener joining an already running software console needs a full
++     * baseline before partial Update messages, including after mode changes.
++     */
++    if (new_surface) {
++        ddl_scanout(ddl);
++    }
+ }
+ 
+ static void dbus_mouse_set(DisplayChangeListener *dcl,

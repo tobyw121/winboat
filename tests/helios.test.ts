@@ -113,13 +113,22 @@ test('host and Windows CI follow the pinned compatible stack', () => {
         }
     }
     assert.ok(checkouts >= 5);
-    for (const filename of ['helios/host/Dockerfile', 'helios/host/build-stack.sh', 'helios/host/fetch-stack.sh']) {
+    for (const filename of ['helios/host/Dockerfile', 'helios/host/build-stack.sh']) {
         assert.ok(fs.readFileSync(filename, 'utf8').includes(HELIOS_REVISION), filename);
     }
     assert.ok(fs.readFileSync('guest_server/scripts/Start-HeliosProvisioning.ps1', 'utf8').includes(HELIOS_GUEST_REVISION));
     const lock = JSON.parse(fs.readFileSync('helios/stack.lock.json', 'utf8'));
     assert.equal(lock.hostRevision, HELIOS_REVISION);
     assert.equal(lock.guestRevision, HELIOS_GUEST_REVISION);
+    const source = JSON.parse(fs.readFileSync('helios/source.lock.json', 'utf8'));
+    assert.equal(source.revision, lock.hostRevision);
+    for (const dep of source.submodules) {
+        if (dep.path in lock.sharedSources) assert.equal(dep.revision, lock.sharedSources[dep.path]);
+    }
+    assert.ok(Object.keys(source.files).length > 0);
+    for (const [filename, checksum] of Object.entries(source.files)) {
+        assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join('helios/upstream', filename))).digest('hex'), checksum, filename);
+    }
     const builder = JSON.parse(fs.readFileSync('electron-builder.json', 'utf8'));
     assert.ok(builder.extraResources.some((x: any) => x.to === 'helios' && x.filter.includes('HeliosSetup.exe')));
 });

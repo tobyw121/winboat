@@ -1,0 +1,78 @@
+; helios_kmd.inx — Helios vGPU System-class KMDF function driver.
+;
+; Binds the virtio-gpu PCI device (VEN_1AF4 & DEV_1050) as a System-class
+; (NOT display/WDDM) KMDF function driver. It exposes GUID_DEVINTERFACE_HELIOS
+; (registered in code via WdfDeviceCreateDeviceInterface) for the Venus IOCTL
+; channel; there is no UserModeDriverName / InstalledDisplayDrivers / Video
+; load-order group. See ARCH.md §9. The wdk-build toolchain stamps DriverVer and
+; produces helios_kmd.inf during packaging.
+
+[Version]
+Signature   = "$Windows NT$"
+Class       = System
+ClassGUID   = {4d36e97d-e325-11ce-bfc1-08002be10318}
+Provider    = %ProviderName%
+CatalogFile = helios_kmd.cat
+PnpLockdown = 1
+
+[DestinationDirs]
+DefaultDestDir = 13  ; driver store (DIRID 13) — required for a universal INF
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+helios_kmd.sys = 1,,
+
+; ──── Manufacturer / Models ────────────────────────────────────────────────
+
+; TargetOSVersion decoration (...16299 = Win10 1709): required because the
+; install section copies to DIRID 13 (driver store) and uses an inbox KMDF
+; coinstaller-free package, both introduced in 10.0.16299.
+[Manufacturer]
+%ProviderName% = Helios_Models,NTamd64.10.0...16299
+
+[Helios_Models.NTamd64.10.0...16299]
+%DeviceDesc% = Helios_Install, PCI\VEN_1AF4&DEV_1050
+
+; ──── Installation ─────────────────────────────────────────────────────────
+
+[Helios_Install.NT]
+CopyFiles = Helios_CopyFiles
+
+[Helios_CopyFiles]
+helios_kmd.sys
+
+[Helios_Install.NT.Services]
+AddService = helios_kmd, 0x00000002, Helios_ServiceInstall  ; SPSVCINST_ASSOCSERVICE
+
+[Helios_ServiceInstall]
+ServiceType    = 1                   ; SERVICE_KERNEL_DRIVER
+StartType      = 3                   ; SERVICE_DEMAND_START
+ErrorControl   = 1                   ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %13%\helios_kmd.sys
+
+; ──── KMDF directive ───────────────────────────────────────────────────────
+; Declares the KMDF library dependency for the service. $KMDFVERSION$ resolves
+; to the target KMDF version (1.33) at packaging time. Inbox KMDF on Win10
+; 1709+ — NO CoInstallers section / WdfCoInstaller DLL (forbidden in a
+; universal INF).
+
+[Helios_Install.NT.Wdf]
+KmdfService = helios_kmd, helios_wdfsect
+
+[helios_wdfsect]
+KmdfLibraryVersion = $KMDFVERSION$
+
+; ──── Vulkan ICD registration ──────────────────────────────────────────────
+; The Windows Vulkan loader enumerates the (separate) Mesa-venus ICD purely via
+; HKLM\SOFTWARE\Khronos\Vulkan\Drivers JSON — written by the ICD's own
+; installer, not by this KMD package (a universal INF cannot write absolute
+; HKLM values). See ARCH.md §7.
+
+; ──── Strings ──────────────────────────────────────────────────────────────
+
+[Strings]
+ProviderName = "Helios Project"
+DeviceDesc   = "Helios vGPU (virtio-gpu / Venus)"
+DiskName     = "Helios vGPU Driver Disk"

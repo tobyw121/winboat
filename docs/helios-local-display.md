@@ -1,0 +1,131 @@
+# Lokaler Helios-Desktop (experimentell)
+
+WinBoat kann den Helios-Desktop optional in einem nativen GTK4-/OpenGL-Fenster
+öffnen. Die Option bleibt standardmäßig ausgeschaltet. Browser Display und
+RemoteApps bleiben verfügbar. Windows und die Grafiktreiber werden durch diesen
+Viewer nicht ersetzt.
+
+## Bauen und einschalten
+
+```bash
+./scripts/build-helios.sh
+```
+
+Der Docker-Build baut den Viewer mit und nimmt ihn unter `resources/native/`
+in die Linux-Anwendung auf. Für die Ausführung benötigt der Host GTK **4.8+**,
+libepoxy, OpenGL 3.3 und `dbus-daemon`. Unter Debian/Ubuntu:
+
+```bash
+sudo apt install libgtk-4-1 libepoxy0 dbus-daemon
+```
+
+Für einen Build mit lokal installierter Werkzeugkette zusätzlich
+`libgtk-4-dev`, `libepoxy-dev`, `pkg-config` und einen C-Compiler installieren.
+`npm run build:linux-gs` baut den Viewer nach dem TypeScript-Build; einzeln geht
+es mit `npm run build:helios:viewer`. `npm run build` allein baut weiterhin nur
+die Electron-Anwendung und leert das Verzeichnis `build/`.
+
+1. Den bestehenden Helios-Adapter und Windows-Treiber nach `helios.md` einrichten.
+2. Automatischen Containerstart ausschalten. Unter **Settings → Container → Local desktop (experimental)** einschalten und
+   speichern. Die VM wird dabei wie bei anderen Containeränderungen neu gestartet.
+3. **Windows Desktop** öffnen. **Ctrl+Alt+Enter** schaltet den Viewer auf Vollbild
+   und zurück. Browser Display lässt sich jederzeit gesondert öffnen.
+
+Die Einstellung prüft Viewer-Version und Image-Fähigkeitslabel `dbus-v3`.
+Ein älteres Host-Image muss neu gebaut werden. Schlägt die Viewer-Anmeldung oder
+Frame-Übernahme fehl, öffnet WinBoat Browser Display und protokolliert den Fehler.
+Die VM und ihre Disk werden dabei nicht automatisch umkonfiguriert.
+
+## Display-Bus und Container
+
+Der Bus wird für diese Anwendung separat gestartet. Er liegt normalerweise unter
+`$XDG_RUNTIME_DIR/winboat-helios`, sonst unter `/tmp/winboat-helios-<uid>`.
+Das Verzeichnis muss dem Desktop-Benutzer gehören und Modus 0700 haben. Es wird
+nur lesbar nach `/run/helios-display` in den VM-Container eingebunden. Es gibt
+keinen TCP-Display-Port und keinen Docker-Socket im Viewer. Der normale
+Desktop-Session-Bus wird nicht an den Container weitergegeben.
+
+Die Bus-Konfiguration akzeptiert ausschließlich EXTERNAL-Authentifizierung für
+Container-root und den Desktop-Benutzer. Den Namen `org.qemu` darf nur root
+registrieren. Die optionale Erweiterung `RegisterListenerReverse` lässt QEMU ein
+Socket-Paar erzeugen und einen seiner FDs an den Viewer zurückgeben. Dadurch
+identifizieren auch die Socket-Credentials QEMU. QEMU meldet sich am Host-Listener an;
+der Viewer vergleicht seine Kernel-UID mit dem von D-Bus bestätigten QEMU-Besitzer.
+Dadurch kann GLib die Container-Peer-Credentials im Host-PID-Namespace prüfen.
+Der ursprüngliche `RegisterListener`-Einstieg bleibt erhalten und prüft die UID
+gegen seinen authentifizierten Aufrufer. Es gibt weder anonyme Anmeldung noch
+deaktivierte Credential-Prüfungen oder einen Host-PID-Namespace für die VM.
+Die Patch-Prüfsumme wird vor dem Anwenden kontrolliert. Die ursprünglichen
+Helios-Quellen und Dependency-Commit-Pins bleiben erhalten.
+Bei Software-Auflösungswechseln sendet der Patch ein vollständiges neues
+Ausgangsbild, bevor weitere Teilaktualisierungen eintreffen. Das verhindert,
+dass etwa 720 Pixel breite VGA-Updates noch in eine 640-Pixel-Textur gelangen.
+
+Der Bus kann die WinBoat-Oberfläche überleben, solange eine VM ihn verwendet.
+Die VM muss über WinBoat gestartet werden, damit der Benutzer-Bus vorher bereit
+ist. Automatischer Docker-Containerstart ist für diesen experimentellen Modus
+gesperrt; eine Boot-/Session-Serviceintegration ist noch nicht implementiert.
+Nach einem Loginwechsel oder gelöschtem Runtime-Verzeichnis kann eine erneute
+Übernahme der Einstellung samt VM-Neustart nötig sein. Ein erreichbarer, aber
+nicht authentifizierbarer Bus wird nicht automatisch gelöscht oder ersetzt.
+
+## Was der Viewer tatsächlich tut
+
+- Software-`Scanout`/`Update` zeigt Firmware und frühe Windows-Bootbilder an.
+- `ScanoutDMABUF` und `ScanoutDMABUF2` übernehmen bis zu vier Ebenen mit FD,
+  Stride, Offset, Modifier, Ausschnitt und Orientierung. Unterstützt werden
+  RGB-Formate XRGB8888, ARGB8888, XBGR8888 und ABGR8888. Andere Formate und nicht
+  importierbare Modifier führen zu einer sichtbaren Fehlermeldung/Rückfall.
+- EGL importiert das Bild. Bei `UpdateDMABUF` wird es auf der GPU in eine eigene
+  Präsentationstextur kopiert. `glFinish` beendet diesen Quellzugriff, bevor die
+  Antwort QEMUs blockierte GL-Konsole wieder freigibt. Spätere Fensterausgaben
+  verwenden nur die eigene Textur, keinen bereits freigegebenen Scanout.
+- Die Produzentenseite nutzt weiterhin die implizite DMA-BUF-Synchronisation des
+  vorhandenen QEMU-/Treiber-Protokolls. Es wird noch kein expliziter Vulkan- oder
+  Wayland-Release-Fence-Kanal hinzugefügt.
+- Tastatur und Maus laufen über QEMUs Display1-Eingabeschnittstellen. Fokusverlust
+  gibt gedrückte Tasten und Maustasten frei. Der Viewer skaliert mit schwarzen
+  Rändern; er erzwingt noch keine neue Gastauflösung.
+
+Das ist **kein durchgehend kopierfreier Direct-Scanout-Pfad**: Es gibt eine
+bewusste GPU-Kopie und eine konservative Synchronisationsstelle. Der Viewer
+vermeidet CPU-Readback für seinen DMA-BUF-Pfad. Dass auch QEMU/Renderer und ein
+parallel verfügbarer VNC-Pfad keine Kopien mehr durchführen, ist damit nicht
+nachgewiesen. Statistiken auf stderr unterscheiden `dmabufFrames`,
+`softwareFrames` und `renderedFrames`.
+
+## Grenzen und nächste Schritte
+
+Wayland mit EGL ist der vorgesehene DMA-BUF-Pfad. Unter X11 hängt der Import davon
+ab, ob GTK einen EGL-Kontext bereitstellt; bei GLX kann Softwareanzeige weiterhin
+funktionieren, DMA-BUF-Import wird jedoch abgelehnt. Physische AMD-, Intel- und
+NVIDIA-GPUs sowie Hybrid-Grafik brauchen gesonderte Tests.
+
+Relative Mausbewegungen innerhalb des Fensters sind vorhanden, jedoch noch
+keine Pointer-Lock-/Relative-Pointer-Protokolle für unbegrenzte Kamerabewegung.
+Audio, Zwischenablage und Controller-Transport sind nicht Teil des Viewers;
+bestehendes USB-Passthrough ist davon unabhängig. HDR, VRR, mehrere Monitore,
+gezielte Frame-Pacing-/GLsync-Optimierung und Direct Scanout sind weitere Arbeit.
+Es gibt keine Zusage für 144 Hz oder weniger als 1 ms Gesamtlatenz.
+
+## Reproduzierbare Prüfungen
+
+```bash
+npm run test:helios
+npm run test:virgl
+npm run test:helios:host
+npx vue-tsc --noEmit -p src/renderer --skipLibCheck
+
+docker buildx build --target viewer-toolchain --load \
+  -t winboat/viewer-toolchain:local .
+npm run test:helios:viewer
+```
+
+Der Viewer-Test baut aus den aktuellen Quellen, prüft die tatsächlichen
+Authentifizierungs-Callbacks aus dem Patch, startet einen privaten Bus und
+QEMU/TCG mit VGA sowie einen GTK-Viewer unter Xvfb. Nur der Test-Viewer-Container
+verwendet den Host-PID-Namespace, um einen nativen Host-Viewer nachzubilden.
+Die VM behält ihren eigenen PID-Namespace. QEMU läuft als root, der Viewer als
+Desktop-UID. Der Test verlangt erfolgreiche Registrierung, Softwareframes
+und ausgeführte Fensterausgaben. Der Test nutzt keine GPU, kein KVM und kein
+Windows. Er bestätigt keinen physischen DMA-BUF-Import oder Gamingbetrieb.

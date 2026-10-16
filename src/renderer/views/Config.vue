@@ -88,6 +88,18 @@
                     </div>
                 </x-card>
 
+                <x-card v-if="heliosEnabled" class="flex flex-row justify-between items-center p-3 my-0 bg-neutral-800/20">
+                    <div>
+                        <h1 class="text-lg font-semibold my-0 mb-2">Local desktop (experimental)</h1>
+                        <p class="text-neutral-400 text-[0.9rem] !pt-0 !mt-0">
+                            Open Windows in a native window. Requires GTK4. Browser Display remains available.
+                            Saving this option restarts the VM. Audio and captured gaming mouse input are not included yet.
+                            Disable automatic container startup before enabling local desktop.
+                        </p>
+                    </div>
+                    <x-switch :toggled="localDisplayEnabled" @toggle="localDisplayEnabled = !localDisplayEnabled" size="large"></x-switch>
+                </x-card>
+
                 <!-- Shared Home Folder -->
                 <x-card class="flex relative z-20 flex-row justify-between items-center p-2 py-3 my-0 w-full backdrop-blur-xl backdrop-brightness-150 bg-neutral-800/20">
                     <div>
@@ -485,6 +497,8 @@
 <script setup lang="ts">
 import { configureHelios, HELIOS_IMAGE } from '../../shared/helios';
 import { requireHelios } from '../lib/helios';
+import { configureHeliosDisplay } from '../../shared/helios-display';
+import { requireLocalDisplay, localDisplayDirectory } from '../lib/helios-display';
 
 import { computed, onMounted, ref } from 'vue';
 import { ContainerStatus, Winboat } from '../lib/winboat';
@@ -540,6 +554,8 @@ const isUpdatingUSBPrerequisites = ref(false);
 const origApplicationScale = ref(0);
 const heliosEnabled = ref(false);
 const origHeliosEnabled = ref(false);
+const localDisplayEnabled = ref(false);
+const origLocalDisplayEnabled = ref(false);
 const heliosSupportAvailable = ref(checkHeliosSupport());
 
 // For USB Devices
@@ -608,6 +624,8 @@ async function assignValues() {
 
     heliosEnabled.value = compose.value.services.windows.image === HELIOS_IMAGE && compose.value.services.windows.environment.HELIOS === '1';
     origHeliosEnabled.value = heliosEnabled.value;
+    localDisplayEnabled.value = compose.value.services.windows.environment.HELIOS_DISPLAY === 'dbus';
+    origLocalDisplayEnabled.value = localDisplayEnabled.value;
     heliosSupportAvailable.value = checkHeliosSupport();
 
     freerdpPort.value = qmpPortManager.value.getHostPort(GUEST_RDP_PORT);
@@ -644,6 +662,11 @@ async function saveDockerCompose() {
         const host = heliosEnabled.value ? await requireHelios() : undefined;
         compose.value!.services.windows = configureHelios(compose.value!.services.windows,
             heliosEnabled.value, host?.renderNode, host?.nvidia);
+        const local = heliosEnabled.value && localDisplayEnabled.value;
+        if (local && autoStartContainer.value) throw new Error('Disable automatic container startup before enabling local desktop. Its display service starts with your desktop session.');
+        if (local) await requireLocalDisplay();
+        compose.value!.services.windows = configureHeliosDisplay(compose.value!.services.windows,
+            local, local ? localDisplayDirectory() : undefined);
         if (heliosEnabled.value && !origHeliosEnabled.value) {
             // The Windows driver needs Venus during its first boot. Switching
             // the host adapter must precede installing it on an existing VM.
@@ -760,7 +783,8 @@ const saveButtonDisabled = computed(() => {
         shareHomeFolder.value !== origShareHomeFolder.value ||
         freerdpPort.value !== origFreerdpPort.value ||
         autoStartContainer.value !== origAutoStartContainer.value ||
-        heliosEnabled.value !== origHeliosEnabled.value;
+        heliosEnabled.value !== origHeliosEnabled.value ||
+        localDisplayEnabled.value !== origLocalDisplayEnabled.value;
 
     const shouldBeDisabled = 
         errors.value.length || 

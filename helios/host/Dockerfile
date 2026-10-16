@@ -12,14 +12,18 @@ RUN --mount=type=secret,id=proxy_ca \
       libepoxy-dev libegl-dev libgbm-dev libdrm-dev libvulkan-dev libssl-dev \
       libslirp-dev libcap-ng-dev libattr1-dev libusb-1.0-0-dev libspice-server-dev \
       libusbredirparser-dev liburing-dev libaio-dev libzstd-dev libpng-dev libjpeg-dev check cmake
-COPY helios/host/fetch-stack.sh /fetch-stack.sh
 RUN --mount=type=secret,id=proxy_ca \
+    --mount=type=bind,source=helios,target=/context/helios \
+    --mount=type=bind,source=scripts/helios/verify-source.py,target=/build/verify-source.py \
+    --mount=type=cache,id=winboat-helios-d82ce565ac79,target=/build/helios,sharing=locked \
     if [ -f /run/secrets/proxy_ca ]; then export SSL_CERT_FILE=/run/secrets/proxy_ca GIT_SSL_CAINFO=/run/secrets/proxy_ca CURL_CA_BUNDLE=/run/secrets/proxy_ca; fi; \
-    bash /fetch-stack.sh
-COPY helios/host/build-stack.sh /build-stack.sh
-RUN --mount=type=secret,id=proxy_ca \
-    if [ -f /run/secrets/proxy_ca ]; then export SSL_CERT_FILE=/run/secrets/proxy_ca GIT_SSL_CAINFO=/run/secrets/proxy_ca CURL_CA_BUNDLE=/run/secrets/proxy_ca; fi; \
-    bash /build-stack.sh
+    set -eu; \
+    mkdir -p /build/source; \
+    cp -a /context/helios/upstream /build/source/upstream; \
+    cp /context/helios/source.lock.json /context/helios/stack.lock.json /build/source/; \
+    cp -a /context/helios/host/patches /build/patches; \
+    bash /context/helios/host/fetch-stack.sh; \
+    bash /context/helios/host/build-stack.sh
 # Runtime shares the builder's Debian ABI without shipping its compiler/source tree.
 FROM ghcr.io/dockur/windows:5.07@sha256:00d59df9af7cfc6e8cd7137c52f126f9671c773fee10adcf8fc75aafedfb5052 AS runtime
 RUN --mount=type=secret,id=proxy_ca \
@@ -32,11 +36,14 @@ RUN --mount=type=secret,id=proxy_ca \
       libusbredirparser1 liburing2 libaio1t64 libzstd1 libpng16-16t64 libjpeg62-turbo \
       mesa-vulkan-drivers libegl-mesa0 libgl1-mesa-dri; \
     rm -rf /var/lib/apt/lists/*
-COPY --from=builder /opt/helios /opt/helios
 LABEL org.winboat.helios.revision="d82ce565ac792eb48da5e59f2a82a12ff221851d"
-COPY --chmod=755 helios/host/display.sh /run/display.sh
-COPY --chmod=755 helios/host/qemu.sh /usr/bin/qemu-system-x86_64
-COPY --chmod=755 helios/host/qemu.sh /usr/local/bin/qemu-system-x86_64
-RUN /usr/bin/qemu-system-x86_64 --version && \
+LABEL org.winboat.helios.display="dbus-v3"
+RUN --mount=from=builder,source=/opt/helios,target=/build/runtime \
+    --mount=type=bind,source=helios/host,target=/build/host \
+    cp -a /build/runtime /opt/helios && \
+    install -m 755 /build/host/display.sh /run/display.sh && \
+    install -m 755 /build/host/qemu.sh /usr/bin/qemu-system-x86_64 && \
+    install -m 755 /build/host/qemu.sh /usr/local/bin/qemu-system-x86_64 && \
+    /usr/bin/qemu-system-x86_64 --version && \
     /usr/bin/qemu-system-x86_64 -device virtio-gpu-gl-pci,help | grep venus
 ENV HELIOS=1 HELIOS_REVISION=d82ce565ac792eb48da5e59f2a82a12ff221851d

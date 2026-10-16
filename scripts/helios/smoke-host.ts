@@ -1,7 +1,12 @@
 /** Container/control validation only. This does not test a real GPU or Windows. */
 import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import net from 'node:net';
 import { HELIOS_IMAGE, HELIOS_LABEL, HELIOS_REVISION } from '../../src/shared/helios.ts';
+import { HELIOS_DISPLAY_CAPABILITY, HELIOS_DISPLAY_VERSION } from '../../src/shared/helios-display.ts';
 function docker(args: string[], input?: string): string {
     const result = spawnSync('docker', args, { input, encoding: 'utf8', timeout: 30000, maxBuffer: 8 * 1024 * 1024 });
     if (result.error) throw result.error;
@@ -9,12 +14,28 @@ function docker(args: string[], input?: string): string {
     return result.stdout;
 }
 assert.equal(docker(['image', 'inspect', '--format', `{{ index .Config.Labels "${HELIOS_LABEL}" }}`, HELIOS_IMAGE]).trim(), HELIOS_REVISION);
+assert.equal(docker(['image', 'inspect', '--format', `{{ index .Config.Labels "${HELIOS_DISPLAY_CAPABILITY}" }}`, HELIOS_IMAGE]).trim(), HELIOS_DISPLAY_VERSION);
 // A null character-device fixture exercises argument generation, never GPU rendering.
 const display = docker(['run', '--rm', '--device', '/dev/null:/dev/dri/renderD128',
     '-e', 'RENDERNODE=/dev/dri/renderD128', '-e', 'RAM_SIZE=128M', '-e', 'VNC_PORT=5900', '-e', 'WSS_PORT=5700',
     '--entrypoint', 'bash', HELIOS_IMAGE, '-c', 'source /run/display.sh; printf "%s" "$DISPLAY_OPTS"']);
 assert.ok(display.includes('venus=on,blob=on'));
 assert.ok(display.includes('memory-backend-memfd,id=helios-ram,size=128M,share=on'));
+const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'winboat-display-args-'));
+const socket = net.createServer();
+await new Promise<void>((resolve, reject) => { socket.once('error', reject); socket.listen(path.join(temporary, 'bus'), resolve); });
+try {
+    const local = docker(['run', '--rm', '--device', '/dev/null:/dev/dri/renderD128',
+        '-v', `${temporary}:/run/helios-display:ro`, '-e', 'HELIOS_DISPLAY=dbus',
+        '-e', 'RAM_SIZE=128M', '-e', 'VNC_PORT=5900', '-e', 'WSS_PORT=5700',
+        '--entrypoint', 'bash', HELIOS_IMAGE, '-c', 'source /run/display.sh; printf "%s" "$DISPLAY_OPTS"']);
+    assert.ok(local.includes('dbus,addr=unix:path=/run/helios-display/bus,gl=on,rendernode=/dev/dri/renderD128'));
+    assert.ok(local.includes('-vnc :0,websocket=5700'));
+    assert.ok(local.includes('venus=on,blob=on'));
+} finally {
+    await new Promise<void>(resolve => socket.close(() => resolve()));
+    fs.rmSync(temporary, { recursive: true });
+}
 const libraries = docker(['run', '--rm', '-e', 'LD_LIBRARY_PATH=/opt/helios/renderer/lib', '--entrypoint', 'sh', HELIOS_IMAGE, '-c',
     'ldd /opt/helios/qemu/bin/qemu-system-x86_64; ldd /opt/helios/renderer/lib/libvirglrenderer.so.1; ldd /opt/helios/renderer/libexec/virgl_render_server']);
 assert.ok(!libraries.includes('not found'), libraries);

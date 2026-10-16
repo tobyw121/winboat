@@ -1,0 +1,79 @@
+# Build artifacts — Linux and Windows MUST use separate target dirs.
+# See AGENTS.md: CARGO_TARGET_DIR=target/linux (Linux) / target/windows (Windows).
+/target
+/**/target
+target/
+
+# WDK / driver packaging output
+*.sys
+*.pdb
+*.cat
+*.cer
+/**/package/
+
+# Editor / OS cruft
+*.swp
+*~
+.DS_Store
+.vscode/
+.idea/
+System\ Volume\ Information
+
+# Local environment overrides
+.env
+*.local.toml
+/.vm/
+/tibix/
+
+# Windows share junk
+$RECYCLE.BIN/
+
+# vkd3d-proton's pipeline cache, written into the CWD by any process that loads the
+# engine. The D3D12 gate probes run with the CWD on the Z:\ share, i.e. the repo root, so
+# a `D12-G7` run drops a `VKS`-magic blob here. It is regenerated on demand and must never
+# be committed -- a stale one would ship a shader cache built against a different driver.
+vkd3d-proton.cache*
+
+# Research-only checkouts (reference material, not part of the build)
+/dx-samples-research-only/
+/dxvk-research-only/
+/dxvk/
+/virtio-research-only-3d/
+/vkd3d-proton/
+/windows-driver-docs-research-only/
+/D3D11_3_FunctionalSpec.htm
+
+# Session scratch + external tool config
+/tmp/
+/.codex/
+/opencode.json
+
+# Stray compiled probe objects
+*.obj
+/tools/*.so
+
+# Local clean-tree comparison mirror
+/umd_clean/
+__pycache__/
+
+# umd12's host cross-check build (cargo check --target x86_64-pc-windows-msvc on
+# the Linux host, PARALLEL.md §7). The CACHED bindings under
+# umd12/bindgen/cached/ are deliberately COMMITTED and must not be ignored.
+/umd12/target/
+/umd_common/target/
+
+# Local reverse-engineering and compatibility investigation notes
+/INVESTIGATIONS/
+
+# Local scratch launchers/probes — never part of the tree
+/config-temp/
+
+# Local build-slave (firstheberg2) usage notes
+/testenv-guide.md
+
+# Local standalone devenv state
+/.devenv/
+/.direnv/
+
+/result
+/result-*

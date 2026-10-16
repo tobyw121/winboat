@@ -9,7 +9,14 @@ set -Eeuo pipefail
 [[ -c "$RENDERNODE" && -r "$RENDERNODE" && -w "$RENDERNODE" ]] || { echo "Helios cannot access $RENDERNODE" >&2; exit 1; }
 # Headless EGL creates the host rendering context; VNC/WebSocket carries the
 # Helios scanout. No extra standard VGA adapter or full GPU passthrough.
-DISPLAY_OPTS="-display egl-headless,rendernode=$RENDERNODE -vga none"
+case "${HELIOS_DISPLAY:-novnc}" in
+    novnc) DISPLAY_OPTS="-display egl-headless,rendernode=$RENDERNODE -vga none" ;;
+    dbus)
+        [[ -S /run/helios-display/bus ]] || { echo 'Start the private Helios display bus before this VM.' >&2; exit 1; }
+        DISPLAY_OPTS="-display dbus,addr=unix:path=/run/helios-display/bus,gl=on,rendernode=$RENDERNODE -vga none"
+        ;;
+    *) echo 'Invalid HELIOS_DISPLAY mode.' >&2; exit 1 ;;
+esac
 DISPLAY_OPTS+=" -device virtio-gpu-gl-pci,id=heliosgpu,venus=on,blob=on,hostmem=8G,max_hostmem=8G"
 DISPLAY_OPTS+=" -vnc :$((VNC_PORT - 5900)),websocket=$WSS_PORT"
 

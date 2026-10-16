@@ -21,7 +21,7 @@ export function validateHeliosProgress(value: unknown): HeliosProgress {
 }
 
 /** Preserve unrelated VM arguments, volumes and device mappings. */
-export function configureHelios<T extends { image: string; environment: Record<string, string>; devices: string[]; gpus?: string; pull_policy?: string }>(
+export function configureHelios<T extends { image: string; environment: Record<string, string>; devices: string[]; volumes?: string[]; gpus?: string; pull_policy?: string }>(
     service: T, enabled: boolean, renderNode?: string, nvidia = false,
 ): T {
     const next = structuredClone(service);
@@ -51,6 +51,8 @@ export function configureHelios<T extends { image: string; environment: Record<s
         }
         delete next.environment.HELIOS;
         delete next.environment.HELIOS_REVISION;
+        delete next.environment.HELIOS_DISPLAY;
+        if (next.volumes) next.volumes = next.volumes.filter(volume => volume.split(':')[1] !== '/run/helios-display');
     }
     return next;
 }

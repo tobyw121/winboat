@@ -1,0 +1,11 @@
+**
+!helios/
+!helios/host/
+!helios/host/**
+!helios/upstream/
+!helios/upstream/**
+!helios/source.lock.json
+!helios/stack.lock.json
+!scripts/
+!scripts/helios/
+!scripts/helios/verify-source.py

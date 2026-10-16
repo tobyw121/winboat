@@ -1,5 +1,14 @@
 # Helios integration
 
+For a combined Docker build from this repository, see
+[WinBoat und Helios lokal bauen](build-helios-local.md). The upstream Helios
+root sources are included under `helios/upstream/`; the host build verifies
+that snapshot and fetches only its pinned external dependencies.
+For the proposed local DMA-BUF viewer and its implementation requirements, see
+[Helios architecture](helios-architecture.md).
+An initial optional native viewer is documented in
+[Local Helios desktop](helios-local-display.md).
+
 This WinBoat branch integrates the Helios Windows WDDM graphics stack at commit
 `d82ce565ac792eb48da5e59f2a82a12ff221851d`. Its Windows installer is pinned to
 `fecffde64fd32399a877b452332681ef0db7993e`, the last complete upstream bundle.
@@ -138,11 +147,13 @@ repeatedly toggling graphics devices.
 ## Display and diagnostics
 
 For a Helios VM, the **Windows Desktop** action opens the console via the browser
-display, so it stays on the Helios adapter instead of creating an RDP desktop.
+display by default, or the optional native viewer when enabled in Settings.
+Both stay on the Helios adapter instead of creating an RDP desktop.
 Individual RemoteApp launches still use the existing FreeRDP integration.
-The current console transport is noVNC: this is not a high-refresh, low-latency
-local SDL gaming viewer, and rendering performance must not be confused with
-viewer FPS or audio/controller support.
+The default console transport is noVNC. The experimental native GTK4 viewer
+imports DMA-BUF frames with a conservative GPU-copy/acknowledgment path; it is
+not yet a direct-scanout gaming viewer. Rendering performance must not be
+confused with viewer FPS or audio/controller support.
 
 - `GET /graphics/helios` is a read-only guest-server status endpoint.
 - Windows setup log: `C:\ProgramData\Helios\logs\setup.log`.

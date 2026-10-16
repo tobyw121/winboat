@@ -1,6 +1,6 @@
 # Validation record
 
-Verified in this cloud workspace on 16 October 2026 (Europe/Berlin):
+Baseline builds verified in this cloud workspace on 16 October 2026:
 
 - 8 Helios TypeScript tests and 5 existing GPU tests passed, with no skips.
 - The Go read-only status-handler test passed, including PowerShell UTF-8 BOMs,
@@ -15,30 +15,91 @@ Verified in this cloud workspace on 16 October 2026 (Europe/Berlin):
   passed; all 36 manifest-listed embedded payload files were also checked during
   inspection. The PE is an x64 Windows GUI executable. It was not executed in
   Windows in this environment. Its immutable provenance is in `helios/stack.lock.json`.
-- `electron-builder --linux dir` produced `dist/linux-unpacked`, including the
-  complete Windows installer. The packaged application opened the welcome screen;
+- An earlier `electron-builder --linux dir` run produced `dist/linux-unpacked`,
+  including the complete Windows installer. That packaged application opened the welcome screen;
   `app.isPackaged` was true and its bundled installer matched the receipt hash.
   External web-font requests hit the cloud browser's NSS/CA restrictions; no TLS
   verification was bypassed.
 - The local image `winboat/helios:d82ce565ac79` built successfully. QEMU 11.1.1
   reports the Venus property. The upstream protocol round-trip test and renderer
   `venus_queue_sync` test each passed (1/1, no skips).
-- Final local image ID:
-  `sha256:274bcf25a0ff7456e596bf0c6066ac4eed3b0dadb2a1dcb16c08f17e03bd9eb5`.
-  Image size: 1,189,733,748 bytes. Rebuilds may differ as Debian build dependencies
+- The host image was rebuilt from all 611 vendored Helios root-source files;
+  source hashes, dependency pins and both upstream tests passed again.
+- Earlier baseline image ID:
+  `sha256:5273f59ecc2fffb25dfa8027591d28d9e1efc4f456b0e2117dfa1280e21cf3e0`.
+  Image size: 1,189,734,532 bytes. Rebuilds may differ as Debian build dependencies
   change; upstream source revisions and the dockur base digest are pinned.
 - `npm run test:helios:host` passed: image identity, installed display/shared-memfd
   argument generation, runtime-library resolution using the installed wrapper's
   loader path, and a QEMU TCG/QMP run with 128 MiB shared memory followed by clean
   shutdown. The display-argument check uses a null character-device fixture; it
   does not emulate a real GPU.
+- The root Dockerfile and `scripts/build-helios.sh` completed with `--skip-host
+  --all-packages --export-host-image --installer-dir <directory with spaces>`
+  after that host rebuild. The fresh container ran `npm ci`, all 13 JavaScript
+  tests, Go status tests, Vue checking, guest cross-build, production build and
+  native USB rebuild. The lockfile was completed with its missing optional
+  Windows signing dependency; existing locked package versions were preserved.
+- AppImage, DEB, RPM and tar.gz were built successfully. Each package's embedded
+  `HeliosSetup.exe` matched the trusted receipt hash; its receipt also matched.
+  The exported host-image archive passed gzip integrity checking. All nine
+  generated package/installer/metadata/image checksums passed in `SHA256SUMS`.
+- Shell syntax, invalid arguments, missing installer paths, and rejection of
+  modified/missing source files were checked. The source import contains no
+  nested Git submodules; its external gitlinks are recorded in `source.lock.json`.
+- The built QEMU lists `dbus` among its display backends. This establishes build
+  availability only; DMA-BUF export, viewer import and presentation fences have
+  not been exercised by that baseline build. The current viewer test is recorded below.
 
 The first host build lacked a test dependency and protocol pkg-config path; both
 were corrected. A subsequent Docker output stage exhausted the 32 GB workspace;
 a separate runtime stage fixed that, and the final image and Linux package builds
 succeeded. No failed build or partial package is counted as a pass.
 
+## Native local display milestone
+
+Validated on 16 October 2026 (UTC), after the baseline packages above:
+
+- The tracked QEMU patch adds an optional reverse-authentication listener with
+  QEMU-created socket FDs. EXTERNAL authentication remains mandatory. It also
+  sends a full software scanout when a surface changes before partial updates;
+  the BIOS switches from 640x480 to 720x400 during the test.
+- Current image: `winboat/helios:d82ce565ac79`, capability `dbus-v3`, ID
+  `sha256:33033f39977fc6d8f5e374ff9bdc21e59969dfc9d31c29db1cc1a598129d2b7b`,
+  size 1,189,753,601 bytes. Its source build passed the upstream protocol and
+  renderer synchronization tests. All 611 pristine vendored sources still match
+  their hashes; the QEMU divergence is confined to `helios/host/patches/`.
+- All 12 Helios/display tests and 5 existing GPU tests passed. Renderer Vue type
+  checking and the production renderer/main build passed.
+- The viewer compiles with `-Wall -Wextra -Werror`. Its self-test and the compiled
+  QEMU authorization callbacks accept matching UIDs and reject different/missing
+  UIDs and weaker authentication mechanisms.
+- `npm run test:helios:viewer` passed with root QEMU in its own container PID
+  namespace and the viewer as desktop UID 1000. Only the test viewer container
+  used the host PID namespace to model a native host process. The private bus
+  denied that desktop user permission to claim `org.qemu`.
+- The eight-second software display test processed 668 software frames and
+  rendered 293 frames in the window; `dmabufFrames` was **0**. It captured a
+  non-uniform 1024x640 frame, visually inspected as readable SeaBIOS boot output.
+  The test deliberately has no boot disk, Windows, KVM or physical GPU.
+- `npm run test:helios:host` checks the capability label, both display modes,
+  runtime library resolution and shared-memory QMP/TCG behavior. It does not
+  demonstrate DMA-BUF export/import.
+- The Docker/Bash pipeline completed with `--skip-host --export-host-image`.
+  It reran all 17 JavaScript tests, Go status tests, Vue type checking, the
+  Windows guest-server cross-build and the production Electron build. The
+  AppImage includes the native viewer and verified Windows installer.
+- All seven checksums passed after export, and the host archive passed gzip
+  integrity checking. Extracting the AppImage confirmed that the executable ELF
+  viewer matches `BUILD-INFO.json`, and that the installer and receipt match
+  their trusted hashes. The build metadata also records `dbus-v3` and the
+  tracked QEMU patch hash. DEB/RPM/tar.gz packages from the earlier baseline
+  were not rebuilt for this viewer milestone.
+- Earlier failed authentication and frame-format experiments were corrected;
+  only the successful current test is counted above.
+
 Unverified: KVM execution, Windows driver loading/signature acceptance, actual
 provisioning reboots, GPU rendering, NVIDIA/AMD/Intel hardware compatibility,
 DirectX conformance, game compatibility, anti-cheat and gaming performance.
-The current display integration uses noVNC, not a local high-refresh SDL viewer.
+The default display remains noVNC. The optional local viewer is an experimental
+GTK4/OpenGL client; high-refresh gaming and physical DMA-BUF import remain unverified.
