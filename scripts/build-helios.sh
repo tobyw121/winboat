@@ -16,6 +16,7 @@ Usage: ./scripts/build-helios.sh [options]
 Requires Linux x86_64, Bash, Git, Docker Engine, Compose v2 and Buildx.
 Set HELIOS_BUILD_JOBS to a positive integer (default 4).
 Optional HELIOS_PROXY_CA: trusted CA bundle passed as a BuildKit secret.
+Optional GH_TOKEN/GITHUB_TOKEN: GitHub Actions read access for installer download.
 HELP
 }
 die() { echo "Build error: $*" >&2; exit 1; }
@@ -85,6 +86,11 @@ fi
 commit=$(git rev-parse --short=12 HEAD 2>/dev/null || printf 'unknown')
 if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then commit+=-dirty; fi
 if [[ -n "$installer_dir" ]]; then build_args+=(--build-context "installer=$installer_dir"); fi
+if [[ -n "${GH_TOKEN:-}" ]]; then
+    build_args+=(--secret id=github_token,env=GH_TOKEN)
+elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    build_args+=(--secret id=github_token,env=GITHUB_TOKEN)
+fi
 docker buildx build "${build_args[@]}" --target artifacts \
     --build-arg "WINBOAT_BUILD_COMMIT=$commit" --build-arg "PACKAGE_TARGETS=$targets" \
     --output "type=local,dest=$temporary/packages" -f Dockerfile .

@@ -98,6 +98,29 @@ Validated on 16 October 2026 (UTC), after the baseline packages above:
 - Earlier failed authentication and frame-format experiments were corrected;
   only the successful current test is counted above.
 
+## Installer authentication fix
+
+The reported clean-clone failure was HTTP 401 from GitHub's Actions artifact
+download API. The builder now accepts `GH_TOKEN`/`GITHUB_TOKEN` through a
+BuildKit secret; curl receives the authorization header over stdin, and retains
+its default cross-origin credential stripping. Download errors report the HTTP
+status and describe both authentication and local-installer remedies.
+
+Validated on 16 October 2026:
+
+- Four real-curl HTTP fixture tests passed: authenticated download, credential
+  stripping on storage redirects, actionable 401/404 errors, and environment
+  token fallback. The full Helios suite passed all 16 tests.
+- The actual pinned upstream artifact downloaded and passed all existing
+  archive, executable and embedded-payload checksum/revision checks.
+- A Docker build with an empty installer context downloaded the installer from
+  scratch and produced the AppImage. All 21 JavaScript tests, Go status tests,
+  Vue type checking, guest-server cross-build and production build passed in
+  that container. All six exported artifact checksums passed.
+- Shell syntax and TypeScript checking of the download helper/tests passed.
+  The GitHub-authenticated user flow was checked with local test credentials;
+  access to the upstream artifact still depends on the caller's GitHub account.
+
 Unverified: KVM execution, Windows driver loading/signature acceptance, actual
 provisioning reboots, GPU rendering, NVIDIA/AMD/Intel hardware compatibility,
 DirectX conformance, game compatibility, anti-cheat and gaming performance.

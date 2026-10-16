@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Internal Docker build step; use scripts/build-helios.sh on your Linux host.
-set -euo pipefail
+set -Eeuo pipefail
+trap 'echo "Helios app build failed at line $LINENO: $BASH_COMMAND" >&2' ERR
 case "${1:-AppImage}" in
     AppImage) targets=(AppImage) ;;
     all) targets=(AppImage deb rpm tar.gz) ;;

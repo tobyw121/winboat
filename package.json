@@ -15,7 +15,7 @@
         "test:virgl": "tsx --test tests/virgl.test.ts",
         "build:helios:host": "node scripts/helios/build-host.ts",
         "helios:stage": "node scripts/helios/stage.ts",
-        "test:helios": "tsx --test tests/helios.test.ts tests/helios-display.test.ts",
+        "test:helios": "tsx --test tests/helios.test.ts tests/helios-display.test.ts tests/helios-download.test.ts",
         "build": "node scripts/build.ts",
         "helios:fetch-installer": "node scripts/helios/fetch-installer.ts",
         "test:helios:host": "node scripts/helios/smoke-host.ts",

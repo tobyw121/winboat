@@ -54,6 +54,15 @@ Der Standardablauf:
 5. WinBoat-Tests, Gaststatus-Tests und Vue-Typprüfung ausführen.
 6. Windows-Gastserver und Linux-AppImage bauen und nach `dist/` exportieren.
 
+Der automatische Installer-Download nutzt ein festgelegtes GitHub-Actions-Artefakt.
+GitHub verlangt dafür normalerweise eine Anmeldung. Falls `GH_TOKEN` oder
+`GITHUB_TOKEN` bereits in deiner Shell gesetzt ist, reicht das Skript es als
+BuildKit-Secret weiter. Der Token benötigt Zugriff auf `winboat-org/helios` mit
+**Actions: read** (bei einem klassischen Token für öffentliche Repositorys genügt
+`public_repo`). Er wird weder als Buildargument noch als Image-Umgebungsvariable
+gespeichert. Alternativ kannst du ein vorhandenes Installer-Paket mit
+`--installer-dir` verwenden; dafür ist kein GitHub-Download nötig.
+
 Der Build enthält auch den optionalen nativen Helios-Viewer. Für dessen Ausführung
 benötigt der Desktop GTK4 4.8+, libepoxy und dbus-daemon; siehe
 [lokaler Helios-Desktop](helios-local-display.md). Die Standardanzeige bleibt noVNC.
@@ -92,12 +101,42 @@ enthalten. Revision, Datei- und eingebettete Payload-Prüfsummen werden geprüft
 Ein ungültiger oder unvollständiger lokaler Installer führt zum Abbruch.
 
 Falls das festgelegte GitHub-Actions-Artefakt abgelaufen ist oder sein Download
-eine Anmeldung verlangt, nutze diesen Weg mit dem Artefakt des Workflows
+für deinen Account nicht verfügbar ist, nutze diesen Weg mit dem Artefakt des Workflows
 **Build WinBoat Helios Windows installer** im eigenen Repository. Der native
 Windows-Treiberbau benötigt Windows/MSVC/WDK; er wird nicht durch den Linux-
 Docker-Build ersetzt. Die Quellen für Treiber, UMDs und Installer liegen trotzdem
 mit WinBoat unter `helios/upstream/` im selben Repository. Der bestehende
 Windows-Workflow verwendet weiterhin den kompatiblen, festgelegten Guest-Commit.
+
+## Fehler beim Installer-Download (HTTP 401/403)
+
+Dieser Fehler betrifft die Anmeldung beim GitHub-Artefakt-Download. Ein bereits
+gebautes Helios-Host-Image muss dafür nicht erneut kompiliert werden.
+
+Einen passenden GitHub-Token kannst du verdeckt in der Shell einlesen und nur
+für diesen Build bereitstellen (nicht in Git oder im Chat ablegen):
+
+```bash
+read -rsp 'GitHub-Token (Actions: read): ' GH_TOKEN
+printf '\n'
+export GH_TOKEN
+./scripts/build-helios.sh --skip-host
+unset GH_TOKEN
+```
+
+Ohne Token lege `HeliosSetup.exe` und die dazugehörige `helios-build.json` in
+einem lokalen Verzeichnis ab und verwende:
+
+```bash
+./scripts/build-helios.sh --skip-host --installer-dir /pfad/zum/installer
+```
+
+Bei direktem Docker-Build lautet die zusätzliche Option
+`--secret id=github_token,env=GH_TOKEN`. Ein `docker login` meldet dich nur bei
+einer Container-Registry an und ersetzt diese GitHub-API-Anmeldung nicht.
+HTTP 404/410 kann auf ein abgelaufenes Artefakt oder fehlenden Zugriff hinweisen;
+ein Token stellt gelöschte Artefakte nicht wieder her. Prüfsummen- und
+Revisionsprüfungen bleiben auch bei lokalen Installer-Paketen aktiv.
 
 ## Gemeinsame Quellen und Dockerfile
 

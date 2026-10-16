@@ -46,6 +46,7 @@ ARG WINBOAT_BUILD_COMMIT=unknown
 ARG PACKAGE_TARGETS=AppImage
 ENV WINBOAT_BUILD_COMMIT=$WINBOAT_BUILD_COMMIT
 RUN --mount=type=secret,id=proxy_ca \
+    --mount=type=secret,id=github_token \
     --mount=type=bind,target=/context \
     --mount=from=installer,target=/installer \
     --mount=from=native-viewer,source=/out,target=/native-viewer \

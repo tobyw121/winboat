@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { verifyBundle } from './bundle.ts';
+import { downloadInstallerArtifact } from './installer-download.ts';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const lock = JSON.parse(fs.readFileSync(path.join(root, 'helios/stack.lock.json'), 'utf8'));
 const artifact = lock.installerArtifact;
@@ -13,9 +14,7 @@ const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'winboat-helios-'));
 function digest(bytes: Buffer): string { return crypto.createHash('sha256').update(bytes).digest('hex'); }
 try {
     const archive = path.join(temporary, 'artifact.zip');
-    // curl uses the inherited HTTPS proxy and CA trust. No token extraction.
-    execFileSync('curl', ['--fail', '--location', '--silent', '--show-error', '--max-time', '180',
-        `https://api.github.com/repos/winboat-org/helios/actions/artifacts/${artifact.id}/zip`, '-o', archive], { stdio: 'inherit' });
+    downloadInstallerArtifact(`https://api.github.com/repos/winboat-org/helios/actions/artifacts/${artifact.id}/zip`, archive);
     if (digest(fs.readFileSync(archive)) !== artifact.sha256) throw new Error('Upstream artifact SHA-256 mismatch.');
     const inner = execFileSync('unzip', ['-p', archive, artifact.package], { maxBuffer: 128 * 1024 * 1024 });
     const innerHash = execFileSync('unzip', ['-p', archive, `${artifact.package}.sha256`], { encoding: 'utf8' }).trim().split(/\s+/)[0];
@@ -31,4 +30,7 @@ try {
     fs.mkdirSync(destination, { recursive: true });
     for (const name of ['HeliosSetup.exe', 'helios-build.json']) fs.copyFileSync(path.join(temporary, name), path.join(destination, name));
     console.log(`Verified and staged HeliosSetup.exe from upstream artifact ${artifact.id}.`);
+} catch (error) {
+    console.error(error instanceof Error ? error.message : 'Helios installer import failed.');
+    process.exitCode = 1;
 } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
