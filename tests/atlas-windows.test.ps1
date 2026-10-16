@@ -38,17 +38,46 @@ if ($lines.Count -ne 2 -or $lines[0] -ne '23:13:12.3456: Worker Start' -or $line
 Write-Host 'Read-only diagnostic script parsing and startup-log allowlist passed.'
 # Exercise the entire collector with OS-query fixtures; the real Windows state
 # still needs to be collected on the affected VM.
-function Get-CimInstance { param($ClassName, $Filter) [pscustomobject]@{ Name='ameoobe'; State='Running'; StartMode='Auto'; ProcessId=42; ExitCode=0; ServiceSpecificExitCode=0 } }
+function Get-CimInstance {
+    param($ClassName, $Filter)
+    if ($ClassName -eq 'Win32_UserAccount') { return [pscustomobject]@{SID='S-1-5-21-1-2-3-1000'; Disabled=$false} }
+    [pscustomobject]@{ Name='ameoobe'; State='Running'; StartMode='Auto'; ProcessId=42; ExitCode=0; ServiceSpecificExitCode=0 }
+}
 function Get-Process { [CmdletBinding()]param($Name) [pscustomobject]@{ProcessName='OOBE'; Id=42; SessionId=0; Responding=$true} }
 function Get-ScheduledTask { param($TaskName) [pscustomobject]@{State='Running'} }
 function Get-ScheduledTaskInfo { [pscustomobject]@{LastTaskResult=267009} }
 function Get-Content { param($LiteralPath, $Tail) 'Message: "23:13:12.3456: Worker Start"'; 'Password: private' }
-function Get-ItemProperty { param($Path) [pscustomobject]@{OOBEInProgress=1; SystemSetupInProgress=0; SetupType=0} }
+function Get-ItemProperty {
+    param($Path)
+    if ($Path -like '*Winlogon') { return [pscustomobject]@{Shell=('"{0}" --oobe' -f (Join-Path $env:ProgramData 'AME/OOBE/AME.Client.exe')); DefaultUserName='defaultuser0'} }
+    [pscustomobject]@{OOBEInProgress=1; SystemSetupInProgress=0; SetupType=0}
+}
+function Get-Acl {
+    param($LiteralPath)
+    $acl = [pscustomobject]@{AreAccessRulesProtected=$true}
+    $acl | Add-Member ScriptMethod GetAccessRules {
+        param($Explicit, $Inherited, $Type)
+        foreach ($sid in @('S-1-5-18', 'S-1-5-32-544', 'S-1-5-21-1-2-3-1000')) {
+            [pscustomobject]@{IdentityReference=[pscustomobject]@{Value=$sid}; FileSystemRights=2032127; AccessControlType='Allow'; IsInherited=$false}
+        }
+    }
+    $acl
+}
+function Get-FileHash { param($LiteralPath, $Algorithm) [pscustomobject]@{Hash='c2b4f73bc9615e2981b9c60bb51974ed67539873dbd3d29b97258e21fa3ada7d'} }
 $oldProgramData = $env:ProgramData
+$oldSystemRoot = $env:SystemRoot
 try {
     $env:ProgramData = [IO.Path]::GetTempPath()
+    $env:SystemRoot = [IO.Path]::GetTempPath()
     $json = & $diagnosticsScript
     $result = $json | ConvertFrom-Json
     if ($result.service[0].ProcessId -ne 42 -or $result.windowsSetup.OOBEInProgress -ne 1 -or $result.startup.Count -ne 1 -or $json -match 'private') { throw 'Full diagnostic collection failed or leaked log contents.' }
-} finally { $env:ProgramData = $oldProgramData }
+    if ($result.errors.Count -or $result.logon.shell -ne 'ame-oobe' -or -not $result.shim.originalAME -or
+        -not $result.setupAccount.exists -or $result.amePermissions[0].rules[2].principal -ne 'setup-account' -or $json -match 'S-1-5-21') { throw 'Shell/permissions diagnostics failed or exposed machine identifiers.' }
+} finally { $env:ProgramData = $oldProgramData; $env:SystemRoot = $oldSystemRoot }
+$failureKinds = @(Select-AtlasFailureKinds @('System.UnauthorizedAccessException: private', 'HResult: 0x80070005', 'Password: private', 'System.UnauthorizedAccessException'))
+if ($failureKinds.Count -ne 2 -or $failureKinds[0] -ne 'System.UnauthorizedAccessException' -or $failureKinds[1] -ne '0x80070005') { throw 'Failure-type allowlist failed.' }
+if ((Get-AtlasShellKind 'explorer.exe' 'client.exe') -ne 'windows-explorer' -or
+    (Get-AtlasShellKind 'unexpected private command' 'client.exe') -ne 'other') { throw 'Shell classification leaked an unknown command.' }
+if ((Get-AtlasShellKind '"C:\ProgramData\\AME\\OOBE\\AME.Client.exe" --oobe' 'C:\ProgramData\AME\OOBE\AME.Client.exe') -ne 'ame-oobe') { throw 'Pinned shim shell path was not recognized.' }
 Write-Host 'Full diagnostic collection passed with Windows-query fixtures (not a Windows VM test).'

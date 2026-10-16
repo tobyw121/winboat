@@ -165,3 +165,14 @@ Die Ausgabe wird privat unter `~/.winboat/diagnostics/atlas-*.json` gespeichert.
 Bei weiteren Abfragen genügt `python3 scripts/atlas/diagnose-vm.py`.
 Ein `waiting`- oder älterer `running`-Status allein beweist keinen laufenden
 Playbook-Durchlauf. Der Diagnoseweg repariert einen blockierten AME-Client nicht.
+
+Fehlen `Window Launched` und `WNF Published 104`, obwohl `ameoobe` läuft, ist der
+Übergang zur AME-Oberfläche nicht bestätigt. Die erweiterte Diagnose klassifiziert
+zusätzlich den Winlogon-Shell-Eintrag, prüft den Original-AME-Shim per SHA-256 und
+liest die Berechtigungen von AME-Ordner, Client und Konfiguration. Dabei werden
+nur Zugriffskategorien ausgegeben; Kontonamen, maschinenspezifische SIDs,
+Shell-Befehlszeilen und Konfigurationsinhalte bleiben privat. Fehlertypen und
+hexadezimale HRESULTs werden getrennt von vertraulichen Meldungstexten gefiltert.
+Nach einem Git-Pull erneut `--update-guest` verwenden, um diese Skriptversion auf
+der bestehenden VM zu installieren. Die Abfrage verändert weder Konten noch
+Windows-Einrichtungszustände oder AME-Berechtigungen.
