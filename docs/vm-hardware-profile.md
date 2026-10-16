@@ -15,10 +15,18 @@ tatsächlich verbaute Host-Hardware; die Herkunft steht als `source` im Profil.
 
 System-, Board- und Gehäuseseriennummer entstehen unabhängig mit Web Crypto
 (je 80 Zufallsbits), die UUID als UUIDv4. Host-Seriennummern und Host-UUID werden
-nicht gelesen. Namen und erzeugte Kennungen stehen im Installationsordner in
+vom Profilgenerator nicht gelesen. Namen und erzeugte Kennungen stehen im Installationsordner in
 `winboat-hardware.json` mit Dateimodus 0600. Die binären SMBIOS-Strukturen 1, 2
 und 3 liegen daneben in `.winboat-hardware/`. QEMU liest sie über die bestehende
 Storage-Zuordnung ein. Leerzeichen in Herstellernamen bleiben dabei erhalten.
+
+Der mitgelieferte Container-Starteinstieg behält `tini` als Init-Prozess bei.
+Ein Hook wendet die SMBIOS-Dateien nach dockurs `boot.sh` an: Dieses Basisskript
+setzt `SM_BIOS` sonst zurück und übernimmt eine Host-Seriennummer. Der Hook
+ersetzt dieses Ergebnis durch das gespeicherte Profil, bevor die endgültigen
+QEMU-Argumente entstehen. Original- und Hook-Skript werden bei Container-Neustarts
+nicht ineinander verschachtelt. Die Hilfsskripte kommen aus WinBoats lokalen
+App-Ressourcen über den bestehenden OEM-Mount; es gibt keinen Skript-Download.
 
 Bei weiteren Starts, Container-Neuerstellungen und erneuten Setup-Versuchen
 wird dasselbe Profil verwendet. Die SMBIOS-Dateien können aus dem gespeicherten

@@ -250,6 +250,13 @@ export class InstallManager {
                 const destPath = path.join(oemPath, entry);
                 copyRecursive(srcPath, destPath);
             });
+            const profileTools = path.join(oemPath, '.winboat-hardware');
+            if (this.conf.hardwareIdentityEnabled) {
+                const source = remote.app.isPackaged ? path.join(process.resourcesPath, 'vm-profile')
+                    : path.join(remote.app.getAppPath(), '..', '..', 'resources', 'vm-profile');
+                fs.mkdirSync(profileTools, { recursive: true });
+                for (const file of ['entry.sh', 'config.sh']) fs.copyFileSync(path.join(source, file), path.join(profileTools, file));
+            } else fs.rmSync(profileTools, { recursive: true, force: true });
             if (this.conf.heliosEnabled) {
                 const bundle = heliosBundlePath();
                 const target = path.join(oemPath, 'helios');

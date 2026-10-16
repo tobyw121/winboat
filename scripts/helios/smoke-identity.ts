@@ -11,7 +11,10 @@ try {
     const profile = createVmIdentity({ board_vendor: 'ASUSTeK COMPUTER INC.', board_name: 'PRIME B450-PLUS' }, 'AMD');
     fs.mkdirSync(path.join(directory, 'hardware'));
     for (const [name, bytes] of Object.entries(vmIdentitySmbios(profile))) fs.writeFileSync(path.join(directory, 'hardware', name), bytes);
-    const cases = [false, true].map(reduced => ({ reduced, environment: configureVmIdentity({ environment: {} }, profile, reduced).environment }));
+    const cases = [false, true].map(reduced => {
+        const service = configureVmIdentity({ environment: {} as Record<string, string>, entrypoint: undefined as string[] | undefined }, profile, reduced);
+        return { reduced, environment: service.environment, entrypoint: service.entrypoint };
+    });
     fs.writeFileSync(path.join(directory, 'settings.json'), JSON.stringify({ profile, cases }));
     const result = spawnSync('python3', ['tests/vm-identity-qemu.py', directory, HELIOS_IMAGE], { stdio: 'inherit', timeout: 240000 });
     if (result.error) throw result.error;

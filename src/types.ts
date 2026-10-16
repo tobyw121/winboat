@@ -50,6 +50,7 @@ export type ComposeConfig = {
             image: string;
             gpus?: string;
             pull_policy?: string;
+            entrypoint?: string[];
             container_name: string;
             environment: {
                 VERSION: WindowsVersionKey;

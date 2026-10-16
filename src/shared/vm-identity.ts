@@ -69,13 +69,15 @@ export function vmIdentitySmbios(value: VmIdentity): Record<string, Uint8Array> 
     };
 }
 
-export function configureVmIdentity<T extends { environment: Record<string, string> }>(service: T, value: VmIdentity, reduceCpuMarkers: boolean): T {
+export function configureVmIdentity<T extends { environment: Record<string, string>; entrypoint?: string[] }>(service: T, value: VmIdentity, reduceCpuMarkers: boolean): T {
     const p = validateVmIdentity(value);
     const next = JSON.parse(JSON.stringify(service)) as T;
-    const smbios = Object.keys(vmIdentitySmbios(p)).map(file => `-smbios file=/storage/.winboat-hardware/${file}`).join(' ');
-    if (next.environment.SM_BIOS && next.environment.SM_BIOS !== smbios) throw new Error('Existing SMBIOS arguments conflict with the VM hardware profile.');
+    const entrypoint = ['/usr/bin/tini', '-s', '--', '/bin/bash', '/oem/.winboat-hardware/entry.sh'];
+    if (next.entrypoint && JSON.stringify(next.entrypoint) !== JSON.stringify(entrypoint)) throw new Error('Existing container entrypoint conflicts with the VM hardware profile.');
+    if (next.environment.SM_BIOS) throw new Error('Existing SMBIOS arguments conflict with the VM hardware profile.');
     if (next.environment.UUID && next.environment.UUID !== p.uuid) throw new Error('Existing VM UUID conflicts with its saved hardware profile.');
-    next.environment.SM_BIOS = smbios;
+    next.entrypoint = entrypoint;
+    next.environment.WINBOAT_HARDWARE_PROFILE = '1';
     next.environment.UUID = p.uuid;
     if (reduceCpuMarkers) {
         const flags = (next.environment.CPU_FLAGS || '').split(',').filter(Boolean).filter(flag =>

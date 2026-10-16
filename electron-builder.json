@@ -52,6 +52,11 @@
   ],
   "extraResources": [
     {
+      "from": "./resources/vm-profile",
+      "to": "vm-profile",
+      "filter": ["entry.sh", "config.sh"]
+    },
+    {
       "from": "./build/native",
       "to": "native",
       "filter": ["winboat-helios-viewer"]

@@ -39,22 +39,45 @@ for case in settings["cases"]:
     name = f"winboat-identity-test-{os.getpid()}-{int(reduced)}"
     env = [item for key, value in case["environment"].items() for item in ("-e", f"{key}={value}")]
     boot = """
+#!/usr/bin/env bash
 set -Eeuo pipefail
-APP=Windows DEBUG=N ARCH=amd64 CPU=Test BOOT_MODE=windows KVM=N CPU_MODEL=max ARGUMENTS=''
+# Exercise restart idempotence in the same container filesystem.
+if [[ ! -f /identity/entry-restarted ]]; then
+    touch /identity/entry-restarted
+    exec /bin/bash /oem/.winboat-hardware/entry.sh
+fi
+APP=Windows DEBUG=N ARCH=amd64 CPU=Test BOOT_MODE=windows KVM=N CPU_MODEL=max
+RAM_SIZE=128M CPU_CORES=1 MACHINE=q35 SECURE=off PROCESS=windows RAM_CHECK=N
+MON_PORT=7100 MONITOR=none SERIAL=none USB=no
 source /run/utils.sh
+# Run the actual stock SMBIOS reset/host-serial block from the pinned base.
+SM_BIOS=before-stock-boot
+source <(sed -n '/^SM_BIOS=""/,/^fi$/p' /run/boot.sh)
+[[ "$SM_BIOS" != before-stock-boot ]]
+ARGUMENTS=''
 source /run/proc.sh >&2
-exec qemu-system-x86_64 -machine q35,accel=tcg -m 128M -nodefaults \
-    -cpu "$CPU_FLAGS" $SM_BIOS -uuid "$UUID" -display none -serial none -monitor none \
-    -drive file=/identity/boot.img,format=raw,if=ide -boot c -no-reboot \
-    -chardev file,id=bootdebug,path=/identity/cpu.out -device isa-debugcon,iobase=0xe9,chardev=bootdebug \
-    -chardev file,id=biosdebug,path=/identity/bios.log -device isa-debugcon,iobase=0x402,chardev=biosdebug -qmp stdio
+INFO=/identity/msg.html PAGE=/identity/index.html
+touch "$INFO" "$PAGE"
+html() { :; }
+SM_BIOS=${SM_BIOS:-} NET_OPTS='-nic none' DISPLAY=web DISPLAY_OPTS='-display none'
+DISK_OPTS='-drive file=/identity/boot.img,format=raw,if=ide'
+BOOT_OPTS='-boot c -no-reboot'
+ARGUMENTS='-qmp stdio -chardev file,id=bootdebug,path=/identity/cpu.out -device isa-debugcon,iobase=0xe9,chardev=bootdebug -chardev file,id=biosdebug,path=/identity/bios.log -device isa-debugcon,iobase=0x402,chardev=biosdebug'
+source /run/config.sh >&2
+exec qemu-system-x86_64 $ARGS
 """
+    entry = directory / "test-entry.sh"
+    entry.write_text(boot.lstrip())
+    entry.chmod(0o755)
+    (directory / "entry-restarted").unlink(missing_ok=True)
     output = directory / "cpu.out"
     output.unlink(missing_ok=True)
     errors = open(directory / "qemu.log", "w+")
+    tools = Path(__file__).resolve().parents[1] / 'resources/vm-profile'
     process = subprocess.Popen(["docker", "run", "--rm", "-i", "--name", name, "--network", "none",
                                 "-v", f"{directory}:/identity", "-v", f"{directory / 'hardware'}:/storage/.winboat-hardware:ro",
-                                *env, "--entrypoint", "bash", image, "-c", boot],
+                                "-v", f"{tools}:/oem/.winboat-hardware:ro", "-v", f"{entry}:/run/entry.sh:ro",
+                                *env, "--entrypoint", case['entrypoint'][0], image, *case['entrypoint'][1:]],
                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors)
     buffer = b""
 

@@ -53,10 +53,12 @@ test('CPU compatibility preserves KVM, host CPU selection, GPU devices, storage 
     assert.deepEqual(updated.devices, service.devices);
     assert.deepEqual(updated.volumes, service.volumes);
     assert.equal(updated.environment.ARGUMENTS, service.environment.ARGUMENTS);
-    assert.equal(updated.environment.SM_BIOS.split('-smbios').length, 4);
+    assert.equal(updated.environment.WINBOAT_HARDWARE_PROFILE, '1');
+    assert.equal(updated.entrypoint?.[0], '/usr/bin/tini');
     assert.deepEqual(configureVmIdentity(updated, p, true), updated);
     assert.equal(JSON.stringify(service), before);
     assert.throws(() => configureVmIdentity({ environment: { UUID: 'another-machine' } }, p, true), /conflicts/);
+    assert.throws(() => configureVmIdentity({ environment: {}, entrypoint: ['custom-entrypoint'] }, p, true), /entrypoint/);
     const standard = configureVmIdentity({ environment: { CPU_FLAGS: 'aes=on' } }, p, false);
     assert.equal(standard.environment.CPU_FLAGS, 'aes=on');
     assert.equal(standard.environment.HV, undefined);
