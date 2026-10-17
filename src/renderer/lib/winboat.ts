@@ -647,6 +647,11 @@ export class Winboat {
     async launchApp(app: WinApp) {
         if (!this.isOnline) throw new Error('Cannot launch app, Winboat is offline');
 
+        if (app.Path === CustomAppCommands.NOVNC_COMMAND && this.parseCompose().services.windows.environment.HELIOS_DISPLAY === 'dbus') {
+            await remote.dialog.showMessageBox({type:'info', message:'Browser Display requires Browser mode.', detail:'Disable Local desktop in Configuration and save to restart this VM with Browser Display. Your Windows disk is preserved.'});
+            return;
+        }
+
         if(customAppCallbacks[app.Path]) {
             logger.info(`Found custom app command for '${app.Name}'`);
             customAppCallbacks[app.Path]!(this);
@@ -659,7 +664,7 @@ export class Winboat {
         if (app.Path === InternalApps.WINDOWS_DESKTOP && compose.services.windows.environment.HELIOS === '1') {
             // Keep games on the Helios console adapter, not an RDP virtual display.
             if (compose.services.windows.environment.HELIOS_DISPLAY === 'dbus') {
-                await openLocalDesktop(`http://127.0.0.1:${this.getHostPort(GUEST_NOVNC_PORT)}`);
+                await openLocalDesktop();
             } else customAppCallbacks[CustomAppCommands.NOVNC_COMMAND]!(this);
             this.appMgr?.incrementAppUsage(app);
             this.appMgr?.writeToDisk();

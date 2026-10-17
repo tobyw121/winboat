@@ -23,6 +23,7 @@ const display = docker(['run', '--rm', '-i', '--network', 'none', '--device', '/
     '-e', 'RENDERNODE=/dev/dri/renderD128', '-e', 'RAM_SIZE=128M', '-e', 'VNC_PORT=5900', '-e', 'WSS_PORT=5700',
     '--entrypoint', 'bash', HELIOS_IMAGE, '-s'], startup);
 assert.ok(display.includes('venus=on,blob=on'));
+assert.ok(display.includes('-vnc :0,websocket=5700'));
 assert.ok(display.includes('-device VGA,id=helios-bootstrap -device virtio-gpu-gl-pci'));
 assert.ok(display.includes('memory-backend-memfd,id=helios-ram,size=128M,share=on'));
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'winboat-display-args-'));
@@ -34,7 +35,7 @@ try {
         '-e', 'RAM_SIZE=128M', '-e', 'VNC_PORT=5900', '-e', 'WSS_PORT=5700',
         '--entrypoint', 'bash', HELIOS_IMAGE, '-s'], startup);
     assert.ok(local.includes('dbus,addr=unix:path=/run/helios-display/bus,gl=on,rendernode=/dev/dri/renderD128'));
-    assert.ok(local.includes('-vnc :0,websocket=5700'));
+    assert.ok(!local.includes('-vnc '), 'Native D-Bus GL cannot register a VNC listener');
     assert.ok(local.includes('venus=on,blob=on'));
     assert.ok(local.includes('-device VGA,id=helios-bootstrap -device virtio-gpu-gl-pci'));
 } finally {
@@ -59,6 +60,9 @@ try {
         '--entrypoint', 'python3', HELIOS_IMAGE, '/test/bootstrap.py', '/test/bootstrap.ppm'], undefined, 60000).trim());
     fs.mkdirSync(new URL('../../dist/', import.meta.url), { recursive: true });
     fs.copyFileSync(path.join(probe, 'bootstrap.ppm'), new URL('../../dist/helios-bootstrap-smoke.ppm', import.meta.url));
+    fs.copyFileSync(new URL('../../tests/helios-gl-display.py', import.meta.url), path.join(probe, 'gl-display.py'));
+    console.log(docker(['run', '--rm', '--network', 'none', '--device', '/dev/null:/dev/dri/renderD128',
+        '-v', `${probe}:/test:ro`, '--entrypoint', 'python3', HELIOS_IMAGE, '/test/gl-display.py'], undefined, 90000).trim());
 } finally {
     fs.rmSync(probe, { recursive: true });
 }

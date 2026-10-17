@@ -92,14 +92,14 @@
                     <div>
                         <h1 class="text-lg font-semibold my-0 mb-2">Local desktop (experimental)</h1>
                         <p class="text-neutral-400 text-[0.9rem] !pt-0 !mt-0">
-                            Open Windows in a native window. Requires GTK4. Browser Display remains available.
+                            Open Windows in a native window. Requires GTK4. Disable this option and save to use Browser Display.
                             Applying a display change restarts the VM. Audio and captured gaming mouse input are not included yet.
                             Host boot auto-start is disabled when this mode is enabled. Start the VM from your desktop session.
                         </p>
                     </div>
                     <div class="flex flex-col gap-2 items-end">
                         <x-switch :toggled="localDisplayEnabled" :disabled="isApplyingChanges" @toggle="toggleLocalDisplay" size="large"></x-switch>
-                        <x-button v-if="origLocalDisplayEnabled && compose?.services.windows.environment.HELIOS_DISPLAY === 'dbus'" :disabled="isApplyingChanges || localDisplayState === 'opening'" @click="openLocalDesktop(localBrowserURL)">Open Local Desktop</x-button>
+                        <x-button v-if="origLocalDisplayEnabled && compose?.services.windows.environment.HELIOS_DISPLAY === 'dbus'" :disabled="isApplyingChanges || localDisplayState === 'opening'" @click="openLocalDesktop()">Open Local Desktop</x-button>
                         <x-button v-else-if="origLocalDisplayEnabled" :disabled="isApplyingChanges" @click="saveDockerCompose()">Retry Local Desktop</x-button>
                         <span v-if="localDisplayMessage" class="text-sm text-neutral-400 max-w-sm">{{ localDisplayMessage }}</span>
                     </div>
@@ -562,7 +562,6 @@ const origApplicationScale = ref(0);
 const heliosEnabled = ref(false);
 const origHeliosEnabled = ref(false);
 const localDisplayEnabled = ref(false);
-const localBrowserURL = computed(() => `http://127.0.0.1:${qmpPortManager.value?.getHostPort(GUEST_NOVNC_PORT) ?? GUEST_NOVNC_PORT}`);
 async function toggleLocalDisplay() {
     localDisplayEnabled.value = !localDisplayEnabled.value;
     localDisplayMessage.value = '';

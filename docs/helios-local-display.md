@@ -4,8 +4,8 @@ WinBoat bevorzugt für neue Helios-VMs ein natives GTK4-/OpenGL-Fenster, sofern
 Viewer, GTK4, D-Bus, Host-Image und Desktop-Sitzung verfügbar sind. Die Einrichtung
 bietet dafür die vorausgewählte Option **Prefer Local Desktop**; sie lässt sich
 abwählen. Fehlen Voraussetzungen, wird Browser Display verwendet und der Grund
-in der Einrichtung angezeigt. Vorhandene VMs werden nicht automatisch umgestellt. Browser Display und
-RemoteApps bleiben verfügbar. Windows und die Grafiktreiber werden durch diesen
+in der Einrichtung angezeigt. Vorhandene VMs werden nicht automatisch umgestellt. Browser Display und Local Desktop sind getrennte Anzeigemodi.
+RemoteApps bleiben unabhängig davon verfügbar. Windows und die Grafiktreiber werden durch diesen
 Viewer nicht ersetzt.
 
 Die Auswahl wird unabhängig vom aktiven Anzeigetransport als
@@ -47,13 +47,14 @@ die Electron-Anwendung und leert das Verzeichnis `build/`.
    Der Schalter deaktiviert den automatischen Containerstart am Host-Boot, weil
    der private Anzeigedienst an die Desktop-Sitzung gebunden ist.
 3. **Windows Desktop** öffnen. **Ctrl+Alt+Enter** schaltet den Viewer auf Vollbild
-   und zurück. Browser Display lässt sich jederzeit gesondert öffnen.
+   und zurück. Für Browser Display Local desktop ausschalten und speichern;
+   dabei wird der Container mit derselben Windows-Festplatte neu gestartet.
 
 **Open Local Desktop** steht auch direkt in Einstellungen und Einrichtung zur
 Verfügung. Der Verbindungsstatus zeigt Start, Verbindung und Fehler an; bei
-Viewer-Fehlern öffnet WinBoat Browser Display. Mehrfaches Öffnen während des
+Viewer-Fehlern zeigt WinBoat den Fehler und den Weg zum Browser-Modus an. Mehrfaches Öffnen während des
 Starts erzeugt nur einen Viewer. Normales Schließen beendet nur das Fenster.
-Beim Stoppen der VM wird der Viewer absichtlich beendet, ohne Browser-Fallback.
+Beim Stoppen der VM wird der Viewer absichtlich beendet, ohne einen Browser zu öffnen.
 
 Das native Fenster bietet außerdem **Fullscreen**, **Ctrl+Alt+Del** und einen
 Hinweis, solange kein Windows-Bild empfangen wird. Gehaltene Tasten/Maustasten
@@ -61,9 +62,10 @@ werden beim normalen Schließen und beim Stoppsignal freigegeben. Anzeige und
 Windows-Anmeldung sind unabhängig: Ein fehlender Windows-Benutzer oder eine
 blockierte AME-OOBE wird durch den Wechsel des Anzeigefensters nicht repariert.
 
-Die Einstellung prüft Viewer-Version und Image-Fähigkeitslabel `dbus-v3`.
+Die Einstellung prüft Viewer-Version und Image-Fähigkeitslabel `dbus-v4`.
 Ein älteres Host-Image muss neu gebaut werden. Schlägt die Viewer-Anmeldung oder
-Frame-Übernahme fehl, öffnet WinBoat Browser Display und protokolliert den Fehler.
+Frame-Übernahme fehl, meldet WinBoat den Fehler und bietet einen erneuten
+Verbindungsversuch. Ein laufender nativer GL-Modus besitzt keinen VNC-Listener.
 Die VM und ihre Disk werden dabei nicht automatisch umkonfiguriert.
 
 ## Display-Bus und Container
@@ -119,9 +121,8 @@ nicht authentifizierbarer Bus wird nicht automatisch gelöscht oder ersetzt.
 
 Das ist **kein durchgehend kopierfreier Direct-Scanout-Pfad**: Es gibt eine
 bewusste GPU-Kopie und eine konservative Synchronisationsstelle. Der Viewer
-vermeidet CPU-Readback für seinen DMA-BUF-Pfad. Dass auch QEMU/Renderer und ein
-parallel verfügbarer VNC-Pfad keine Kopien mehr durchführen, ist damit nicht
-nachgewiesen. Statistiken auf stderr unterscheiden `dmabufFrames`,
+vermeidet CPU-Readback für seinen DMA-BUF-Pfad. Dass auch QEMU/Renderer keine weiteren Kopien durchführen, ist damit nicht
+nachgewiesen. VNC wird ausschließlich im separaten Browser-Modus verwendet. Statistiken auf stderr unterscheiden `dmabufFrames`,
 `softwareFrames` und `renderedFrames`.
 
 ## Grenzen und nächste Schritte
@@ -237,3 +238,32 @@ before stopping tasks. Atlas/Helios provisioning tasks may still be completing a
 installation or a required reboot. Do not terminate every PowerShell process or
 remove all startup tasks. The CPU reduction must be measured in the Windows VM;
 a successful cross-build does not establish its runtime CPU usage.
+
+### D-Bus GL und VNC
+
+Ab `dbus-v4` startet der native Modus ausschließlich mit D-Bus/GL. Ein zusätzlicher
+VNC-Listener wird dort nicht registriert: QEMUs D-Bus-GL-Kontext weist ihn mit
+`Display vnc is incompatible with the GL context` zurück und beendet QEMU bereits
+vor dem Windows-Start. Der Browser-Modus verwendet weiterhin EGL-headless mit
+VNC/WebSocket und Helios. Der HTTP-Installationsstatus bleibt in beiden Modi aktiv.
+Ein Wechsel des Modus startet den Container neu, ohne die Windows-Platte zu löschen.
+Das Host-Image muss neu gebaut werden; ein Gastdienst-Update allein reicht nicht.
+
+Der Regressionstest `tests/helios-gl-display.py` reproduziert mit dem echten
+gepinnten QEMU und Mesa-Software-OpenGL zunächst den bisherigen Startfehler.
+Danach prüft er erfolgreiche QMP-Antworten für D-Bus/GL ohne VNC und für
+EGL-headless mit VNC. Er ist Teil von `test:helios:host`; der Null-Geräteknoten
+ist ausschließlich eine Software-Testfixture. Diese Prüfung ersetzt keinen
+DMA-BUF-/NVIDIA-Test mit einer physischen GPU.
+
+Nach dem Neubauen verwendet ein bereits vorhandener Container weiterhin seine
+alte Image-ID. Nach dem Start der neu gebauten WinBoat-Anwendung kann er mit
+unveränderter Compose-Datei und denselben eingebundenen Windows-Daten neu erzeugt
+werden:
+
+```bash
+docker compose -f "$HOME/.winboat/docker-compose.yml" up -d --force-recreate windows
+```
+
+Für den nativen Modus muss der private Display-Bus noch verfügbar sein. Die neue
+WinBoat-Anwendung vor dem Containerstart auf derselben Desktop-Sitzung öffnen.

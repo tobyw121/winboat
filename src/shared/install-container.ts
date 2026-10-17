@@ -2,6 +2,9 @@
 export function containerInstallLogFailure(logs: string): string | undefined {
     const atlas = logs.match(/^AME ISO injection failed: ([^\r\n]+)/m);
     if (atlas) return `AME ISO preparation failed: ${atlas[1]}`;
+    if (/Display vnc is incompatible with the GL context/.test(logs)) {
+        return 'The Helios host image combines incompatible native GL and VNC displays. Rebuild the host image and recreate the container without deleting the Windows disk.';
+    }
     if (/Couldn't open libGL\.so\.1 or libOpenGL\.so\.0/.test(logs)) {
         return 'Helios is missing its OpenGL runtime libraries. Rebuild the Helios host image and recreate the container; keep the VM disk.';
     }

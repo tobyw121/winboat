@@ -624,10 +624,11 @@
                         <h1 class="text-3xl font-semibold">Installation</h1>
                         <p class="text-lg text-gray-400 text-justify">
                             WinBoat is now installing Windows. Please be patient as this may take up to an hour.
-                            In the meantime, you can grab a coffee and check the installation status <a :href="novncURL" @click="openAnchorLink">in your browser</a>.
+                            <span v-if="localDisplayConfigured">Follow Windows setup in Local Desktop.</span>
+                            <span v-else>Check the installation status <a :href="novncURL" @click="openAnchorLink">in your browser</a>.</span>
                         </p>
                         <div v-if="localDisplayConfigured" class="mb-4">
-                            <x-button @click="openLocalDesktop(novncURL)" :disabled="localDisplayState === 'opening'">Open Local Desktop</x-button>
+                            <x-button @click="openLocalDesktop()" :disabled="localDisplayState === 'opening'">Open Local Desktop</x-button>
                             <p class="text-sm text-gray-400">{{ localDisplayMessage || 'Native console available; Ctrl+Alt+Enter toggles fullscreen.' }}</p>
                         </div>
                         <p v-else-if="localDisplayUnavailableReason" class="text-sm text-gray-400">Local Desktop unavailable: {{ localDisplayUnavailableReason }} Browser Display remains available.</p>

@@ -16,6 +16,11 @@ STORAGE="$temporary/storage"
 mkdir -p "$STORAGE"
 source /run/utils.sh
 source /run/display.sh
+if [[ "${HELIOS_DISPLAY:-novnc}" == dbus ]]; then
+    [[ "$DISPLAY_OPTS" == *'-display dbus,'* && "$DISPLAY_OPTS" != *'-vnc '* ]]
+else
+    [[ "$DISPLAY_OPTS" == *'-display egl-headless,'* && "$DISPLAY_OPTS" == *'-vnc :0,websocket=5700'* ]]
+fi
 [[ "$DISPLAY_OPTS" == *'-device VGA,id=helios-bootstrap -device virtio-gpu-gl-pci'* ]]
 # A ready marker only belongs to a confirmed, matching Helios installation.
 printf '%s\n' "$HELIOS_REVISION" > "$STORAGE/.winboat-helios-ready"

@@ -6,6 +6,7 @@ test('AME preparation diagnostics survive a reset HTTP connection without treati
     assert.equal(containerInstallLogFailure('Adding OEM folder to image...\nAME OOBE and offline registry preparation injected.'), undefined);
     assert.match(containerInstallLogFailure('AME ISO injection failed: Windows Pro index 6 has no Windows/System32/oobe/msoobe.exe. Select apply after installation.\nTraceback...')!, /index 6.*apply after installation/);
     assert.match(containerInstallLogFailure("Couldn't open libGL.so.1 or libOpenGL.so.0")!, /OpenGL runtime/);
+    assert.match(containerInstallLogFailure('qemu-system-x86_64: -vnc :0,websocket=5700: Display vnc is incompatible with the GL context')!, /incompatible native GL and VNC.*without deleting/);
 });
 
 test('a healthy VM and Windows reboots do not fail installation monitoring', () => {

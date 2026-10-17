@@ -9,7 +9,7 @@ set -Eeuo pipefail
 [[ -c "$RENDERNODE" && -r "$RENDERNODE" && -w "$RENDERNODE" ]] || { echo "Helios cannot access $RENDERNODE" >&2; exit 1; }
 # dockur's network/config stages use DISPLAY independently of QEMU's backend:
 # reserve the console ports and remove msg.html when preinstallation finishes.
-# Keep Browser Display available in both the EGL and native D-Bus modes.
+# Keep dockur's HTTP status/installation endpoint active in both modes.
 DISPLAY=web
 # Headless EGL creates the host rendering context; VNC/WebSocket carries the
 # Helios scanout. A bootstrap VGA supplies Windows Setup/AME's initial display.
@@ -40,7 +40,11 @@ case "$bootstrap" in
     *) echo 'Invalid HELIOS_BOOTSTRAP_DISPLAY (use auto, 1/yes or 0/no).' >&2; exit 1 ;;
 esac
 DISPLAY_OPTS+=" -device virtio-gpu-gl-pci,id=heliosgpu,venus=on,blob=on,hostmem=8G,max_hostmem=8G"
-DISPLAY_OPTS+=" -vnc :$((VNC_PORT - 5900)),websocket=$WSS_PORT"
+# The D-Bus GL context only accepts D-Bus listeners. Registering VNC against
+# it aborts QEMU at startup. EGL-headless supplies the 2D readback VNC needs.
+if [[ "${HELIOS_DISPLAY:-novnc}" == novnc ]]; then
+    DISPLAY_OPTS+=" -vnc :$((VNC_PORT - 5900)),websocket=$WSS_PORT"
+fi
 
 # Match Helios's shared guest-memory contract. The ordinary dockur -m value is
 # preserved; a second -machine option merges in the memfd backend property.

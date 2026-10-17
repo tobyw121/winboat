@@ -93,14 +93,12 @@ export async function launchLocalDisplay(onFailure: (message: string) => void): 
     await viewer.open(onFailure);
 }
 export function closeLocalDisplay(): void { viewer.close(); }
-export function openLocalDesktop(browserURL: string): Promise<void> {
+export function openLocalDesktop(): Promise<void> {
     if (!openingConsole) openingConsole = (async () => {
         const fallback = (message: string) => {
             console.warn(`Local Helios display: ${message}`);
-            localDisplayState.value = 'failed'; localDisplayMessage.value = `${message} Browser Display opened.`;
-            void remote.shell.openExternal(browserURL).catch((error: Error) => {
-                localDisplayMessage.value = `${message} Browser Display could not open: ${error.message}`;
-            });
+            localDisplayState.value = 'failed';
+            localDisplayMessage.value = `${message} Retry Local Desktop, or disable Local desktop in Configuration and save to restart this VM with Browser Display. Windows data is preserved.`;
         };
         try { await launchLocalDisplay(fallback); }
         catch (error) { if (!(error instanceof Error && error.name === 'AbortError')) fallback(error instanceof Error ? error.message : String(error)); }
