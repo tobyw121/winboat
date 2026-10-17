@@ -50,7 +50,9 @@ struct Viewer {
  GDBusProxy *mouse;
  GDBusNodeInfo *info;
  GdkCursor *cursor;
- GLuint program, vao, texture, source, fbo;
+ GLuint program, external_program, vao, texture, source, fbo;
+ gboolean source_external;
+ GLenum image_error;
  EGLImageKHR image;
  EGLDisplay display;
  guint width, height, resize_timer, requested_width, requested_height;
@@ -70,7 +72,7 @@ struct Viewer {
  guint console_id, pending_consoles, reconnect_timer;
  gboolean accelerated, seen_update, cursor_visible, awaiting_scanout;
  guint recovery_attempt;
- char frame_problem[256];
+ char frame_problem[512];
  gint helios_health, basic_health; /* 0 unknown, 1 running, 2 unavailable */
  gint64 health_at;
  guint health_watch, health_timer;
@@ -238,10 +240,13 @@ static void desktop_gl(void) {
  }
 }
 static void draw(Viewer *v, GLuint texture, const float *rect, gboolean flip) {
- glUseProgram(v->program);glBindVertexArray(v->vao);glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,texture);
- glUniform1i(glGetUniformLocation(v->program,"image"),0);
- glUniform4fv(glGetUniformLocation(v->program,"rect"),1,rect);
- glUniform1i(glGetUniformLocation(v->program,"flip"),flip);glDrawArrays(GL_TRIANGLES,0,3);
+ gboolean external=v->source_external && texture==v->source;
+ GLuint program=external?v->external_program:v->program;
+ glUseProgram(program);glBindVertexArray(v->vao);glActiveTexture(GL_TEXTURE0);
+ glBindTexture(external?GL_TEXTURE_EXTERNAL_OES:GL_TEXTURE_2D,texture);
+ glUniform1i(glGetUniformLocation(program,"image"),0);
+ glUniform4fv(glGetUniformLocation(program,"rect"),1,rect);
+ glUniform1i(glGetUniformLocation(program,"flip"),flip);glDrawArrays(GL_TRIANGLES,0,3);
 }
 static gboolean save_screenshot(Viewer *v,const char *path) {
  int scale=gtk_widget_get_scale_factor(v->area),w=gtk_widget_get_width(v->area)*scale,h=gtk_widget_get_height(v->area)*scale;
@@ -277,6 +282,7 @@ static gboolean render(GtkGLArea *area,GdkGLContext *context,Viewer *v) {
  return TRUE;
 }
 static void discard_source(Viewer *v) {
+ v->source_external=FALSE;
  if (v->source) {glDeleteTextures(1,&v->source);v->source=0;}
  if (v->image!=EGL_NO_IMAGE_KHR) {eglDestroyImageKHR(v->display,v->image);v->image=EGL_NO_IMAGE_KHR;}
 }
@@ -290,6 +296,27 @@ static void dma_geometry(Viewer *v,guint x,guint y,guint w,guint h,guint bw,guin
  /* Match QEMU's egl_fb_blit(..., !y0_top): its display-origin flag is
   * opposite to the vertical flip needed by our bottom-up GL coordinates. */
  v->source_flip=!top;
+}
+static gboolean bind_egl_source(Viewer *v,EGLImageKHR image,gboolean external) {
+ /* GTK shares this GL context. Errors left by another user of it must not be
+  * attributed to glEGLImageTargetTexture2DOES, whose result is checked below. */
+ for (guint i=0;i<16;i++) {
+  GLenum previous=glGetError();
+  if (previous==GL_NO_ERROR) break;
+  if (previous==GL_CONTEXT_LOST) {v->image_error=previous;return FALSE;}
+  g_printerr("Console %u: clearing pre-existing GL error 0x%04x before EGL image binding.\n",v->console_id,previous);
+ }
+ if (v->source) {glDeleteTextures(1,&v->source);v->source=0;}
+ GLenum target=external?GL_TEXTURE_EXTERNAL_OES:GL_TEXTURE_2D;
+ glGenTextures(1,&v->source);glBindTexture(target,v->source);
+ glTexParameteri(target,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(target,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+ glTexParameteri(target,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(target,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+ v->image_error=glGetError();
+ if (v->image_error==GL_NO_ERROR) {
+  glEGLImageTargetTexture2DOES(target,image);v->image_error=glGetError();
+ }
+ if (v->image_error!=GL_NO_ERROR) {glDeleteTextures(1,&v->source);v->source=0;return FALSE;}
+ v->source_external=external;return TRUE;
 }
 static gboolean import_dma(Viewer *v,GDBusMethodInvocation *inv,GVariant *handles,
  guint x,guint y,guint w,guint h,GVariant *offsets,GVariant *strides,guint planes,
@@ -328,11 +355,19 @@ static gboolean import_dma(Viewer *v,GDBusMethodInvocation *inv,GVariant *handle
  EGLImageKHR image=ok?eglCreateImageKHR(v->display,EGL_NO_CONTEXT,EGL_LINUX_DMA_BUF_EXT,NULL,attrs):EGL_NO_IMAGE_KHR;
  for (guint p=0;p<planes;p++) if (fds[p]>=0) close(fds[p]);
  if (image==EGL_NO_IMAGE_KHR) {g_snprintf(v->frame_problem,sizeof(v->frame_problem),"EGL DMA-BUF import failed: egl=0x%04x, fourcc=0x%08x, modifier=0x%016" G_GINT64_MODIFIER "x",eglGetError(),fourcc,modifier);return FALSE;}
- discard_source(v);v->image=image;glGenTextures(1,&v->source);glBindTexture(GL_TEXTURE_2D,v->source);
- glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
- glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
- glEGLImageTargetTexture2DOES(GL_TEXTURE_2D,image);
- if (glGetError()!=GL_NO_ERROR) {g_strlcpy(v->frame_problem,"OpenGL could not bind the imported EGL image",sizeof(v->frame_problem));discard_source(v);return FALSE;}
+ discard_source(v);v->image=image;
+ if (!bind_egl_source(v,image,FALSE)) {
+  GLenum regular_error=v->image_error;
+  /* Some DMA-BUF layouts can only be sampled as external textures. A 2D
+   * sampler cannot consume those even though eglCreateImageKHR succeeds. */
+  gboolean compatible=regular_error==GL_INVALID_OPERATION || regular_error==GL_INVALID_ENUM;
+  if (!compatible || !v->external_program || !bind_egl_source(v,image,TRUE)) {
+   g_snprintf(v->frame_problem,sizeof(v->frame_problem),
+    "EGL image binding failed: 2D GL=0x%04x, last GL=0x%04x, external=%s, fourcc=0x%08x, modifier=0x%016" G_GINT64_MODIFIER "x, planes=%u, renderer=%s",
+    regular_error,v->image_error,v->external_program?"available":"unavailable",fourcc,modifier,planes,(const char *)glGetString(GL_RENDERER));
+   discard_source(v);return FALSE;
+  }
+ }
  dma_geometry(v,x,y,w,h,bw,bh,top);v->frame_problem[0]=0;return TRUE;
 }
 static gboolean copy_dma(Viewer *v) {
@@ -356,7 +391,7 @@ static void report_display_recovery(Viewer *v,const char *message) {
 static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,const gchar *iface,
  const gchar *name,GVariant *params,GDBusMethodInvocation *inv,gpointer data) {
  (void)conn;(void)sender;(void)path;(void)iface;
- Viewer *v=data;gboolean ok=TRUE;
+ Viewer *v=data;gboolean ok=TRUE;v->image_error=GL_NO_ERROR;
  gboolean scanout=!strcmp(name,"Scanout") || !strcmp(name,"ScanoutDMABUF") || !strcmp(name,"ScanoutDMABUF2");
  gboolean update=!strcmp(name,"Update") || !strcmp(name,"UpdateDMABUF");
  gboolean frame=scanout || update || !strcmp(name,"Disable");
@@ -428,6 +463,7 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
  } else ok=FALSE;
  GLenum frame_error=GL_NO_ERROR;
  if (!gtk_gl_area_get_error(GTK_GL_AREA(v->area))) frame_error=glGetError();
+ if (frame_error==GL_NO_ERROR && !ok) frame_error=v->image_error;
  if (frame_error!=GL_NO_ERROR) ok=FALSE;
  if (ok) {
   if (scanout) {
@@ -557,13 +593,20 @@ static void registered(GObject *object,GAsyncResult *result,gpointer data) {
  g_dbus_connection_new(G_IO_STREAM(stream),guid,G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_SERVER|G_DBUS_CONNECTION_FLAGS_DELAY_MESSAGE_PROCESSING,
                        auth,NULL,peer_ready,v);g_free(guid);g_object_unref(auth);g_object_unref(stream);
 }
+static GLuint presentation_program(const char *vertex,const char *fragment) {
+ GLuint vs=shader(GL_VERTEX_SHADER,vertex),fs=shader(GL_FRAGMENT_SHADER,fragment);
+ if (!vs || !fs) {if(vs)glDeleteShader(vs);if(fs)glDeleteShader(fs);return 0;}
+ GLuint program=glCreateProgram();glAttachShader(program,vs);glAttachShader(program,fs);glLinkProgram(program);
+ glDeleteShader(vs);glDeleteShader(fs);GLint ok;glGetProgramiv(program,GL_LINK_STATUS,&ok);
+ if (!ok) {glDeleteProgram(program);return 0;}return program;
+}
 static gboolean initialize_gl(Viewer *v) {
  const char *vertex="#version 330\nout vec2 uv;void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);uv=p;gl_Position=vec4(p*2-1,0,1);}";
  const char *fragment="#version 330\nin vec2 uv;out vec4 color;uniform sampler2D image;uniform vec4 rect;uniform bool flip;void main(){vec2 p=uv;if(flip)p.y=1-p.y;color=vec4(texture(image,rect.xy+p*rect.zw).rgb,1);}";
- GLuint vs=shader(GL_VERTEX_SHADER,vertex),fs=shader(GL_FRAGMENT_SHADER,fragment);
- v->program=glCreateProgram();glAttachShader(v->program,vs);glAttachShader(v->program,fs);glLinkProgram(v->program);
- glDeleteShader(vs);glDeleteShader(fs);GLint ok;glGetProgramiv(v->program,GL_LINK_STATUS,&ok);
- if (!ok) return FALSE;
+ const char *external="#version 330\n#extension GL_OES_EGL_image_external : require\nin vec2 uv;out vec4 color;uniform samplerExternalOES image;uniform vec4 rect;uniform bool flip;void main(){vec2 p=uv;if(flip)p.y=1-p.y;color=vec4(texture(image,rect.xy+p*rect.zw).rgb,1);}";
+ v->program=presentation_program(vertex,fragment);
+ if (!v->program) return FALSE;
+ if (epoxy_has_gl_extension("GL_OES_EGL_image_external")) v->external_program=presentation_program(vertex,external);
  glGenVertexArrays(1,&v->vao);glGenFramebuffers(1,&v->fbo);glGenTextures(1,&v->texture);glBindTexture(GL_TEXTURE_2D,v->texture);
  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
@@ -632,7 +675,7 @@ static void console_ids_ready(GObject *object,GAsyncResult *result,gpointer data
    * frames when its asynchronous sibling finishes discovery. */
   Viewer *d=g_new0(Viewer,1);
   d->parent=v;d->area=v->area;d->bus=v->bus;d->info=v->info;d->qemu_uid=v->qemu_uid;
-  d->program=v->program;d->vao=v->vao;d->fbo=v->fbo;
+  d->program=v->program;d->external_program=v->external_program;d->vao=v->vao;d->fbo=v->fbo;
   d->image=EGL_NO_IMAGE_KHR;d->display=EGL_NO_DISPLAY;d->cursor_visible=TRUE;
   d->console_path=g_strdup_printf(CONSOLE_PREFIX "%u",id);d->console_id=id;
   g_dbus_proxy_new(v->bus,G_DBUS_PROXY_FLAGS_DO_NOT_CONNECT_SIGNALS,NULL,"org.qemu",d->console_path,IFACE "Console",NULL,console_ready,d);
@@ -820,7 +863,7 @@ int main(int argc,char **argv) {
  const char *version_error=gtk_check_version(4,8,0);
  if (version_error) {g_printerr("GTK 4.8 or newer is required: %s\n",version_error);return 1;}
  desktop_gl();
- if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 5");return 0;}
+ if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 6");return 0;}
  if (argc==2 && !strcmp(argv[1],"--check-gl")) {
   if (!gtk_init_check()) {g_printerr("GTK cannot open the host X11/Wayland display.\n");return 1;}
   GtkWidget *window=gtk_window_new(),*area=display_area();

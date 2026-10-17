@@ -470,6 +470,21 @@ Ein GLX-Kontext kann OpenGL anzeigen, aber keine EGL-DMA-BUFs importieren. Die
 Vorprüfung kontrolliert deshalb zusätzlich den tatsächlichen EGL-Kontext.
 Manuelle `GDK_DEBUG`-Optionen sind dafür nicht nötig.
 
+Beim Import prüft der Viewer Texturaufbau und EGL-Bildbindung getrennt. Alte
+Fehler im gemeinsam genutzten GTK-GL-Kontext werden vor der Bindung ausgelesen,
+damit ein gültiges Bild nicht wegen eines fremden Fehlers verworfen wird.
+Unterstützt der Treiber externe EGL-Texturen, versucht der Viewer bei einer
+inkompatiblen 2D-Bindung zusätzlich `GL_TEXTURE_EXTERNAL_OES` mit dem passenden
+Sampler. Die anschließende GPU-Kopie und die Adapterpriorität bleiben gleich.
+Scheitern beide Wege, enthält die Meldung die tatsächlichen GL-Fehlercodes,
+Format, Modifier, Ebenenzahl und den GL-Renderer.
+
+Der Mesa/Xvfb-Test prüft eine echte EGLImage-Bindung, absichtlich hinterlassene
+GL-Fehler und die vier Bildecken nach der GPU-Kopie. Der externe Sampler wird
+nur getestet, wenn der GL-Kontext die Erweiterung anbietet; andernfalls meldet
+der Test diesen Teil ausdrücklich als übersprungen. Ein erfolgreicher
+Softwaretest belegt keinen Import eines DMA-BUFs von einer physischen GPU.
+
 Nach einem ungültigen Scanout/Update meldet sich nur die betroffene Konsole mit
 begrenzter Wiederholungsrate erneut bei QEMU an. QEMU liefert dadurch wieder
 einen vollständigen Scanout. Updates, die noch zur verworfenen Bildquelle

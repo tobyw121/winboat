@@ -71,6 +71,31 @@ int main(void) {
  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
  glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,4,4);
  draw(&v,v.texture,full,TRUE);expect_corners(fbo);
+ /* Real EGLImage binding, independently of DMA-BUF availability in Xvfb.
+  * A stale GL error must not make a valid imported image look unsupported. */
+ discard_source(&v);
+ GLuint original;glGenTextures(1,&original);glBindTexture(GL_TEXTURE_2D,original);
+ glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,2,2,0,GL_RGBA,GL_UNSIGNED_BYTE,software);
+ glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+ EGLDisplay display=eglGetCurrentDisplay();
+ EGLImageKHR image=eglCreateImageKHR(display,eglGetCurrentContext(),EGL_GL_TEXTURE_2D_KHR,(EGLClientBuffer)(uintptr_t)original,NULL);
+ g_assert_true(image!=EGL_NO_IMAGE_KHR);
+ glEnable(0xffffffffu); /* Deliberately leave GL_INVALID_ENUM in shared state. */
+ g_assert_true(bind_egl_source(&v,image,FALSE));
+ dma_geometry(&v,0,0,2,2,2,2,FALSE);g_assert_true(copy_dma(&v));
+ glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,4,4);
+ draw(&v,v.texture,full,v.flip);expect_corners(fbo);
+ if (epoxy_has_gl_extension("GL_OES_EGL_image_external")) {
+  g_assert_cmpuint(v.external_program,!=,0);
+  g_assert_true(bind_egl_source(&v,image,TRUE));
+  g_assert_true(copy_dma(&v));
+  glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,4,4);
+  draw(&v,v.texture,full,v.flip);expect_corners(fbo);
+  puts("External EGLImage sampler and presentation copy passed.");
+ } else puts("External EGLImage sampler unavailable in this GL context; external sampling test skipped.");
+ puts("Real EGLImage binding, stale GL error isolation and presentation corners passed.");
+ g_assert_true(eglDestroyImageKHR(display,image));glDeleteTextures(1,&original);
+ glDeleteProgram(v.external_program);
  glDeleteTextures(1,&v.source);glDeleteTextures(1,&v.texture);glDeleteTextures(1,&target);
  glDeleteFramebuffers(1,&fbo);glDeleteFramebuffers(1,&v.fbo);
  glDeleteVertexArrays(1,&v.vao);glDeleteProgram(v.program);
