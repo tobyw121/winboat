@@ -14,7 +14,7 @@ import { openLink } from '../utils/openLink';
 import { WinboatConfig } from "./config";
 import { QMPManager } from "./qmp";
 import { assert } from "@vueuse/core";
-import { setIntervalImmediately } from "../utils/interval";
+import { setIntervalImmediately, skipWhileRunning } from "../utils/interval";
 import { ComposePortEntry, PortManager } from "../utils/port";
 
 const nodeFetch: typeof import('node-fetch').default = require('node-fetch');
@@ -295,11 +295,12 @@ export class Winboat {
             this.#metricsInverval = null;
         }
 
-        this.#metricsInverval = setInterval(async () => {
+        this.#metricsInverval = setInterval(skipWhileRunning(async () => {
             // If the guest is offline or updating, don't bother checking metrics
             if (!this.isOnline.value || this.isUpdatingGuestServer.value) return;
-            this.metrics.value = await this.getMetrics();
-        }, METRICS_WAIT_MS);
+            try { this.metrics.value = await this.getMetrics(); }
+            catch { logger.warn('Guest metrics request failed; retrying on the next tick'); }
+        }), METRICS_WAIT_MS);
 
         // *** RDP Connection Status Interval ***
         // Make sure we don't have any existing intervals
@@ -308,7 +309,7 @@ export class Winboat {
             this.#rdpConnectionStatusInterval = null;
         }
 
-        this.#rdpConnectionStatusInterval = setInterval(async () => {
+        this.#rdpConnectionStatusInterval = setInterval(skipWhileRunning(async () => {
             // If the guest is offline or updating, don't bother checking RDP status
             if (!this.isOnline.value || this.isUpdatingGuestServer.value) return;
 
@@ -319,12 +320,14 @@ export class Winboat {
             }
 
             // Check RDP status
-            const _rdpConnected = await this.getRDPConnectedStatus();
+            let _rdpConnected: boolean;
+            try { _rdpConnected = await this.getRDPConnectedStatus(); }
+            catch { return; } // Preserve the last known state during a transient API failure.
             if (_rdpConnected !== this.rdpConnected.value) {
                 this.rdpConnected.value = _rdpConnected;
                 logger.info(`RDP connection status changed to ${_rdpConnected ? 'connected' : 'disconnected'}`);
             }
-        }, RDP_STATUS_WAIT_MS);
+        }), RDP_STATUS_WAIT_MS);
 
         // *** QMP Interval ***
         // Make sure we don't have any existing intervals
@@ -408,7 +411,8 @@ export class Winboat {
     async getMetrics() {
         const apiPort = this.getHostPort(GUEST_API_PORT);
         const apiUrl = `http://127.0.0.1:${apiPort}`;
-        const res = await nodeFetch(`${apiUrl}/metrics`);
+        const res = await nodeFetch(`${apiUrl}/metrics`, {timeout: 5000});
+        if (!res.ok) throw new Error('Guest metrics unavailable');
         const metrics = await res.json() as Metrics;
         return metrics;
     }
@@ -417,7 +421,8 @@ export class Winboat {
 
         const apiPort = this.getHostPort(GUEST_API_PORT);
         const apiUrl = `http://127.0.0.1:${apiPort}`;
-        const res = await nodeFetch(`${apiUrl}/rdp/status`);
+        const res = await nodeFetch(`${apiUrl}/rdp/status`, {timeout: 5000});
+        if (!res.ok) throw new Error('Guest RDP status unavailable');
         const status = await res.json() as { rdpConnected: boolean };
         return status.rdpConnected;
     }

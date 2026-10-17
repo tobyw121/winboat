@@ -222,3 +222,18 @@ ersetzt und können eine vorhandene X11-/Wayland-Sitzung übersehen. Die Korrekt
 benötigt einen neuen WinBoat-Anwendungsbuild; ein Gastdienst-Update allein ändert
 die Desktop-Erkennung nicht. Ein Produktionstest mit Vite prüft DISPLAY,
 WAYLAND_DISPLAY und XDG_RUNTIME_DIR ohne Zugriff auf die echte Benutzerumgebung.
+
+### High guest CPU usage and repeated PowerShell processes
+
+The guest `/rdp/status` endpoint uses the Windows Terminal Services API directly.
+It does not start PowerShell or parse localized `qwinsta` output. Metrics read the
+base CPU frequency once from the Windows registry. Renderer metrics and RDP polls
+skip ticks while a request is pending and time out after five seconds. Updating
+only the guest removes the RDP subprocess; rebuilding and opening the new AppImage
+also activates the renderer polling guard.
+
+If PowerShell still repeats after the guest update, identify the script names
+before stopping tasks. Atlas/Helios provisioning tasks may still be completing an
+installation or a required reboot. Do not terminate every PowerShell process or
+remove all startup tasks. The CPU reduction must be measured in the Windows VM;
+a successful cross-build does not establish its runtime CPU usage.

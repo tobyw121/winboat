@@ -13,7 +13,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"time"
+
+	"golang.org/x/sys/windows/registry"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
@@ -133,6 +136,9 @@ func getVersion(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+var cpuFrequencyOnce sync.Once
+var cpuFrequencyMHz uint64
+
 func getMetrics(w http.ResponseWriter, r *http.Request) {
 	// CPU stats
 	cpuPercent, err := cpu.Percent(time.Second/4, false)
@@ -140,11 +146,14 @@ func getMetrics(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to get CPU stats: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	cpuInfo, err := cpu.Info()
-	if err != nil || len(cpuInfo) == 0 {
-		http.Error(w, "Failed to get CPU info: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
+	// CPU model/frequency is static for this VM; avoid repeated WMI discovery.
+	cpuFrequencyOnce.Do(func() {
+		key, err := registry.OpenKey(registry.LOCAL_MACHINE, `HARDWARE\DESCRIPTION\System\CentralProcessor\0`, registry.QUERY_VALUE)
+		if err == nil {
+			defer key.Close()
+			cpuFrequencyMHz, _, _ = key.GetIntegerValue("~MHz")
+		}
+	})
 
 	// RAM stats
 	memInfo, err := mem.VirtualMemory()
@@ -162,9 +171,9 @@ func getMetrics(w http.ResponseWriter, r *http.Request) {
 
 	// Build metrics struct
 	metrics := Metrics{}
-	metrics.CPU.Usage = cpuPercent[0]              // Total CPU usage
-	metrics.CPU.Frequency = uint64(cpuInfo[0].Mhz) // First CPU's frequency
-	metrics.RAM.Used = memInfo.Used / 1024 / 1024  // Bytes to MB
+	metrics.CPU.Usage = cpuPercent[0]             // Total CPU usage
+	metrics.CPU.Frequency = cpuFrequencyMHz       // First CPU's frequency
+	metrics.RAM.Used = memInfo.Used / 1024 / 1024 // Bytes to MB
 	metrics.RAM.Total = memInfo.Total / 1024 / 1024
 	metrics.RAM.Percentage = float64(metrics.RAM.Used) / float64(metrics.RAM.Total) * 100
 	metrics.Disk.Used = diskInfo.Used / 1024 / 1024
@@ -178,17 +187,13 @@ func getMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func getRdpConnectedStatus(w http.ResponseWriter, r *http.Request) {
-	// Grep for any active RDP sessions via qwinsta
-	// Run the PowerShell script
-	cmd := exec.Command("powershell", "-ExecutionPolicy", "Bypass", "-File", "scripts\\rdp-status.ps1")
-	output, err := cmd.Output()
+	connected, err := activeRDPConnected()
 	if err != nil {
-		http.Error(w, "Failed to execute script: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Failed to query Windows sessions", http.StatusServiceUnavailable)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write(output)
+	json.NewEncoder(w).Encode(map[string]bool{"rdpConnected": connected})
 }
 
 func applyUpdate(w http.ResponseWriter, r *http.Request) {
