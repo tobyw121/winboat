@@ -50,7 +50,8 @@ struct Viewer {
  GDBusProxy *mouse;
  GDBusNodeInfo *info;
  GdkCursor *cursor;
- GLuint program, external_program, vao, texture, source, fbo;
+ GLuint program, external_program, vao, texture, source, fbo, source_renderbuffer, source_fbo;
+ guint source_x, source_y;
  gboolean source_external;
  GLenum image_error;
  EGLImageKHR image;
@@ -205,7 +206,10 @@ static gboolean scroll(GtkEventControllerScroll *controller, double dx, double d
 static GLuint shader(GLenum type,const char *text) {
  GLuint s=glCreateShader(type);glShaderSource(s,1,&text,NULL);glCompileShader(s);
  GLint ok;glGetShaderiv(s,GL_COMPILE_STATUS,&ok);
- if (!ok) {glDeleteShader(s);return 0;}return s;
+ if (!ok) {
+  char message[2048];glGetShaderInfoLog(s,sizeof(message),NULL,message);
+  g_printerr("GL shader compilation failed: %s\n",message);glDeleteShader(s);return 0;
+ }return s;
 }
 static GtkWidget *display_area(void) {
  GtkWidget *area=gtk_gl_area_new();
@@ -284,6 +288,8 @@ static gboolean render(GtkGLArea *area,GdkGLContext *context,Viewer *v) {
 static void discard_source(Viewer *v) {
  v->source_external=FALSE;
  if (v->source) {glDeleteTextures(1,&v->source);v->source=0;}
+ if (v->source_fbo) {glDeleteFramebuffers(1,&v->source_fbo);v->source_fbo=0;}
+ if (v->source_renderbuffer) {glDeleteRenderbuffers(1,&v->source_renderbuffer);v->source_renderbuffer=0;}
  if (v->image!=EGL_NO_IMAGE_KHR) {eglDestroyImageKHR(v->display,v->image);v->image=EGL_NO_IMAGE_KHR;}
 }
 static void texture_size(Viewer *v,guint w,guint h) {
@@ -292,6 +298,7 @@ static void texture_size(Viewer *v,guint w,guint h) {
 }
 static void dma_geometry(Viewer *v,guint x,guint y,guint w,guint h,guint bw,guint bh,gboolean top) {
  texture_size(v,w,h);
+ v->source_x=x;v->source_y=y;
  v->rect[0]=(float)x/bw;v->rect[1]=(float)y/bh;v->rect[2]=(float)w/bw;v->rect[3]=(float)h/bh;
  /* Match QEMU's egl_fb_blit(..., !y0_top): its display-origin flag is
   * opposite to the vertical flip needed by our bottom-up GL coordinates. */
@@ -317,6 +324,47 @@ static gboolean bind_egl_source(Viewer *v,EGLImageKHR image,gboolean external) {
  }
  if (v->image_error!=GL_NO_ERROR) {glDeleteTextures(1,&v->source);v->source=0;return FALSE;}
  v->source_external=external;return TRUE;
+}
+static gboolean bind_egl_renderbuffer(Viewer *v,EGLImageKHR image) {
+ GLint previous_buffer,previous_read;
+ glGetIntegerv(GL_RENDERBUFFER_BINDING,&previous_buffer);glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING,&previous_read);
+ glGenRenderbuffers(1,&v->source_renderbuffer);glBindRenderbuffer(GL_RENDERBUFFER,v->source_renderbuffer);
+ glEGLImageTargetRenderbufferStorageOES(GL_RENDERBUFFER,image);v->image_error=glGetError();
+ if (v->image_error==GL_NO_ERROR) {
+  glGenFramebuffers(1,&v->source_fbo);glBindFramebuffer(GL_READ_FRAMEBUFFER,v->source_fbo);
+  glFramebufferRenderbuffer(GL_READ_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_RENDERBUFFER,v->source_renderbuffer);
+  glReadBuffer(GL_COLOR_ATTACHMENT0);
+  GLenum status=glCheckFramebufferStatus(GL_READ_FRAMEBUFFER);v->image_error=glGetError();
+  if (status!=GL_FRAMEBUFFER_COMPLETE && v->image_error==GL_NO_ERROR) v->image_error=GL_INVALID_FRAMEBUFFER_OPERATION;
+ }
+ glBindRenderbuffer(GL_RENDERBUFFER,previous_buffer);glBindFramebuffer(GL_READ_FRAMEBUFFER,previous_read);
+ if (v->image_error!=GL_NO_ERROR) {
+  if(v->source_fbo)glDeleteFramebuffers(1,&v->source_fbo);
+  v->source_fbo=0;
+  glDeleteRenderbuffers(1,&v->source_renderbuffer);v->source_renderbuffer=0;return FALSE;
+ }
+ return TRUE;
+}
+static gboolean bind_egl_image(Viewer *v,EGLImageKHR image,guint fourcc,guint64 modifier,guint planes) {
+ if (bind_egl_source(v,image,FALSE)) return TRUE;
+ GLenum regular_error=v->image_error,external_error=GL_NO_ERROR;
+ /* Sampling and rendering are separate EGLImage capabilities. An imported
+  * RGB buffer rejected as a texture may still be a readable renderbuffer. */
+ if (regular_error!=GL_CONTEXT_LOST) {
+  if (v->external_program) {
+   if (bind_egl_source(v,image,TRUE)) {
+    g_printerr("Console %u: EGL image uses external texture sampling (2D GL=0x%04x).\n",v->console_id,regular_error);return TRUE;
+   }
+   external_error=v->image_error;
+  }
+  if (v->image_error!=GL_CONTEXT_LOST && bind_egl_renderbuffer(v,image)) {
+   g_printerr("Console %u: EGL image uses renderbuffer GPU blit (2D GL=0x%04x).\n",v->console_id,regular_error);return TRUE;
+  }
+ }
+ g_snprintf(v->frame_problem,sizeof(v->frame_problem),
+  "EGL image binding failed: 2D GL=0x%04x, external=%s GL=0x%04x, renderbuffer GL=0x%04x, fourcc=0x%08x, modifier=0x%016" G_GINT64_MODIFIER "x, planes=%u, renderer=%s",
+  regular_error,v->external_program?"available":"unavailable",external_error,v->image_error,fourcc,modifier,planes,(const char *)glGetString(GL_RENDERER));
+ return FALSE;
 }
 static gboolean import_dma(Viewer *v,GDBusMethodInvocation *inv,GVariant *handles,
  guint x,guint y,guint w,guint h,GVariant *offsets,GVariant *strides,guint planes,
@@ -356,31 +404,25 @@ static gboolean import_dma(Viewer *v,GDBusMethodInvocation *inv,GVariant *handle
  for (guint p=0;p<planes;p++) if (fds[p]>=0) close(fds[p]);
  if (image==EGL_NO_IMAGE_KHR) {g_snprintf(v->frame_problem,sizeof(v->frame_problem),"EGL DMA-BUF import failed: egl=0x%04x, fourcc=0x%08x, modifier=0x%016" G_GINT64_MODIFIER "x",eglGetError(),fourcc,modifier);return FALSE;}
  discard_source(v);v->image=image;
- if (!bind_egl_source(v,image,FALSE)) {
-  GLenum regular_error=v->image_error;
-  /* Some DMA-BUF layouts can only be sampled as external textures. A 2D
-   * sampler cannot consume those even though eglCreateImageKHR succeeds. */
-  gboolean compatible=regular_error==GL_INVALID_OPERATION || regular_error==GL_INVALID_ENUM;
-  if (!compatible || !v->external_program || !bind_egl_source(v,image,TRUE)) {
-   g_snprintf(v->frame_problem,sizeof(v->frame_problem),
-    "EGL image binding failed: 2D GL=0x%04x, last GL=0x%04x, external=%s, fourcc=0x%08x, modifier=0x%016" G_GINT64_MODIFIER "x, planes=%u, renderer=%s",
-    regular_error,v->image_error,v->external_program?"available":"unavailable",fourcc,modifier,planes,(const char *)glGetString(GL_RENDERER));
-   discard_source(v);return FALSE;
-  }
- }
+ if (!bind_egl_image(v,image,fourcc,modifier,planes)) {discard_source(v);return FALSE;}
  dma_geometry(v,x,y,w,h,bw,bh,top);v->frame_problem[0]=0;return TRUE;
 }
 static gboolean copy_dma(Viewer *v) {
- if (!v->source) return FALSE;
- GLint previous;glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING,&previous);
+ if (!v->source && !v->source_renderbuffer) return FALSE;
+ GLint previous,previous_read;glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING,&previous);glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING,&previous_read);
  glBindFramebuffer(GL_DRAW_FRAMEBUFFER,v->fbo);glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,v->texture,0);
  if (glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE) {glBindFramebuffer(GL_DRAW_FRAMEBUFFER,previous);return FALSE;}
- glViewport(0,0,v->width,v->height);glDisable(GL_BLEND);draw(v,v->source,v->rect,v->source_flip);
+ glViewport(0,0,v->width,v->height);glDisable(GL_BLEND);glDisable(GL_SCISSOR_TEST);
+ if (v->source_renderbuffer) {
+  GLint x=v->source_x,y=v->source_y,w=v->width,h=v->height;
+  glBindFramebuffer(GL_READ_FRAMEBUFFER,v->source_fbo);
+  glBlitFramebuffer(x,v->source_flip?y+h:y,x+w,v->source_flip?y:y+h,0,0,w,h,GL_COLOR_BUFFER_BIT,GL_NEAREST);
+ } else draw(v,v->source,v->rect,v->source_flip);
  /* QEMU blocks its GL console until UpdateDMABUF returns. Finish source reads
   * before ACK; redraws only sample our own texture, never a released scanout.
   * Producer completion still relies on the protocol/driver's implicit sync.
   */
- glFinish();glBindFramebuffer(GL_DRAW_FRAMEBUFFER,previous);v->flip=FALSE;
+ glFinish();glBindFramebuffer(GL_DRAW_FRAMEBUFFER,previous);glBindFramebuffer(GL_READ_FRAMEBUFFER,previous_read);v->flip=FALSE;
  v->cache_valid=glGetError()==GL_NO_ERROR;return v->cache_valid;
 }
 static void report_display_recovery(Viewer *v,const char *message) {
@@ -415,7 +457,7 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
   ok=dimensions(w,h) && stride%4==0 && (guint64)stride>=(guint64)w*4 && (guint64)stride*h<=len && len<=MAX_BYTES
      && (format==0x20020888 || format==0x20028888 || format==0x20030888 || format==0x20038888);
   if (ok && initial) {discard_source(v);texture_size(v,w,h);}
-  ok=ok && !v->source && region(v,x,y,w,h);
+  ok=ok && !v->source && !v->source_renderbuffer && region(v,x,y,w,h);
   if (!ok) g_printerr("%s: region=%d,%d %dx%d, stride=%u, pixman=0x%08x, bytes=%zu, scanout=%ux%u\n",
                      name,x,y,w,h,stride,format,(size_t)len,v->width,v->height);
   if (ok) {
@@ -440,7 +482,7 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
   g_variant_unref(handles);g_variant_unref(offsets);g_variant_unref(strides);
  } else if (!strcmp(name,"UpdateDMABUF")) {
   gint x,y,w,h;g_variant_get(params,"(iiii)",&x,&y,&w,&h);
-  g_snprintf(v->frame_problem,sizeof(v->frame_problem),"UpdateDMABUF region=%d,%d %dx%d, scanout=%ux%u, imported=%s",x,y,w,h,v->width,v->height,v->source?"yes":"no");
+  g_snprintf(v->frame_problem,sizeof(v->frame_problem),"UpdateDMABUF region=%d,%d %dx%d, scanout=%ux%u, imported=%s",x,y,w,h,v->width,v->height,(v->source || v->source_renderbuffer)?"yes":"no");
   ok=region(v,x,y,w,h) && copy_dma(v);
   if (ok) {v->dma_frames++;v->last_dma=TRUE;}
  } else if (!strcmp(name,"Disable")) {
@@ -598,12 +640,15 @@ static GLuint presentation_program(const char *vertex,const char *fragment) {
  if (!vs || !fs) {if(vs)glDeleteShader(vs);if(fs)glDeleteShader(fs);return 0;}
  GLuint program=glCreateProgram();glAttachShader(program,vs);glAttachShader(program,fs);glLinkProgram(program);
  glDeleteShader(vs);glDeleteShader(fs);GLint ok;glGetProgramiv(program,GL_LINK_STATUS,&ok);
- if (!ok) {glDeleteProgram(program);return 0;}return program;
+ if (!ok) {
+  char message[2048];glGetProgramInfoLog(program,sizeof(message),NULL,message);
+  g_printerr("GL shader linking failed: %s\n",message);glDeleteProgram(program);return 0;
+ }return program;
 }
 static gboolean initialize_gl(Viewer *v) {
  const char *vertex="#version 330\nout vec2 uv;void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);uv=p;gl_Position=vec4(p*2-1,0,1);}";
  const char *fragment="#version 330\nin vec2 uv;out vec4 color;uniform sampler2D image;uniform vec4 rect;uniform bool flip;void main(){vec2 p=uv;if(flip)p.y=1-p.y;color=vec4(texture(image,rect.xy+p*rect.zw).rgb,1);}";
- const char *external="#version 330\n#extension GL_OES_EGL_image_external : require\nin vec2 uv;out vec4 color;uniform samplerExternalOES image;uniform vec4 rect;uniform bool flip;void main(){vec2 p=uv;if(flip)p.y=1-p.y;color=vec4(texture(image,rect.xy+p*rect.zw).rgb,1);}";
+ const char *external="#version 330\n#extension GL_OES_EGL_image_external : require\nin vec2 uv;out vec4 color;uniform samplerExternalOES image;uniform vec4 rect;uniform bool flip;void main(){vec2 p=uv;if(flip)p.y=1-p.y;color=vec4(texture2D(image,rect.xy+p*rect.zw).rgb,1);}";
  v->program=presentation_program(vertex,fragment);
  if (!v->program) return FALSE;
  if (epoxy_has_gl_extension("GL_OES_EGL_image_external")) v->external_program=presentation_program(vertex,external);
@@ -863,7 +908,7 @@ int main(int argc,char **argv) {
  const char *version_error=gtk_check_version(4,8,0);
  if (version_error) {g_printerr("GTK 4.8 or newer is required: %s\n",version_error);return 1;}
  desktop_gl();
- if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 6");return 0;}
+ if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 7");return 0;}
  if (argc==2 && !strcmp(argv[1],"--check-gl")) {
   if (!gtk_init_check()) {g_printerr("GTK cannot open the host X11/Wayland display.\n");return 1;}
   GtkWidget *window=gtk_window_new(),*area=display_area();
@@ -874,7 +919,13 @@ int main(int argc,char **argv) {
   if (error) g_printerr("Host GTK OpenGL: %s\n",error->message);
   else if (eglGetCurrentDisplay()==EGL_NO_DISPLAY) {g_printerr("Host GTK OpenGL has no EGL context; DMA-BUF import is unavailable.\n");result=1;}
   else if (!glGetString(GL_VERSION) || !glGetString(GL_RENDERER)) {g_printerr("Host GTK OpenGL returned no version/renderer.\n");result=1;}
-  else g_print("Host GTK OpenGL: %s; renderer: %s; backend: %s\n",glGetString(GL_VERSION),glGetString(GL_RENDERER),G_OBJECT_TYPE_NAME(gdk_display_get_default()));
+  else {
+   g_print("Host GTK OpenGL: %s; renderer: %s; backend: %s\n",glGetString(GL_VERSION),glGetString(GL_RENDERER),G_OBJECT_TYPE_NAME(gdk_display_get_default()));
+   g_print("EGL image capabilities: image=%s; external=%s; dma-buf=%s; modifiers=%s\n",
+    epoxy_has_gl_extension("GL_OES_EGL_image")?"yes":"no",epoxy_has_gl_extension("GL_OES_EGL_image_external")?"yes":"no",
+    epoxy_has_egl_extension(eglGetCurrentDisplay(),"EGL_EXT_image_dma_buf_import")?"yes":"no",
+    epoxy_has_egl_extension(eglGetCurrentDisplay(),"EGL_EXT_image_dma_buf_import_modifiers")?"yes":"no");
+  }
   gtk_window_destroy(GTK_WINDOW(window));return result;
  }
  if (argc==2 && !strcmp(argv[1],"--self-test")) {

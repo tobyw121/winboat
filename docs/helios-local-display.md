@@ -485,6 +485,23 @@ nur getestet, wenn der GL-Kontext die Erweiterung anbietet; andernfalls meldet
 der Test diesen Teil ausdrücklich als übersprungen. Ein erfolgreicher
 Softwaretest belegt keinen Import eines DMA-BUFs von einer physischen GPU.
 
+Viewer 7 versucht nach abgelehnten Texturbindungen außerdem
+`glEGLImageTargetRenderbufferStorageOES`. Ist das Bild als Renderbuffer nutzbar
+und sein Lese-Framebuffer vollständig, kopiert `glBlitFramebuffer` den Ausschnitt
+mit der passenden Bildausrichtung in den vorhandenen Präsentationspuffer. Die
+Kopie bleibt auf der GPU; auch hier wird QEMU erst nach Abschluss der Lesezugriffe
+bestätigt. Der implizite Modifier `DRM_FORMAT_MOD_INVALID` wird dabei weiterhin
+unverändert behandelt und niemals als lineares Layout ausgelegt.
+
+Der Grafiktest erzwingt den gemeldeten 2D-Bindefehler `GL_INVALID_OPERATION`,
+übernimmt anschließend ein echtes EGLImage als Renderbuffer und prüft beide
+Ausrichtungen, Ausschnitte, wiederholte Updates, Framebuffer-Wiederherstellung
+und Freigabe der Quellobjekte. Das validiert den Ausweichpfad mit Mesa, ersetzt
+aber keinen Test mit dem NVIDIA-DMA-BUF des betroffenen Rechners. Scheitert auch
+der Renderbuffer-Import, enthält die Meldung dessen eigenen Fehlercode.
+Shader-Fehler werden im Terminal ausgegeben; `--check-gl` zeigt zusätzlich die
+vorhandenen EGL-/GL-Importerweiterungen an.
+
 Nach einem ungültigen Scanout/Update meldet sich nur die betroffene Konsole mit
 begrenzter Wiederholungsrate erneut bei QEMU an. QEMU liefert dadurch wieder
 einen vollständigen Scanout. Updates, die noch zur verworfenen Bildquelle

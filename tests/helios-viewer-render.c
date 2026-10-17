@@ -1,8 +1,23 @@
 /* Exercise the real viewer shaders and DMA presentation copy with Mesa/Xvfb.
  * Synthetic textures avoid requiring a physical GPU or a Windows guest. */
+#include <epoxy/gl.h>
+static int reject_texture_binding;
+static void texture_image(GLenum target,GLeglImageOES image);
+#undef glEGLImageTargetTexture2DOES
+#define glEGLImageTargetTexture2DOES texture_image
 #define main viewer_main
 #include "../native/helios-viewer/viewer.c"
 #undef main
+#undef glEGLImageTargetTexture2DOES
+static void texture_image(GLenum target,GLeglImageOES image) {
+ if (reject_texture_binding) {
+  /* Reproduce the NVIDIA GL_INVALID_OPERATION without replacing EGLImage
+   * creation or the renderbuffer import/blit that must actually succeed. */
+  GLint texture;glGetIntegerv(GL_TEXTURE_BINDING_2D,&texture);
+  glBindTexture(GL_TEXTURE_CUBE_MAP,texture);return;
+ }
+ epoxy_glEGLImageTargetTexture2DOES(target,image);
+}
 
 static void expect_corners(GLuint fbo) {
  /* GL readback order: bottom-left, bottom-right, top-left, top-right. */
@@ -95,6 +110,35 @@ int main(void) {
  } else puts("External EGLImage sampler unavailable in this GL context; external sampling test skipped.");
  puts("Real EGLImage binding, stale GL error isolation and presentation corners passed.");
  g_assert_true(eglDestroyImageKHR(display,image));glDeleteTextures(1,&original);
+ discard_source(&v);
+ /* Force the reported 2D error, then require a real renderbuffer import and
+  * blit to recover both cropped orientations, including repeated updates. */
+ GLuint external=v.external_program;v.external_program=0;reject_texture_binding=1;
+ for (int top=0;top<=1;top++) {
+  guint8 pixels[8][6][4]={0};
+  for (int y=0;y<4;y++) for (int x=0;x<4;x++) {
+   int row=top?1-y/2:y/2;memcpy(pixels[y+2][x+1],software[row*2+x/2],4);
+  }
+  glGenTextures(1,&original);glBindTexture(GL_TEXTURE_2D,original);
+  glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,6,8,0,GL_RGBA,GL_UNSIGNED_BYTE,pixels);
+  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+  image=eglCreateImageKHR(display,eglGetCurrentContext(),EGL_GL_TEXTURE_2D_KHR,(EGLClientBuffer)(uintptr_t)original,NULL);
+  g_assert_true(image!=EGL_NO_IMAGE_KHR);
+  g_assert_true(bind_egl_image(&v,image,0x34325241,MOD_INVALID,1));
+  g_assert_cmpuint(v.source,==,0);g_assert_cmpuint(v.source_renderbuffer,!=,0);
+  dma_geometry(&v,1,2,4,4,6,8,top);
+  for (int update=0;update<2;update++) {
+   glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,4,4);
+   g_assert_true(copy_dma(&v));
+   GLint read,write;glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING,&read);glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING,&write);
+   g_assert_cmpuint(read,==,fbo);g_assert_cmpuint(write,==,fbo);
+   draw(&v,v.texture,full,v.flip);expect_corners(fbo);
+  }
+  discard_source(&v);g_assert_cmpuint(v.source_fbo,==,0);g_assert_cmpuint(v.source_renderbuffer,==,0);
+  g_assert_true(eglDestroyImageKHR(display,image));glDeleteTextures(1,&original);
+ }
+ reject_texture_binding=0;v.external_program=external;
+ puts("Rejected 2D image binding recovered through real EGL renderbuffer GPU blits: both orientations/crops, repeated updates, framebuffer restoration and source cleanup passed.");
  glDeleteProgram(v.external_program);
  glDeleteTextures(1,&v.source);glDeleteTextures(1,&v.texture);glDeleteTextures(1,&target);
  glDeleteFramebuffers(1,&fbo);glDeleteFramebuffers(1,&v.fbo);
