@@ -50,6 +50,12 @@ die Electron-Anwendung und leert das Verzeichnis `build/`.
    und zurück. Für Browser Display Local desktop ausschalten und speichern;
    dabei wird der Container mit derselben Windows-Festplatte neu gestartet.
 
+Bei einer neuen Installation mit **Prefer Local Desktop** öffnet WinBoat den
+nativen Viewer bereits bei **Installing Windows**. **Open Local Desktop** bleibt
+im Installationsbildschirm verfügbar, auch wenn Windows-OOBE oder AME noch auf
+Eingaben wartet. Der Windows-Gastdienst muss dafür noch nicht erreichbar sein.
+Vor dem Start der Windows-Konsole bleibt die Schaltfläche deaktiviert.
+
 **Open Local Desktop** steht auch direkt in Einstellungen und Einrichtung zur
 Verfügung. Der Verbindungsstatus zeigt Start, Verbindung und Fehler an; bei
 Viewer-Fehlern zeigt WinBoat den Fehler und den Weg zum Browser-Modus an. Mehrfaches Öffnen während des
@@ -193,6 +199,10 @@ Der Recorder wurde mit einem echten QEMU/TCG-Container und kontrolliertem
 ### Fenstergröße und Bildpfad
 
 Der Viewer fordert Desktop-OpenGL 3.3 ausdrücklich an, auch auf GTK 4.12+.
+Die Auswahl gilt vor der GTK-Initialisierung auch für den gemeinsamen
+Display-Kontext: GTK 4.14 verwendet intern `gl-disable-gles`, GTK 4.16+
+`GDK_DISABLE=gles-api`. Vorhandene Diagnoseoptionen bleiben erhalten; diese
+Einstellungen gelten nur im Viewer-Prozess und seiner GL-Vorabprüfung.
 Die AppImage lässt sich direkt mit `./dist/winboat-0.8.7-x86_64.AppImage`
 starten; `GDK_DEBUG=gl-disable-gles` ist dafür nicht erforderlich.
 DMA-BUF-Bilder übernehmen QEMUs Bildausrichtung, ohne zusätzliche Drehung

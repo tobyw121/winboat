@@ -47,3 +47,60 @@ test('Local Desktop preference is persisted and reloaded independently of the ac
         assert.equal(reload().config.localDisplayPreferred,false);
     } finally {await fs.rm(root,{recursive:true,force:true});}
 });
+
+test('Windows installation opens its native console before the guest health API is ready', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'winboat-install-console-'));
+    try {
+        const source = path.resolve('src/renderer/lib/install.ts').replaceAll('\\', '/');
+        await fs.writeFile(path.join(root, 'entry.ts'), `
+            import {InstallManager} from ${JSON.stringify(source)};
+            window.manager = new InstallManager({});
+            window.manager.localDisplayConfigured = window.native;
+            window.manager.checkContainer = async () => {};
+            window.manager.portMgr.value = {getHostPort: () => 7148};
+            window.run = () => window.manager.monitorAPIHealth();
+        `);
+        const result = await build({configFile:false, root, logLevel:'silent', plugins:[{
+            name:'installation-console-fixture',
+            enforce:'pre',
+            resolveId(id, importer) {
+                if (id === './helios-display' && importer?.endsWith('/lib/install.ts')) return '\0display-fixture';
+                if (id === '../utils/port' && importer?.endsWith('/lib/install.ts')) return '\0ports-fixture';
+            },
+            load(id) {
+                if (id === '\0ports-fixture') return 'export class PortManager {}';
+                if (id === '\0display-fixture') return `
+                    export async function openLocalDesktop() {
+                        window.opens++;
+                        if (window.viewerFails) throw new Error('Viewer unavailable');
+                    }
+                    export async function prepareLocalDisplay() {}
+                    export function localDisplayDirectory() {return '/tmp/display-fixture';}
+                `;
+            },
+        }], build:{write:false, modulePreload:{polyfill:false}, rollupOptions:{input:path.join(root,'entry.ts')}}});
+        assert(!Array.isArray(result) && 'output' in result);
+        const output = result.output.find(item => item.type === 'chunk'); assert(output && 'code' in output);
+        const nativeRequire = createRequire(import.meta.url);
+        for (const [native, viewerFails] of [[true,false], [true,true], [false,false]]) {
+            const window = {native, viewerFails, opens:0} as {
+                native:boolean; viewerFails:boolean; opens:number;
+                manager:{state:string}; run:()=>Promise<void>; health?:(response:{status:number})=>void;
+            };
+            vm.runInNewContext(output.code, {window, process, setTimeout, clearTimeout,
+                console:{log(){},info(){},warn(){},error(){}}, require:(name:string) => {
+                    if (name === 'os') return {...os,homedir:()=>root};
+                    if (name === '@electron/remote') return {app:{isPackaged:false}};
+                    if (name === 'node-fetch') return () => new Promise(resolve => {window.health=resolve;});
+                    return nativeRequire(name);
+                }});
+            const installing = window.run();
+            await new Promise(resolve => setImmediate(resolve));
+            assert.equal(window.manager.state,'Installing Windows');
+            assert.equal(window.opens,native?1:0);
+            assert.ok(window.health,'installation is still waiting for Windows, with the console already opened');
+            window.health({status:200});
+            await installing; // A viewer failure must not abort Windows installation.
+        }
+    } finally {await fs.rm(root,{recursive:true,force:true});}
+});

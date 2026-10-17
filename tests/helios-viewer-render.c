@@ -17,7 +17,16 @@ static void expect_corners(GLuint fbo) {
 }
 
 int main(void) {
+ desktop_gl();
  g_assert_true(gtk_init_check());
+ /* Exercise GTK's default/shared API as well as the explicit GtkGLArea API.
+  * On newer GTK, constraining only the area can leave a GLES display context. */
+ GError *error=NULL;
+ GdkGLContext *shared=gdk_display_create_gl_context(gdk_display_get_default(),&error);
+ g_assert_no_error(error);g_assert_nonnull(shared);
+ g_assert_true(gdk_gl_context_realize(shared,&error));g_assert_no_error(error);
+ g_assert_cmpint(gdk_gl_context_get_api(shared),==,GDK_GL_API_GL);
+ g_object_unref(shared);
  GtkWidget *window=gtk_window_new(),*area=display_area();
  if (g_object_class_find_property(G_OBJECT_GET_CLASS(area),"allowed-apis")) {
   GdkGLAPI allowed;g_object_get(area,"allowed-apis",&allowed,NULL);

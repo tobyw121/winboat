@@ -187,6 +187,24 @@ static GtkWidget *display_area(void) {
  gtk_gl_area_set_required_version(GTK_GL_AREA(area),3,3);
  return area;
 }
+static void desktop_gl(void) {
+ /* GtkGLArea's API selection does not constrain GTK's shared display context.
+  * Select desktop GL before GTK creates that context, including during the
+  * installation preflight. These settings are private to this helper process. */
+ const char *name=NULL,*flag=NULL;
+ if (!gtk_check_version(4,16,0)) {name="GDK_DISABLE";flag="gles-api";}
+ else if (!gtk_check_version(4,14,0)) {name="GDK_DEBUG";flag="gl-disable-gles";}
+ if (!name) return; /* Older GTK defaults to desktop GL. */
+ const char *previous=g_getenv(name);
+ char **flags=g_strsplit_set(previous?previous:"",",:; \t",-1);
+ gboolean present=FALSE;
+ for (guint i=0;flags[i];i++) present|=!strcmp(flags[i],flag);
+ g_strfreev(flags);
+ if (!present) {
+  char *value=previous && *previous?g_strconcat(previous,",",flag,NULL):g_strdup(flag);
+  g_setenv(name,value,TRUE);g_free(value);
+ }
+}
 static void draw(Viewer *v, GLuint texture, const float *rect, gboolean flip) {
  glUseProgram(v->program);glBindVertexArray(v->vao);glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,texture);
  glUniform1i(glGetUniformLocation(v->program,"image"),0);
@@ -542,6 +560,7 @@ static gboolean smoke_done(Viewer *v) {
 int main(int argc,char **argv) {
  const char *version_error=gtk_check_version(4,8,0);
  if (version_error) {g_printerr("GTK 4.8 or newer is required: %s\n",version_error);return 1;}
+ desktop_gl();
  if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 3");return 0;}
  if (argc==2 && !strcmp(argv[1],"--check-gl")) {
   if (!gtk_init_check()) {g_printerr("GTK cannot open the host X11/Wayland display.\n");return 1;}

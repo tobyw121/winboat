@@ -628,8 +628,8 @@
                             <span v-else>Check the installation status <a :href="novncURL" @click="openAnchorLink">in your browser</a>.</span>
                         </p>
                         <div v-if="localDisplayConfigured" class="mb-4">
-                            <x-button @click="openLocalDesktop()" :disabled="localDisplayState === 'opening'">Open Local Desktop</x-button>
-                            <p class="text-sm text-gray-400">{{ localDisplayMessage || 'Native console available; Ctrl+Alt+Enter toggles fullscreen.' }}</p>
+                            <x-button @click="openLocalDesktop()" :disabled="!installationConsoleReady || localDisplayState === 'opening'">Open Local Desktop</x-button>
+                            <p class="text-sm text-gray-400">{{ localDisplayMessage || (installationConsoleReady ? 'Follow Windows installation in Local Desktop; Ctrl+Alt+Enter toggles fullscreen.' : 'Local Desktop will open when Windows installation starts.') }}</p>
                         </div>
                         <p v-else-if="localDisplayUnavailableReason" class="text-sm text-gray-400">Local Desktop unavailable: {{ localDisplayUnavailableReason }} Browser Display remains available.</p>
     
@@ -801,6 +801,8 @@ const heliosEnabled = ref(true);
 const localDisplayEnabled = ref(true);
 const localDisplayConfigured = ref(false);
 const localDisplayUnavailableReason = ref('');
+const installationConsoleReady = computed(() =>
+    ([InstallStates.INSTALLING_WINDOWS, InstallStates.INSTALLING_HELIOS, InstallStates.INSTALLING_ATLAS, InstallStates.COMPLETED] as InstallState[]).includes(installState.value));
 const hardwareIdentityEnabled = ref(true);
 const reduceCpuMarkers = ref(true);
 const atlasEnabled = ref(false);

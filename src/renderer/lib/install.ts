@@ -1,6 +1,6 @@
 import { configureHelios, validateHeliosProgress, HELIOS_REVISION } from '../../shared/helios';
 import { requireHelios, heliosBundlePath } from './helios';
-import { prepareLocalDisplay, localDisplayDirectory } from './helios-display';
+import { prepareLocalDisplay, localDisplayDirectory, openLocalDesktop } from './helios-display';
 import { resolveHeliosDisplay } from '../../shared/helios-display';
 import { WinboatConfig } from './config';
 import { configureVmIdentity } from '../../shared/vm-identity';
@@ -421,6 +421,11 @@ export class InstallManager {
 
     async monitorAPIHealth() {
         this.changeState(InstallStates.INSTALLING_WINDOWS);
+        // QEMU is ready after preinstallation; Windows' guest service is not.
+        // Open the console now so OOBE/installation can be followed locally.
+        if (this.localDisplayConfigured) {
+            void openLocalDesktop().catch(error => logger.warn(`Could not open the installation console: ${error}`));
+        }
         logger.info("Waiting for WinBoat Guest Server to wrap up installation...");
 
         let attempts = 0;
