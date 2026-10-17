@@ -425,7 +425,15 @@ static void maybe_ready(Viewer *v) {
 static void closed(GDBusConnection *conn,gboolean vanished,GError *err,Viewer *v) {
  (void)conn;(void)vanished;(void)err;
  if (v->parent) {
-  v->cache_valid=FALSE;v->registered=FALSE;select_console(v->parent);return;
+  Viewer *root=v->parent;
+  v->cache_valid=FALSE;v->registered=FALSE;select_console(root);
+  gboolean disconnected=TRUE;
+  for (guint i=0;i<root->consoles->len;i++) {
+   Viewer *d=g_ptr_array_index(root->consoles,i);
+   if (!d->peer || !g_dbus_connection_is_closed(d->peer)) disconnected=FALSE;
+  }
+  if (disconnected) fatal(root,"All QEMU display consoles disconnected.");
+  return;
  }
  fatal(v,"The QEMU display disconnected. Browser Display remains available.");
 }

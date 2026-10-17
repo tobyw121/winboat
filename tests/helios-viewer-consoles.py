@@ -192,6 +192,38 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
             offset = (y * width + x) * 3
             assert tuple(pixels[offset:offset + 3]) == color, (index, pixels[offset:offset + 3])
         print('Actual viewer: VGA -> Helios, stale VGA isolation, disable/re-enable handoff, console-1 resize, visible X11 frame and four readback corners passed.')
+        # Losing one adapter is recoverable; losing the VM must report failure
+        # instead of leaving a permanently blank window marked as connected.
+        peers.clear()
+        viewer = subprocess.Popen([sys.argv[1], '--address', address], env=environment,
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        disconnect_stage = 0
+        disconnect_started = time.monotonic()
+
+        def disconnect_tick():
+            global disconnect_stage
+            if viewer.poll() is not None:
+                loop.quit()
+                return False
+            if time.monotonic() - disconnect_started > 12:
+                failures.append('Viewer did not terminate after VM disconnection')
+                loop.quit()
+                return False
+            if len(peers) != 2:
+                return True
+            if disconnect_stage == 0:
+                peers[0].close_sync(None)
+            elif disconnect_stage == 1:
+                peers[1].close_sync(None)
+            disconnect_stage += 1
+            return True
+
+        GLib.timeout_add(400, disconnect_tick)
+        loop.run()
+        assert not failures, failures
+        output, errors = viewer.communicate(timeout=3)
+        assert viewer.returncode != 0 and 'All QEMU display consoles disconnected.' in errors, errors
+        print('Actual viewer reports complete VM disconnection while tolerating one disconnected adapter.')
     finally:
         if viewer is not None and viewer.poll() is None:
             viewer.terminate()
