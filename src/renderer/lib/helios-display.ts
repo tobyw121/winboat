@@ -2,6 +2,7 @@ import { GUEST_API_PORT } from './constants';
 import { skipWhileRunning } from '../utils/interval';
 import { hostEnvironment } from './host-environment';
 import { nativeDesktopEnvironment } from '../../shared/native-desktop-environment';
+import { selectHeliosGLAPI, type HeliosGLAPI } from '../../shared/helios-gl';
 import { HELIOS_IMAGE } from '../../shared/helios';
 import { HELIOS_DISPLAY_CAPABILITY, HELIOS_DISPLAY_VERSION, HELIOS_DISPLAY_MOUNT,
     heliosDisplayAddress, heliosDisplayBusConfig, heliosDisplayDirectory } from '../../shared/helios-display';
@@ -24,6 +25,7 @@ let adapterGeneration=0;
 let adapterAPIPort:number|undefined;
 let lastFallback=-Infinity;
 let viewerUnavailable=false;
+let graphicsAPI: HeliosGLAPI = 'gl';
 const viewer = new HeliosViewer(() => child.spawn(binary(), ['--address', heliosDisplayAddress(localDisplayDirectory()), '--control-stdin'],
     { env: desktopEnvironment(), stdio: ['pipe', 'pipe', 'pipe'] }), (state, message) => {
     localDisplayState.value = state; localDisplayMessage.value = message;
@@ -42,8 +44,9 @@ function reportViewerAvailability(unavailable:boolean):void {
     }).then(response=>{if(!response.ok) console.warn(`Display recovery hint rejected: ${response.status}`);})
       .catch(()=>{}); // Guest API can be offline during installation/reboot.
 }
-function desktopEnvironment(): NodeJS.ProcessEnv {
-    return nativeDesktopEnvironment(hostEnvironment(), remote.app.isPackaged ? path.dirname(process.resourcesPath) : undefined);
+function desktopEnvironment(api: HeliosGLAPI = graphicsAPI): NodeJS.ProcessEnv {
+    return {...nativeDesktopEnvironment(hostEnvironment(), remote.app.isPackaged ? path.dirname(process.resourcesPath) : undefined),
+        WINBOAT_HELIOS_GL_API: api};
 }
 
 function binary(): string {
@@ -57,13 +60,18 @@ export async function requireLocalDisplay(): Promise<void> {
     if (!hostEnvironment().DISPLAY && !hostEnvironment().WAYLAND_DISPLAY) throw new Error('Local Desktop needs a running X11 or Wayland desktop session.');
     try {
         const { stdout } = await execFile(binary(), ['--version'], { timeout: 3000, env: desktopEnvironment() });
-        if (stdout.trim() !== 'winboat-helios-viewer 7') throw new Error('Viewer protocol mismatch.');
+        if (stdout.trim() !== 'winboat-helios-viewer 8') throw new Error('Viewer protocol mismatch.');
     }
     catch { throw new Error('The local Helios viewer needs its bundled executable, GTK 4.8+, libepoxy and a desktop session. Install the GTK4 runtime or use Browser Display.'); }
-    try { await execFile(binary(), ['--check-gl'], {timeout: 8000, env: desktopEnvironment()}); }
+    try {
+        graphicsAPI = await selectHeliosGLAPI(async api => {
+            const {stdout} = await execFile(binary(), ['--check-gl'], {timeout: 8000, env: desktopEnvironment(api)});
+            console.info(`Local Desktop ${api} probe: ${stdout.trim()}`);return stdout;
+        });
+    }
     catch (error) {
         const detail = (error as Error & {stderr?: string}).stderr?.trim() || (error as Error).message;
-        throw new Error(`Local Desktop cannot create a host OpenGL 3.3 context: ${detail.slice(-1500)}`);
+        throw new Error(`Local Desktop cannot initialize host OpenGL 3.3 or OpenGL ES 3.0: ${detail.slice(-1500)}`);
     }
     const { stdout } = await execFile('docker', ['image', 'inspect', '--format', `{{ index .Config.Labels "${HELIOS_DISPLAY_CAPABILITY}" }}`, HELIOS_IMAGE], { timeout: 5000 });
     if (stdout.trim() !== HELIOS_DISPLAY_VERSION) throw new Error('Rebuild the Helios host image to enable local display support.');

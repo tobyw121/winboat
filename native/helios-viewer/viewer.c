@@ -211,15 +211,14 @@ static GLuint shader(GLenum type,const char *text) {
   g_printerr("GL shader compilation failed: %s\n",message);glDeleteShader(s);return 0;
  }return s;
 }
+static gboolean use_gles(void) {return !g_strcmp0(g_getenv("WINBOAT_HELIOS_GL_API"),"gles");}
 static GtkWidget *display_area(void) {
  GtkWidget *area=gtk_gl_area_new();
- /* GTK 4.12+ allows GLES by default, but our shaders and BGRA uploads use
-  * desktop OpenGL. Select it explicitly, also when built against GTK 4.8.
-  * set_use_es(FALSE) alone is a no-op with the newer mixed-API default. */
+ /* Constrain both the area and GTK's shared context to the selected API. */
  if (g_object_class_find_property(G_OBJECT_GET_CLASS(area),"allowed-apis"))
-  g_object_set(area,"allowed-apis",GDK_GL_API_GL,NULL);
- else g_object_set(area,"use-es",FALSE,NULL);
- gtk_gl_area_set_required_version(GTK_GL_AREA(area),3,3);
+  g_object_set(area,"allowed-apis",use_gles()?GDK_GL_API_GLES:GDK_GL_API_GL,NULL);
+ else g_object_set(area,"use-es",use_gles(),NULL);
+ gtk_gl_area_set_required_version(GTK_GL_AREA(area),3,use_gles()?0:3);
  return area;
 }
 static void add_gtk_flag(const char *name,const char *flag) {
@@ -233,14 +232,27 @@ static void add_gtk_flag(const char *name,const char *flag) {
   g_setenv(name,value,TRUE);g_free(value);
  }
 }
-static void desktop_gl(void) {
+static void remove_gtk_flag(const char *name,const char *flag) {
+ const char *previous=g_getenv(name);if (!previous) return;
+ char **flags=g_strsplit_set(previous,",:; \t",-1);GString *kept=g_string_new(NULL);
+ for (guint i=0;flags[i];i++) if (*flags[i] && strcmp(flags[i],flag)) {
+  if (kept->len) g_string_append_c(kept,',');
+  g_string_append(kept,flags[i]);
+ }
+ g_setenv(name,kept->str,TRUE);g_string_free(kept,TRUE);g_strfreev(flags);
+}
+static void configure_gl(void) {
  /* DMA-BUF import requires an EGL context. A valid GLX desktop GL context
   * passed our old preflight but can never satisfy eglGetCurrentDisplay(). */
  if (!gtk_check_version(4,16,0)) {
-  add_gtk_flag("GDK_DISABLE","gles-api");add_gtk_flag("GDK_DISABLE","glx");
+  remove_gtk_flag("GDK_DISABLE",use_gles()?"gles-api":"gl-api");
+  add_gtk_flag("GDK_DISABLE",use_gles()?"gl-api":"gles-api");add_gtk_flag("GDK_DISABLE","glx");
  } else {
   add_gtk_flag("GDK_DEBUG","gl-egl");
-  if (!gtk_check_version(4,14,0)) add_gtk_flag("GDK_DEBUG","gl-disable-gles");
+  remove_gtk_flag("GDK_DEBUG","gl-gles");
+  remove_gtk_flag("GDK_DEBUG","gl-disable-gl");remove_gtk_flag("GDK_DEBUG","gl-disable-gles");
+  if (!gtk_check_version(4,14,0)) add_gtk_flag("GDK_DEBUG",use_gles()?"gl-disable-gl":"gl-disable-gles");
+  else if (use_gles()) add_gtk_flag("GDK_DEBUG","gl-gles");
  }
 }
 static void draw(Viewer *v, GLuint texture, const float *rect, gboolean flip) {
@@ -256,10 +268,10 @@ static gboolean save_screenshot(Viewer *v,const char *path) {
  int scale=gtk_widget_get_scale_factor(v->area),w=gtk_widget_get_width(v->area)*scale,h=gtk_widget_get_height(v->area)*scale;
  if (!displayed(v)->cache_valid || !dimensions(w,h)) return FALSE;
  /* Explicit screenshots alone read back pixels; normal DMA-BUF rendering does not. */
- GdkPixbuf *pixels=gdk_pixbuf_new(GDK_COLORSPACE_RGB,FALSE,8,w,h);
+ GdkPixbuf *pixels=gdk_pixbuf_new(GDK_COLORSPACE_RGB,TRUE,8,w,h);
  if (!pixels) return FALSE;
  glPixelStorei(GL_PACK_ALIGNMENT,4);
- glReadPixels(0,0,w,h,GL_RGB,GL_UNSIGNED_BYTE,gdk_pixbuf_get_pixels(pixels));
+ glReadPixels(0,0,w,h,GL_RGBA,GL_UNSIGNED_BYTE,gdk_pixbuf_get_pixels(pixels));
  if (glGetError()!=GL_NO_ERROR) {g_object_unref(pixels);return FALSE;}
  GdkPixbuf *flipped=gdk_pixbuf_flip(pixels,FALSE);g_object_unref(pixels);
  if (!flipped) return FALSE;
@@ -430,6 +442,21 @@ static void report_display_recovery(Viewer *v,const char *message) {
  g_print("{\"event\":\"display-recovery\",\"console\":%u,\"accelerated\":%s,\"reason\":\"%s\"}\n",v->console_id,v->accelerated?"true":"false",reason);
  fflush(stdout);g_free(reason);
 }
+static void upload_software(Viewer *v,gint x,gint y,gint w,gint h,guint stride,gboolean bgra,const void *bytes) {
+ guint8 *converted=NULL;
+ /* BGRA subimage uploads into RGBA8 storage are not portable across GLES.
+  * Convert only software frames; DMA-BUFs remain on the GPU. */
+ if (bgra && !epoxy_is_desktop_gl()) {
+  converted=g_memdup2(bytes,(gsize)stride*h);
+  for (gint row=0;row<h;row++) for (gint col=0;col<w;col++) {
+   guint8 *pixel=converted+(gsize)row*stride+col*4;guint8 blue=pixel[0];pixel[0]=pixel[2];pixel[2]=blue;
+  }
+  bytes=converted;bgra=FALSE;
+ }
+ glBindTexture(GL_TEXTURE_2D,v->texture);glPixelStorei(GL_UNPACK_ROW_LENGTH,stride/4);
+ glTexSubImage2D(GL_TEXTURE_2D,0,x,y,w,h,bgra?GL_BGRA:GL_RGBA,GL_UNSIGNED_BYTE,bytes);
+ glPixelStorei(GL_UNPACK_ROW_LENGTH,0);g_free(converted);
+}
 static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,const gchar *iface,
  const gchar *name,GVariant *params,GDBusMethodInvocation *inv,gpointer data) {
  (void)conn;(void)sender;(void)path;(void)iface;
@@ -461,9 +488,8 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
   if (!ok) g_printerr("%s: region=%d,%d %dx%d, stride=%u, pixman=0x%08x, bytes=%zu, scanout=%ux%u\n",
                      name,x,y,w,h,stride,format,(size_t)len,v->width,v->height);
   if (ok) {
-   glBindTexture(GL_TEXTURE_2D,v->texture);glPixelStorei(GL_UNPACK_ROW_LENGTH,stride/4);
-   glTexSubImage2D(GL_TEXTURE_2D,0,x,y,w,h,(format&0x000f0000)==0x00020000?GL_BGRA:GL_RGBA,GL_UNSIGNED_BYTE,bytes);
-   glPixelStorei(GL_UNPACK_ROW_LENGTH,0);v->flip=TRUE;v->cache_valid=TRUE;v->software_frames++;v->last_dma=FALSE;
+   upload_software(v,x,y,w,h,stride,(format&0x000f0000)==0x00020000,bytes);
+   v->flip=TRUE;v->cache_valid=TRUE;v->software_frames++;v->last_dma=FALSE;
   }
   g_variant_unref(pixels);
  } else if (!strcmp(name,"ScanoutDMABUF")) {
@@ -646,12 +672,17 @@ static GLuint presentation_program(const char *vertex,const char *fragment) {
  }return program;
 }
 static gboolean initialize_gl(Viewer *v) {
- const char *vertex="#version 330\nout vec2 uv;void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);uv=p;gl_Position=vec4(p*2-1,0,1);}";
- const char *fragment="#version 330\nin vec2 uv;out vec4 color;uniform sampler2D image;uniform vec4 rect;uniform bool flip;void main(){vec2 p=uv;if(flip)p.y=1-p.y;color=vec4(texture(image,rect.xy+p*rect.zw).rgb,1);}";
- const char *external="#version 330\n#extension GL_OES_EGL_image_external : require\nin vec2 uv;out vec4 color;uniform samplerExternalOES image;uniform vec4 rect;uniform bool flip;void main(){vec2 p=uv;if(flip)p.y=1-p.y;color=vec4(texture2D(image,rect.xy+p*rect.zw).rgb,1);}";
- v->program=presentation_program(vertex,fragment);
- if (!v->program) return FALSE;
- if (epoxy_has_gl_extension("GL_OES_EGL_image_external")) v->external_program=presentation_program(vertex,external);
+ gboolean desktop=epoxy_is_desktop_gl();
+ const char *header=desktop?"#version 330\n":"#version 300 es\nprecision highp float;\n";
+ char *vertex=g_strconcat(header,"out vec2 uv;void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);uv=p;gl_Position=vec4(p*2.0-1.0,0.0,1.0);}",NULL);
+ char *fragment=g_strconcat(header,"in vec2 uv;out vec4 color;uniform sampler2D image;uniform vec4 rect;uniform bool flip;void main(){vec2 p=uv;if(flip)p.y=1.0-p.y;color=vec4(texture(image,rect.xy+p*rect.zw).rgb,1.0);}",NULL);
+ v->program=presentation_program(vertex,fragment);g_free(fragment);
+ if (v->program && epoxy_has_gl_extension(desktop?"GL_OES_EGL_image_external":"GL_OES_EGL_image_external_essl3")) {
+  const char *external_header=desktop?"#version 330\n#extension GL_OES_EGL_image_external : require\n":"#version 300 es\n#extension GL_OES_EGL_image_external_essl3 : require\nprecision highp float;\n";
+  char *external=g_strdup_printf("%sin vec2 uv;out vec4 color;uniform %ssamplerExternalOES image;uniform vec4 rect;uniform bool flip;void main(){vec2 p=uv;if(flip)p.y=1.0-p.y;color=vec4(%s(image,rect.xy+p*rect.zw).rgb,1.0);}",external_header,desktop?"":"highp ",desktop?"texture2D":"texture");
+  v->external_program=presentation_program(vertex,external);g_free(external);
+ }
+ g_free(vertex);if (!v->program) return FALSE;
  glGenVertexArrays(1,&v->vao);glGenFramebuffers(1,&v->fbo);glGenTextures(1,&v->texture);glBindTexture(GL_TEXTURE_2D,v->texture);
  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
@@ -758,7 +789,15 @@ static void select_console(Viewer *v) {
 static void adapter_health(Viewer *v,gint helios,gint basic) {
  for (guint i=0;i<v->consoles->len;i++) {
   Viewer *d=g_ptr_array_index(v->consoles,i);
-  if ((d->accelerated?helios:basic)==2) {d->cache_valid=FALSE;d->seen_update=FALSE;}
+  gint next=d->accelerated?helios:basic,previous=d->accelerated?v->helios_health:v->basic_health;
+  if (next==2) {d->cache_valid=FALSE;d->seen_update=FALSE;d->awaiting_scanout=TRUE;}
+  else if (previous==2 && !d->cache_valid) {
+   /* Re-enabling a driver need not generate another Scanout. Re-register only
+    * this listener to obtain a fresh baseline; queued partial updates belong
+    * to the old generation. Do not delay recovery behind an old backoff. */
+   if (d->reconnect_timer) {g_source_remove(d->reconnect_timer);d->reconnect_timer=0;}
+   d->recovery_attempt=0;refresh_scanout(d);
+  }
  }
  v->helios_health=helios;v->basic_health=basic;v->health_at=g_get_monotonic_time();
  select_console(v);
@@ -882,8 +921,8 @@ static gboolean smoke_done(Viewer *v) {
   render(GTK_GL_AREA(v->area),gtk_gl_area_get_context(GTK_GL_AREA(v->area)),v);
   int scale=gtk_widget_get_scale_factor(v->area), w=gtk_widget_get_width(v->area)*scale, h=gtk_widget_get_height(v->area)*scale;
   if (!dimensions(w,h)) {fatal(v,"Invalid smoke-test screenshot size.");return G_SOURCE_REMOVE;}
-  guint8 *pixels=g_malloc((gsize)w*h*3);glPixelStorei(GL_PACK_ALIGNMENT,1);
-  glReadPixels(0,0,w,h,GL_RGB,GL_UNSIGNED_BYTE,pixels);glFinish();
+  guint8 *pixels=g_malloc((gsize)w*h*4);glPixelStorei(GL_PACK_ALIGNMENT,1);
+  glReadPixels(0,0,w,h,GL_RGBA,GL_UNSIGNED_BYTE,pixels);glFinish();
   char *png=g_build_filename(g_get_tmp_dir(),"helios-viewer-smoke.png",NULL);
   if (!save_screenshot(v,png)) {g_free(png);g_free(pixels);fatal(v,"PNG screenshot test failed.");return G_SOURCE_REMOVE;}
   GdkPixbuf *check=gdk_pixbuf_new_from_file(png,NULL);g_free(png);
@@ -896,7 +935,7 @@ static gboolean smoke_done(Viewer *v) {
   if (!output) fatal(v,"Could not capture the software display test.");
   else {
    fprintf(output,"P6\n%d %d\n255\n",w,h);
-   for (int row=h-1;row>=0;row--) fwrite(pixels+(gsize)row*w*3,1,w*3,output);
+   for (int row=h-1;row>=0;row--) for (int col=0;col<w;col++) fwrite(pixels+((gsize)row*w+col)*4,1,3,output);
    if (fclose(output)) fatal(v,"Could not save the software display test.");
    else g_main_loop_quit(v->loop);
   }
@@ -907,8 +946,8 @@ static gboolean smoke_done(Viewer *v) {
 int main(int argc,char **argv) {
  const char *version_error=gtk_check_version(4,8,0);
  if (version_error) {g_printerr("GTK 4.8 or newer is required: %s\n",version_error);return 1;}
- desktop_gl();
- if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 7");return 0;}
+ configure_gl();
+ if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 8");return 0;}
  if (argc==2 && !strcmp(argv[1],"--check-gl")) {
   if (!gtk_init_check()) {g_printerr("GTK cannot open the host X11/Wayland display.\n");return 1;}
   GtkWidget *window=gtk_window_new(),*area=display_area();
@@ -920,11 +959,16 @@ int main(int argc,char **argv) {
   else if (eglGetCurrentDisplay()==EGL_NO_DISPLAY) {g_printerr("Host GTK OpenGL has no EGL context; DMA-BUF import is unavailable.\n");result=1;}
   else if (!glGetString(GL_VERSION) || !glGetString(GL_RENDERER)) {g_printerr("Host GTK OpenGL returned no version/renderer.\n");result=1;}
   else {
+   Viewer check={0};
+   if (!initialize_gl(&check)) {g_printerr("Host GL shader initialization failed.\n");result=1;}
    g_print("Host GTK OpenGL: %s; renderer: %s; backend: %s\n",glGetString(GL_VERSION),glGetString(GL_RENDERER),G_OBJECT_TYPE_NAME(gdk_display_get_default()));
+   g_print("Presentation API: %s; external-sampler=%s\n",epoxy_is_desktop_gl()?"gl":"gles",check.external_program?"yes":"no");
    g_print("EGL image capabilities: image=%s; external=%s; dma-buf=%s; modifiers=%s\n",
     epoxy_has_gl_extension("GL_OES_EGL_image")?"yes":"no",epoxy_has_gl_extension("GL_OES_EGL_image_external")?"yes":"no",
     epoxy_has_egl_extension(eglGetCurrentDisplay(),"EGL_EXT_image_dma_buf_import")?"yes":"no",
     epoxy_has_egl_extension(eglGetCurrentDisplay(),"EGL_EXT_image_dma_buf_import_modifiers")?"yes":"no");
+   glDeleteProgram(check.program);glDeleteProgram(check.external_program);
+   glDeleteTextures(1,&check.texture);glDeleteFramebuffers(1,&check.fbo);glDeleteVertexArrays(1,&check.vao);
   }
   gtk_window_destroy(GTK_WINDOW(window));return result;
  }

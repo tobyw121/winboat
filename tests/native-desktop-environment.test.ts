@@ -1,6 +1,42 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {nativeDesktopEnvironment} from '../src/shared/native-desktop-environment';
+import {selectHeliosGLAPI, type HeliosGLAPI} from '../src/shared/helios-gl';
+
+const glProbe = (gpu:string,api:HeliosGLAPI,external:boolean) => `Host GTK OpenGL: test; renderer: ${gpu}; backend: GdkX11Display\nPresentation API: ${api}; external-sampler=${external?'yes':'no'}\n`;
+
+test('NVIDIA uses the same-GPU GLES external sampler when desktop GL lacks it', async () => {
+    const calls:HeliosGLAPI[]=[];
+    assert.equal(await selectHeliosGLAPI(async api => {
+        calls.push(api);return glProbe('NVIDIA GeForce RTX 2070/PCIe/SSE2',api,api==='gles');
+    }),'gles');
+    assert.deepEqual(calls,['gl','gles']);
+});
+
+test('AMD and NVIDIA with desktop external sampling keep desktop GL without another probe', async () => {
+    for (const [gpu,external] of [['AMD Radeon',false],['NVIDIA RTX',true]] as const) {
+        const calls:HeliosGLAPI[]=[];
+        assert.equal(await selectHeliosGLAPI(async api => {calls.push(api);return glProbe(gpu,api,external); }),'gl');
+        assert.deepEqual(calls,['gl']);
+    }
+});
+
+test('optional GLES failure, missing sampler or another GPU preserves usable desktop GL', async () => {
+    for (const embedded of [null,glProbe('NVIDIA RTX','gles',false),glProbe('llvmpipe','gles',true)]) {
+        assert.equal(await selectHeliosGLAPI(async api => {
+            if(api==='gl') return glProbe('NVIDIA RTX',api,false);
+            if(embedded===null) throw new Error('GLES unavailable');return embedded;
+        }),'gl');
+    }
+});
+
+test('GLES can recover failed desktop GL and both failures preserve the original diagnosis', async () => {
+    const failure=new Error('desktop GL unavailable');
+    assert.equal(await selectHeliosGLAPI(async api => {
+        if(api==='gl') throw failure;return glProbe('NVIDIA RTX',api,true);
+    }),'gles');
+    await assert.rejects(selectHeliosGLAPI(async () => {throw failure;}),error=>error===failure);
+});
 
 test('GTK child discards AppImage libraries while keeping host NVIDIA and desktop configuration', () => {
     const source = {

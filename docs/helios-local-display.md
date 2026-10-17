@@ -29,7 +29,7 @@ Gastdienst und ersetzt keine laufende WinBoat-Anwendung.
 
 Der Docker-Build baut den Viewer mit und nimmt ihn unter `resources/native/`
 in die Linux-Anwendung auf. Für die Ausführung benötigt der Host GTK **4.8+**,
-libepoxy, OpenGL 3.3 und `dbus-daemon`. Unter Debian/Ubuntu:
+libepoxy, OpenGL 3.3 oder OpenGL ES 3.0 und `dbus-daemon`. Unter Debian/Ubuntu:
 
 ```bash
 sudo apt install libgtk-4-1 libepoxy0 dbus-daemon
@@ -227,11 +227,14 @@ Der Recorder wurde mit einem echten QEMU/TCG-Container und kontrolliertem
 
 ### Fenstergröße und Bildpfad
 
-Der Viewer fordert Desktop-OpenGL 3.3 ausdrücklich an, auch auf GTK 4.12+.
+WinBoat prüft zunächst Desktop-OpenGL 3.3. Meldet der NVIDIA-Kontext keinen
+externen EGL-Bildsampler, prüft es zusätzlich OpenGL ES 3.0. GLES wird gewählt,
+wenn sein externer Shader kompiliert und derselbe GL-Renderer gemeldet wird;
+ein Wechsel auf einen anderen Renderer wie llvmpipe wird dabei abgelehnt.
+Scheitert Desktop-GL vollständig, kann ein erfolgreicher GLES-Test es ersetzen.
 Die Auswahl gilt vor der GTK-Initialisierung auch für den gemeinsamen
-Display-Kontext: GTK 4.14 verwendet intern `gl-disable-gles`, GTK 4.16+
-`GDK_DISABLE=gles-api`. Vorhandene Diagnoseoptionen bleiben erhalten; diese
-Einstellungen gelten nur im Viewer-Prozess und seiner GL-Vorabprüfung.
+Display-Kontext. Die nötigen GTK-Schalter setzt nur der Viewer-Prozess;
+unabhängige Diagnoseoptionen bleiben erhalten.
 Die AppImage lässt sich direkt mit `./dist/winboat-0.8.7-x86_64.AppImage`
 starten; `GDK_DEBUG=gl-disable-gles` ist dafür nicht erforderlich.
 DMA-BUF-Bilder übernehmen QEMUs Bildausrichtung, ohne zusätzliche Drehung
@@ -465,7 +468,7 @@ GPU-Hänger, bei dem Windows den Treiber weiterhin als fehlerfrei meldet.
 
 ### Bildfehler beim Wechsel des Adapters
 
-Der Viewer verwendet ausdrücklich Desktop-OpenGL über **EGL**, auch unter X11.
+Der Viewer verwendet die vorab geprüfte GL-/GLES-API über **EGL**, auch unter X11.
 Ein GLX-Kontext kann OpenGL anzeigen, aber keine EGL-DMA-BUFs importieren. Die
 Vorprüfung kontrolliert deshalb zusätzlich den tatsächlichen EGL-Kontext.
 Manuelle `GDK_DEBUG`-Optionen sind dafür nicht nötig.
@@ -501,6 +504,25 @@ aber keinen Test mit dem NVIDIA-DMA-BUF des betroffenen Rechners. Scheitert auch
 der Renderbuffer-Import, enthält die Meldung dessen eigenen Fehlercode.
 Shader-Fehler werden im Terminal ausgegeben; `--check-gl` zeigt zusätzlich die
 vorhandenen EGL-/GL-Importerweiterungen an.
+
+Viewer 8 bietet eigene GLSL-ES-3.00-Shader mit
+`GL_OES_EGL_image_external_essl3` und `samplerExternalOES`. Die GLES-Auswahl
+erfolgt in WinBoat automatisch anhand der Vorabprüfung. Ein manueller
+Diagnoseaufruf ist mit `WINBOAT_HELIOS_GL_API=gles winboat-helios-viewer --check-gl`
+möglich. Software-Bilder des Basic Display Adapters werden ebenfalls unter
+GLES unterstützt, einschließlich BGRA-Farbkanälen, Zeilenpadding und Screenshots.
+Die Tests führen die tatsächlichen Shader, EGLImage-Bindungen, GPU-Kopien und
+Adapterwechsel sowohl mit Desktop-GL als auch GLES aus. Ein simulierter
+`GL_INVALID_OPERATION` bei der 2D-Bindung muss unter GLES über den echten
+externen EGL-Sampler ein korrektes Bild liefern.
+
+Meldet die Guest API einen zuvor deaktivierten/fehlgeschlagenen Adapter wieder
+als verfügbar, fordert der Viewer für ihn einen vollständigen neuen Scanout
+an, sofern noch kein gültiger neuer Puffer vorliegt. Der alte Backoff wird dabei
+zurückgesetzt. Partielle Updates einer verworfenen Quelle bleiben gesperrt;
+ein frischer Helios-Puffer erhält wieder Vorrang vor Basic. Derselbe Mechanismus
+gilt für die Wiederherstellung des Basic-Adapters. Fenster und anderer Listener
+bleiben bestehen.
 
 Nach einem ungültigen Scanout/Update meldet sich nur die betroffene Konsole mit
 begrenzter Wiederholungsrate erneut bei QEMU an. QEMU liefert dadurch wieder

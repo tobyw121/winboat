@@ -10,6 +10,7 @@ on:
       - 'tests/helios-qemu-dbus.*'
       - 'native/helios-viewer/**'
       - 'src/shared/helios-viewer.ts'
+      - 'src/shared/helios-gl.ts'
       - 'src/shared/guest-protocol.ts'
       - 'src/shared/helios-display.ts'
       - 'src/renderer/lib/helios-display.ts'
@@ -21,6 +22,7 @@ on:
       - 'src/renderer/lib/install.ts'
       - 'tests/helios-viewer*'
       - 'tests/host-environment.test.ts'
+      - 'tests/native-desktop-environment.test.ts'
       - 'tests/specs.test.ts'
   pull_request:
     paths:
@@ -29,6 +31,7 @@ on:
       - 'tests/helios-qemu-dbus.*'
       - 'native/helios-viewer/**'
       - 'src/shared/helios-viewer.ts'
+      - 'src/shared/helios-gl.ts'
       - 'src/shared/guest-protocol.ts'
       - 'src/shared/helios-display.ts'
       - 'src/renderer/lib/helios-display.ts'
@@ -40,6 +43,7 @@ on:
       - 'src/renderer/lib/install.ts'
       - 'tests/helios-viewer*'
       - 'tests/host-environment.test.ts'
+      - 'tests/native-desktop-environment.test.ts'
       - 'tests/specs.test.ts'
 permissions:
   contents: read

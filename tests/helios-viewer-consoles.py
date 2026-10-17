@@ -246,7 +246,7 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
         assert selections == [0, 1, 0, 1, 0, 1, 0, 1, 0, 1], (selections, errors)
         assert 1 in resizes, 'Guest resize did not follow the selected Helios console'
         assert visible, 'The actual displayed frame was not checked'
-        magic, dimensions, maximum, pixels = (root / 'helios-viewer-smoke.ppm').read_bytes().split(b'\n', 3)
+        magic, dimensions, maximum, screen_pixels = (root / 'helios-viewer-smoke.ppm').read_bytes().split(b'\n', 3)
         width, height = map(int, dimensions.split())
         assert magic == b'P6' and maximum == b'255'
         scale = min(width / 32, height / 24)
@@ -254,8 +254,85 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
             x = int(width / 2 + (-8 if index % 2 == 0 else 8) * scale)
             y = int(height / 2 + (-6 if index < 2 else 6) * scale)
             offset = (y * width + x) * 3
-            assert tuple(pixels[offset:offset + 3]) == color, (index, pixels[offset:offset + 3])
+            assert tuple(screen_pixels[offset:offset + 3]) == color, (index, screen_pixels[offset:offset + 3])
         print('Actual viewer: serialized QEMU listener authentication, VGA -> Helios, invalid Helios frame fallback, lost-adapter reconnect, stale VGA isolation, disable/re-enable handoff, console-1 resize, guest-reported silent failure/VGA recovery, static Helios scanout preference, visible X11 frame and four readback corners passed.')
+        # A re-enabled driver may be silent until QEMU replays its baseline.
+        # Reconnects below must be initiated by the viewer, never by this test.
+        peers.clear()
+        viewer = subprocess.Popen([sys.argv[1], '--address', address, '--control-stdin'], env=environment,
+                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        recovery_stage = 0
+        recovery_started = time.monotonic()
+        old_helios = old_basic = None
+        wanted_health = (0, 0)
+        health_sent = 0
+
+        def health(helios, basic):
+            global wanted_health, health_sent
+            wanted_health = (helios, basic);health_sent = time.monotonic()
+            viewer.stdin.write(f'adapters {helios} {basic}\n');viewer.stdin.flush()
+
+        def recovery_tick():
+            global recovery_stage, old_helios, old_basic
+            try:
+                assert viewer.poll() is None, 'Viewer exited during driver recovery'
+                assert time.monotonic() - recovery_started < 25, f'No fresh scanout requested after driver recovery (stage {recovery_stage})'
+                if time.monotonic() - health_sent >= 2: health(*wanted_health)
+                if len(peers) != 2:
+                    return True
+                if recovery_stage == 0:
+                    call(0, 'Scanout', '(uuuuay)', (32, 24, 128, 0x20020888, red))
+                    call(1, 'Scanout', '(uuuuay)', (32, 24, 128, 0x20020888, pixels))
+                    call(1, 'Update', '(iiiiuuay)', (0, 0, 32, 24, 128, 0x20020888, pixels))
+                    health(1, 1)
+                elif recovery_stage == 1:
+                    old_helios = peers[1];health(2, 1)
+                elif recovery_stage == 2:
+                    health(1, 1)
+                elif recovery_stage == 3:
+                    if peers[1] is old_helios or peers[1].is_closed(): return True
+                    call(1, 'Scanout', '(uuuuay)', (32, 24, 128, 0x20020888, pixels))
+                elif recovery_stage == 4:
+                    old_basic = peers[0];health(1, 2)
+                elif recovery_stage == 5:
+                    old_helios = peers[1];health(2, 2)
+                elif recovery_stage == 6:
+                    health(2, 1)
+                elif recovery_stage == 7:
+                    if peers[0] is old_basic or peers[0].is_closed(): return True
+                    call(0, 'Scanout', '(uuuuay)', (32, 24, 128, 0x20020888, red))
+                elif recovery_stage == 8:
+                    health(1, 1)
+                elif recovery_stage == 9:
+                    if peers[1] is old_helios or peers[1].is_closed(): return True
+                    call(1, 'Scanout', '(uuuuay)', (32, 24, 128, 0x20020888, pixels))
+                elif recovery_stage == 10:
+                    old_basic = peers[0]
+                    try:
+                        call(0, 'Update', '(iiiiuuay)', (8192, 0, 32, 24, 128, 0x20020888, red))
+                    except GLib.Error as error:
+                        assert 'DisplayError' in str(error), error
+                    else:
+                        raise AssertionError('Invalid Basic frame was accepted')
+                elif recovery_stage == 11:
+                    if peers[0] is old_basic or peers[0].is_closed(): return True
+                    call(0, 'Scanout', '(uuuuay)', (32, 24, 128, 0x20020888, red))
+                elif recovery_stage == 12:
+                    visible_frame();viewer.terminate();loop.quit();return False
+                recovery_stage += 1
+                return True
+            except Exception as error:
+                failures.append(str(error));loop.quit();return False
+
+        GLib.timeout_add(400, recovery_tick)
+        loop.run()
+        if failures: viewer.terminate()
+        output, errors = viewer.communicate(timeout=3)
+        assert not failures, (failures, errors)
+        assert viewer.returncode == 0 and recovery_stage == 12, errors
+        selections = [json.loads(line)['id'] for line in errors.splitlines() if line.startswith('{"event":"console"')]
+        assert selections == [0, 1, 0, 1, 0, 1], (selections, errors)
+        print('Both adapters recover from silent disable/re-enable through viewer-requested fresh baselines; corrupt Basic frames cannot replace healthy Helios; one viewer process/window stays alive.')
         # Losing one adapter is recoverable; losing the VM must report failure
         # instead of leaving a permanently blank window marked as connected.
         peers.clear()

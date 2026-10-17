@@ -10,7 +10,7 @@ static void texture_image(GLenum target,GLeglImageOES image);
 #undef main
 #undef glEGLImageTargetTexture2DOES
 static void texture_image(GLenum target,GLeglImageOES image) {
- if (reject_texture_binding) {
+ if (reject_texture_binding==1 || (reject_texture_binding==2 && target==GL_TEXTURE_2D)) {
   /* Reproduce the NVIDIA GL_INVALID_OPERATION without replacing EGLImage
    * creation or the renderbuffer import/blit that must actually succeed. */
   GLint texture;glGetIntegerv(GL_TEXTURE_BINDING_2D,&texture);
@@ -32,7 +32,7 @@ static void expect_corners(GLuint fbo) {
 }
 
 int main(void) {
- desktop_gl();
+ configure_gl();
  g_assert_true(gtk_init_check());
  /* Exercise GTK's default/shared API as well as the explicit GtkGLArea API.
   * On newer GTK, constraining only the area can leave a GLES display context. */
@@ -40,18 +40,19 @@ int main(void) {
  GdkGLContext *shared=gdk_display_create_gl_context(gdk_display_get_default(),&error);
  g_assert_no_error(error);g_assert_nonnull(shared);
  g_assert_true(gdk_gl_context_realize(shared,&error));g_assert_no_error(error);
- g_assert_cmpint(gdk_gl_context_get_api(shared),==,GDK_GL_API_GL);
+ GdkGLAPI expected_api=use_gles()?GDK_GL_API_GLES:GDK_GL_API_GL;
+ g_assert_cmpint(gdk_gl_context_get_api(shared),==,expected_api);
  g_object_unref(shared);
  GtkWidget *window=gtk_window_new(),*area=display_area();
  if (g_object_class_find_property(G_OBJECT_GET_CLASS(area),"allowed-apis")) {
   GdkGLAPI allowed;g_object_get(area,"allowed-apis",&allowed,NULL);
-  g_assert_cmpint(allowed,==,GDK_GL_API_GL);
+  g_assert_cmpint(allowed,==,expected_api);
  }
  gtk_window_set_child(GTK_WINDOW(window),area);
  gtk_widget_realize(window);gtk_widget_realize(area);
  gtk_gl_area_make_current(GTK_GL_AREA(area));
  g_assert_null(gtk_gl_area_get_error(GTK_GL_AREA(area)));
- g_assert_cmpint(gdk_gl_context_get_api(gtk_gl_area_get_context(GTK_GL_AREA(area))),==,GDK_GL_API_GL);
+ g_assert_cmpint(gdk_gl_context_get_api(gtk_gl_area_get_context(GTK_GL_AREA(area))),==,expected_api);
  g_assert_true(eglGetCurrentDisplay()!=EGL_NO_DISPLAY);
  Viewer v={0};g_assert_true(initialize_gl(&v));
  GLuint target,fbo;glGenTextures(1,&target);glBindTexture(GL_TEXTURE_2D,target);
@@ -86,6 +87,14 @@ int main(void) {
  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
  glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,4,4);
  draw(&v,v.texture,full,TRUE);expect_corners(fbo);
+ /* Use the real software upload with BGRA pixels and row padding. */
+ guint8 padded[24]={0};
+ for (int row=0;row<2;row++) for(int col=0;col<2;col++) {
+  const guint8 *color=software[row*2+col];guint8 *pixel=padded+row*12+col*4;
+  pixel[0]=color[2];pixel[1]=color[1];pixel[2]=color[0];pixel[3]=color[3];
+ }
+ upload_software(&v,0,0,2,2,12,TRUE,padded);
+ draw(&v,v.texture,full,TRUE);expect_corners(fbo);
  /* Real EGLImage binding, independently of DMA-BUF availability in Xvfb.
   * A stale GL error must not make a valid imported image look unsupported. */
  discard_source(&v);
@@ -100,9 +109,11 @@ int main(void) {
  dma_geometry(&v,0,0,2,2,2,2,FALSE);g_assert_true(copy_dma(&v));
  glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,4,4);
  draw(&v,v.texture,full,v.flip);expect_corners(fbo);
- if (epoxy_has_gl_extension("GL_OES_EGL_image_external")) {
+ if (epoxy_has_gl_extension(epoxy_is_desktop_gl()?"GL_OES_EGL_image_external":"GL_OES_EGL_image_external_essl3")) {
   g_assert_cmpuint(v.external_program,!=,0);
-  g_assert_true(bind_egl_source(&v,image,TRUE));
+  reject_texture_binding=2;
+  g_assert_true(bind_egl_image(&v,image,0x34325241,MOD_INVALID,1));
+  reject_texture_binding=0;g_assert_true(v.source_external);
   g_assert_true(copy_dma(&v));
   glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,4,4);
   draw(&v,v.texture,full,v.flip);expect_corners(fbo);
@@ -144,6 +155,6 @@ int main(void) {
  glDeleteFramebuffers(1,&fbo);glDeleteFramebuffers(1,&v.fbo);
  glDeleteVertexArrays(1,&v.vao);glDeleteProgram(v.program);
  gtk_window_destroy(GTK_WINDOW(window));
- puts("Desktop OpenGL, both DMA orientations/crops and software frame corners passed without GDK_DEBUG.");
+ puts("Selected GL API, both DMA orientations/crops and software frame corners passed without manual GDK_DEBUG.");
  return 0;
 }
