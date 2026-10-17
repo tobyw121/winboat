@@ -293,11 +293,16 @@ func getIcon(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--display-session-probe" {
+		runDisplaySessionProbe()
+		return
+	}
 	r := mux.NewRouter()
 	graphics := newGraphicsMonitor()
 	go graphics.run(context.Background(), collectDisplayAdapters)
 	go ensureSelectedHelios()
 	r.HandleFunc("/graphics/adapters", graphics.status).Methods("GET")
+	r.HandleFunc("/graphics/diagnostics", graphics.diagnostics(collectHeliosDiagnostics)).Methods("GET")
 	r.HandleFunc("/graphics/adapters/recovery", graphics.viewerRecovery).Methods("POST")
 	r.HandleFunc("/apps", getApps).Methods("GET")
 	r.HandleFunc("/health", getHealth).Methods("GET")

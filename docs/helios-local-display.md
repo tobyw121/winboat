@@ -579,6 +579,40 @@ ein bereits gültiges Helios-Bild anzeigen; `Auto` schützt die Installation
 weiterhin vor unbestätigten Helios-Platzhaltern. Die Auswahl gilt bis zum
 Schließen des Local-Desktop-Fensters.
 
+Viewer 12 und Guest-Protokoll `helios-watchdog-v3` unterscheiden den geladenen
+PnP-Treiber von einer aktiven Windows-Ausgabe. `/graphics/adapters` enthält pro
+Adapter zusätzlich `desktopState` (`active`, `inactive`, `unknown`) sowie die
+GDI-Anzeigenamen und die primäre Anzeige unter `desktop`. Der Dienst startet
+dazu einen ausschließlich lesenden Probeprozess als Benutzer der aktiven
+Konsolensitzung; eine Abfrage aus Session 0 oder einer fremden RDP-Sitzung wäre
+kein gültiger Desktop-Nachweis. Ohne angemeldete Konsolensitzung oder bei einem
+Abfragefehler bleibt der Zustand unbekannt.
+
+Ein ausdrücklich inaktiver Helios-Ausgang darf VGA auch bei laufendem
+PnP-Treiber nicht verdrängen. Bei manueller Helios-Auswahl wird der fehlende
+Windows-Desktop erklärt. Wird der Ausgang aktiv, fordert der Viewer einen
+frischen Scanout an. Ist VGA deaktiviert und Helios nachweislich nicht an den
+Desktop angeschlossen, darf der bestehende, begrenzte Watchdog VGA wieder
+aktivieren; ein bloßer Abfragefehler löst diese Aktion nicht aus. Die
+Versionsprüfung aktualisiert auch eine Guest API mit derselben App-Version,
+wenn deren Grafikprotokoll noch älter ist.
+
+Ein aktiver Windows-Ausgang beweist noch keinen fehlerfreien Bildinhalt.
+Für diesen Fall liefert `GET /graphics/diagnostics` zusätzlich den aktiven
+Kernel-Testmodus, den installierten Grafiktreiber und die vorhandenen
+Helios-Zähler für Display-Half, VidPn und Scanout. Die Abfrage ändert weder
+Treiberkonfiguration noch Testmodus. Beispiel:
+
+```bash
+curl --fail -sS http://127.0.0.1:7148/graphics/diagnostics
+```
+
+`DspH=0` trotz laufendem PnP-Gerät grenzt etwa einen fehlenden Display-Half ein;
+`DisplayHalf` allein ist nur eine Konfiguration und kein Laufzeitnachweis.
+Die Zustandsprüfung und Diagnosen reparieren keinen noch unbekannten Fehler
+im WDDM-/Venus-Present-Pfad. Dafür müssen diese Laufzeitdaten aus dem betroffenen
+Windows-Gast und ein danach getesteter Windows-Treiber-Build vorliegen.
+
 Der ursprüngliche Fehlergrund (einschließlich EGL-Fehlercode, Format und
 Modifier bei einem Importfehler) erscheint in WinBoat während der
 Wiederherstellung und in der Terminal-Ausgabe. Sobald wieder ein gültiges Bild

@@ -76,7 +76,7 @@ struct Viewer {
  guint display_mode; /* 0 automatic, 1 VGA/Basic, 2 Helios; window-local choice */
  guint recovery_attempt;
  char frame_problem[512];
- gint helios_health, basic_health; /* 0 unknown, 1 running, 2 unavailable */
+ gint helios_health, basic_health; /* 0 unknown, 1 desktop active, 2 unavailable, 3 no Windows desktop */
  gint64 health_at;
  guint health_watch, health_timer;
 };
@@ -477,7 +477,7 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
    * Request a baseline if the producer resumes without one, without treating
    * the normal transition as a driver failure or triggering guest recovery. */
   if (!v->width && !v->reconnect_timer && v->parent &&
-      (v->accelerated?v->parent->helios_health:v->parent->basic_health)!=2)
+      (v->accelerated?v->parent->helios_health:v->parent->basic_health)<2)
    refresh_scanout(v);
   g_dbus_method_invocation_return_value(inv,NULL);return;
  }
@@ -779,7 +779,7 @@ static void register_consoles(Viewer *v) {
 }
 static gboolean console_eligible(Viewer *v,Viewer *d) {
  if ((v->display_mode==1 && d->accelerated) || (v->display_mode==2 && !d->accelerated)) return FALSE;
- if (!d->cache_valid || (d->accelerated?v->helios_health:v->basic_health)==2) return FALSE;
+ if (!d->cache_valid || (d->accelerated?v->helios_health:v->basic_health)>=2) return FALSE;
  /* QEMU can update a virtio placeholder before the Windows Helios driver is
   * installed. During bootstrap, only confirmed guest health may promote it.
   * A transient API outage can retain an already verified active desktop. */
@@ -790,6 +790,8 @@ static gboolean console_eligible(Viewer *v,Viewer *d) {
 static void select_console(Viewer *v) {
  const char *waiting=v->display_mode==1?"Waiting for VGA / Basic Display Adapter…":
                      v->display_mode==2?"Waiting for Helios…":"Waiting for the Windows display…";
+ if (v->display_mode==2 && v->helios_health==3) waiting="Helios is loaded, but Windows has no active desktop on this adapter.";
+ if (v->display_mode==1 && v->basic_health==3) waiting="Windows has no active desktop on the Basic Display Adapter.";
  gtk_label_set_text(GTK_LABEL(v->waiting),waiting);
  Viewer *next=v->active && console_eligible(v,v->active)?v->active:NULL;
  for (guint i=0;i<v->consoles->len;i++) {
@@ -829,8 +831,8 @@ static void adapter_health(Viewer *v,gint helios,gint basic) {
   Viewer *d=g_ptr_array_index(v->consoles,i);
   gint next=d->accelerated?helios:basic,previous=d->accelerated?v->helios_health:v->basic_health;
   if (d->accelerated && next!=0) d->driver_confirmed=next==1;
-  if (next==2) {d->cache_valid=FALSE;d->seen_update=FALSE;d->awaiting_scanout=TRUE;}
-  else if (previous==2 && !d->cache_valid) {
+  if (next>=2) {d->cache_valid=FALSE;d->seen_update=FALSE;d->awaiting_scanout=TRUE;}
+  else if (previous>=2 && !d->cache_valid) {
    /* Re-enabling a driver need not generate another Scanout. Re-register only
     * this listener to obtain a fresh baseline; queued partial updates belong
     * to the old generation. Do not delay recovery behind an old backoff. */
@@ -848,7 +850,7 @@ static gboolean adapter_control(GIOChannel *channel,GIOCondition condition,gpoin
  GIOStatus status=g_io_channel_read_line(channel,&line,&length,NULL,&error);
  if (status==G_IO_STATUS_NORMAL && length<=64) {
   int helios,basic;char extra;
-  if (sscanf(line,"adapters %d %d %c",&helios,&basic,&extra)==2 && helios>=0 && helios<=2 && basic>=0 && basic<=2)
+  if (sscanf(line,"adapters %d %d %c",&helios,&basic,&extra)==2 && helios>=0 && helios<=3 && basic>=0 && basic<=3)
    adapter_health(v,helios,basic);
  }
  g_free(line);g_clear_error(&error);
@@ -989,7 +991,7 @@ int main(int argc,char **argv) {
  const char *version_error=gtk_check_version(4,8,0);
  if (version_error) {g_printerr("GTK 4.8 or newer is required: %s\n",version_error);return 1;}
  configure_gl();
- if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 11");return 0;}
+ if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 12");return 0;}
  if (argc==2 && !strcmp(argv[1],"--check-gl")) {
   if (!gtk_init_check()) {g_printerr("GTK cannot open the host X11/Wayland display.\n");return 1;}
   GtkWidget *window=gtk_window_new(),*area=display_area();

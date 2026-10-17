@@ -185,6 +185,10 @@ int main(void) {
  root.basic_health=2;
  gtk_drop_down_set_selected(GTK_DROP_DOWN(selector),1);g_assert_null(root.active);
  g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(root.waiting)),==,"Waiting for VGA / Basic Display Adapter…");
+ root.basic_health=1;root.helios_health=3;
+ gtk_drop_down_set_selected(GTK_DROP_DOWN(selector),2);g_assert_null(root.active);
+ g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(root.waiting)),"no active desktop"));
+ gtk_drop_down_set_selected(GTK_DROP_DOWN(selector),0);g_assert_true(root.active==&basic);
  g_object_unref(selector);g_object_unref(root.waiting);g_ptr_array_free(root.consoles,TRUE);
  puts("Header adapter selector: Auto/VGA/Helios, manual selection retention, unavailable-adapter waiting, recovery, explicit unknown-health override and automatic bootstrap safety passed.");
  gtk_window_destroy(GTK_WINDOW(window));

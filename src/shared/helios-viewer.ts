@@ -6,12 +6,19 @@ export class HeliosViewer {
     private adapterCommand = 'adapters 0 0\n';
     /** Unknown guest health cannot promote an unverified Helios boot surface. */
     updateAdapters(value: unknown): void {
-        const candidate = value as {helios?:{state?:string};basic?:{state?:string};sampleAgeMs?:number} | null;
-        const state = (value?:string) => value === 'running' ? 1 : ['disabled','failed','missing'].includes(value || '') ? 2 : 0;
+        type Adapter = {state?:string;desktopState?:string};
+        const candidate = value as {helios?:Adapter;basic?:Adapter;sampleAgeMs?:number} | null;
+        const state = (adapter?:Adapter) => {
+            if (['disabled','failed','missing'].includes(adapter?.state || '')) return 2;
+            if (adapter?.state !== 'running') return 0;
+            if (adapter.desktopState === 'inactive') return 3;
+            if (adapter.desktopState !== undefined && adapter.desktopState !== 'active') return 0;
+            return 1; // Legacy API, or a confirmed active Windows output.
+        };
         // A monotonic sample age avoids dependence on the Windows wall clock.
         const age = candidate?.sampleAgeMs;
         const fresh = typeof age === 'number' && Number.isFinite(age) && age>=0 && age<15000;
-        this.adapterCommand = `adapters ${fresh?state(candidate?.helios?.state):0} ${fresh?state(candidate?.basic?.state):0}\n`;
+        this.adapterCommand = `adapters ${fresh?state(candidate?.helios):0} ${fresh?state(candidate?.basic):0}\n`;
         this.sendAdapters();
     }
     private sendAdapters(): void {

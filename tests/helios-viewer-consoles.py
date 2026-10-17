@@ -296,7 +296,9 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
                     call(1, 'Update', '(iiiiuuay)', (0, 0, 32, 24, 128, 0x20020888, pixels))
                     health(1, 1)
                 elif recovery_stage == 1:
-                    old_helios = peers[1];health(2, 1)
+                    # PnP can still be running while Windows has no desktop
+                    # attached to Helios. This must also retain working VGA.
+                    old_helios = peers[1];health(3, 1)
                 elif recovery_stage == 2:
                     health(1, 1)
                 elif recovery_stage == 3:

@@ -8,21 +8,24 @@ import (
 	"time"
 )
 
-const graphicsProtocol = "helios-watchdog-v2"
+const graphicsProtocol = "helios-watchdog-v3"
 
 type displayAdapter struct {
-	State       string `json:"state"`
-	InstanceID  string `json:"instanceId"`
-	ProblemCode int    `json:"problemCode"`
-	Service     string `json:"service"`
+	State        string `json:"state"`
+	InstanceID   string `json:"instanceId"`
+	ProblemCode  int    `json:"problemCode"`
+	Service      string `json:"service"`
+	DesktopState string `json:"desktopState,omitempty"`
 }
 type displayAdapters struct {
-	SampleAgeMS  int64          `json:"sampleAgeMs"`
-	Helios       displayAdapter `json:"helios"`
-	Basic        displayAdapter `json:"basic"`
-	Recovery     string         `json:"recovery"`
-	UpdatedAtUTC string         `json:"updatedAtUtc"`
-	Error        string         `json:"error,omitempty"`
+	SampleAgeMS  int64            `json:"sampleAgeMs"`
+	Helios       displayAdapter   `json:"helios"`
+	Basic        displayAdapter   `json:"basic"`
+	Recovery     string           `json:"recovery"`
+	UpdatedAtUTC string           `json:"updatedAtUtc"`
+	Error        string           `json:"error,omitempty"`
+	Desktop      *desktopSnapshot `json:"desktop,omitempty"`
+	DesktopError string           `json:"desktopError,omitempty"`
 }
 type graphicsMonitor struct {
 	mu                     sync.RWMutex

@@ -17,11 +17,18 @@ func collectDisplayAdapters(ctx context.Context, viewerUnavailable bool) ([]byte
 		return nil, err
 	}
 	script := filepath.Join(filepath.Dir(executable), "scripts", "Get-DisplayAdapters.ps1")
+	desktopCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	desktop, probeErr := collectConsoleDesktop(desktopCtx)
+	cancel()
 	args := []string{"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, "-Recover"}
-	if viewerUnavailable {
+	if viewerUnavailable || desktopRequiresFallback(desktop, probeErr) {
 		args = append(args, "-ViewerUnavailable")
 	}
-	return exec.CommandContext(ctx, "powershell.exe", args...).Output()
+	data, err := exec.CommandContext(ctx, "powershell.exe", args...).Output()
+	if err != nil {
+		return nil, err
+	}
+	return mergeDesktopStatus(data, desktop, probeErr)
 }
 func ensureSelectedHelios() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
@@ -35,4 +42,13 @@ func ensureSelectedHelios() {
 	if _, err = exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, "-Ensure").Output(); err != nil {
 		log.Printf("Cannot ensure selected Helios startup task: %v", err)
 	}
+}
+
+func collectHeliosDiagnostics(ctx context.Context) ([]byte, error) {
+	executable, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	script := filepath.Join(filepath.Dir(executable), "scripts", "Get-HeliosDiagnostics.ps1")
+	return exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script).Output()
 }
