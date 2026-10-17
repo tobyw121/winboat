@@ -56,8 +56,10 @@ im Installationsbildschirm verfügbar, auch wenn Windows-OOBE oder AME noch auf
 Eingaben wartet. Der Windows-Gastdienst muss dafür noch nicht erreichbar sein.
 Vor dem Start der Windows-Konsole bleibt die Schaltfläche deaktiviert.
 
-Der Viewer entdeckt alle grafischen QEMU-Konsolen auf Monitor 0. Während Setup
-zeigt er den Installations-VGA; sobald die Helios-GPU Bildupdates liefert,
+Der Viewer entdeckt alle grafischen QEMU-Konsolen auf Monitor 0. Die Abfragen
+und die Anmeldung der Listener laufen asynchron, damit QEMU während des
+Verbindungsaufbaus auf den Viewer zugreifen kann, ohne das Fenster zu blockieren.
+Während Setup zeigt er den Installations-VGA; sobald die Helios-GPU Bildupdates liefert,
 wechselt er zu deren Konsole. Maus, Tastatur und Auflösungsanfragen folgen
 dieser Auswahl. Späte VGA-Updates überschreiben das Helios-Bild nicht.
 Bei einem Treiberneustart kann er vorübergehend auf eine noch aktive Konsole
@@ -239,7 +241,9 @@ oder Spiegelung. Der Software-Bildpfad behält seine eigene Zeilenorientierung.
 Mesa/Xvfb ohne `GDK_DEBUG`: alle vier Bildecken, beide DMA-BUF-Ausrichtungen,
 einen Ausschnitt aus einer größeren Textur und den Software-Bildpfad.
 Zusätzlich startet er den echten Viewer an einem privaten D-Bus-Testserver mit
-VGA- und virtio-Konsole. Er prüft den Wechsel zur Helios-Ausgabe, das Aus- und
+VGA- und virtio-Konsole. Der Server wartet vor weiteren Abfragen auf die
+Listener-Anmeldung, um eine gegenseitige Blockade beim Start zu erkennen.
+Der Test prüft den Wechsel zur Helios-Ausgabe, das Aus- und
 Einschalten der Konsolen, Auflösungsanfragen an die ausgewählte Konsole sowie
 die sichtbaren Bildecken direkt auf dem X11-Bildschirm. Die Frames sind
 synthetisch; das ersetzt keinen Windows-/GPU-Hardwaretest.

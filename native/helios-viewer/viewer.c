@@ -67,7 +67,7 @@ struct Viewer {
  Viewer *parent, *active;
  GPtrArray *consoles;
  char *console_path;
- guint console_id;
+ guint console_id, pending_consoles;
  gboolean accelerated, seen_update, cursor_visible;
 };
 static Viewer *displayed(Viewer *v) {return v->active?v->active:v;}
@@ -427,7 +427,7 @@ static void closed(GDBusConnection *conn,gboolean vanished,GError *err,Viewer *v
  if (v->parent) {
   Viewer *root=v->parent;
   v->cache_valid=FALSE;v->registered=FALSE;select_console(root);
-  gboolean disconnected=TRUE;
+  gboolean disconnected=root->pending_consoles==0;
   for (guint i=0;i<root->consoles->len;i++) {
    Viewer *d=g_ptr_array_index(root->consoles,i);
    if (!d->peer || !g_dbus_connection_is_closed(d->peer)) disconnected=FALSE;
@@ -483,43 +483,78 @@ static gboolean initialize_gl(Viewer *v) {
  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
  return glGetError()==GL_NO_ERROR;
 }
-static void register_consoles(Viewer *v) {
- GError *error=NULL;
- GVariant *reply=g_dbus_connection_call_sync(v->bus,"org.qemu",VM,"org.freedesktop.DBus.Properties","Get",
-  g_variant_new("(ss)",IFACE "VM","ConsoleIDs"),G_VARIANT_TYPE("(v)"),G_DBUS_CALL_FLAGS_NONE,5000,NULL,&error);
+static void console_discovered(Viewer *v) {
+ if (--v->pending_consoles==0 && !v->consoles->len && !v->exit_code)
+  fatal(v,"QEMU provides no graphical desktop console.");
+}
+static void mouse_ready(GObject *object,GAsyncResult *result,gpointer data) {
+ (void)object;Viewer *d=data,*v=d->parent;GError *error=NULL;
+ d->mouse=g_dbus_proxy_new_finish(result,&error);
+ if (!d->mouse) {fatal(v,error->message);g_error_free(error);}
+ else if (!v->exit_code) {
+  /* Discovery callbacks run after realize, so restore our GL context. */
+  gtk_gl_area_make_current(GTK_GL_AREA(v->area));
+  const GError *gl_error=gtk_gl_area_get_error(GTK_GL_AREA(v->area));
+  if (gl_error) fatal(v,gl_error->message);
+  else {
+   glGenTextures(1,&d->texture);glBindTexture(GL_TEXTURE_2D,d->texture);
+   glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+   glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+   g_dbus_connection_call_with_unix_fd_list(v->bus,"org.qemu",d->console_path,IFACE "Console","RegisterListenerReverse",NULL,
+    G_VARIANT_TYPE("(h)"),G_DBUS_CALL_FLAGS_NONE,10000,NULL,NULL,registered,d);
+  }
+ }
+ console_discovered(v);
+}
+static void console_ready(GObject *object,GAsyncResult *result,gpointer data) {
+ (void)object;Viewer *d=data,*v=d->parent;GError *error=NULL;
+ GDBusProxy *console=g_dbus_proxy_new_finish(result,&error);
+ if (!console) {
+  fatal(v,error->message);g_error_free(error);
+  g_free(d->console_path);g_free(d);console_discovered(v);return;
+ }
+ GVariant *type=g_dbus_proxy_get_cached_property(console,"Type"),*label=g_dbus_proxy_get_cached_property(console,"Label"),
+          *head=g_dbus_proxy_get_cached_property(console,"Head");
+ gboolean graphic=type && g_variant_is_of_type(type,G_VARIANT_TYPE_STRING) && !strcmp(g_variant_get_string(type,NULL),"Graphic");
+ /* The default desktop is head 0; do not replace it with an extended monitor. */
+ if (!v->exit_code && graphic && (!head || (g_variant_is_of_type(head,G_VARIANT_TYPE_UINT32) && g_variant_get_uint32(head)==0))) {
+  const char *name=label && g_variant_is_of_type(label,G_VARIANT_TYPE_STRING)?g_variant_get_string(label,NULL):"";
+  d->accelerated=strstr(name,"virtio") || strstr(name,"Helios");
+  g_ptr_array_add(v->consoles,d);
+  g_dbus_proxy_new(v->bus,G_DBUS_PROXY_FLAGS_NONE,NULL,"org.qemu",d->console_path,IFACE "Mouse",NULL,mouse_ready,d);
+ } else {
+  g_free(d->console_path);g_free(d);console_discovered(v);
+ }
+ g_clear_pointer(&type,g_variant_unref);g_clear_pointer(&label,g_variant_unref);g_clear_pointer(&head,g_variant_unref);
+ g_object_unref(console);
+}
+static void console_ids_ready(GObject *object,GAsyncResult *result,gpointer data) {
+ Viewer *v=data;GError *error=NULL;
+ GVariant *reply=g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),result,&error);
  if (!reply) {fatal(v,error->message);g_error_free(error);return;}
  GVariant *boxed,*ids;g_variant_get(reply,"(@v)",&boxed);ids=g_variant_get_variant(boxed);
  if (!g_variant_is_of_type(ids,G_VARIANT_TYPE("au")) || g_variant_n_children(ids)>32) {
   fatal(v,"Invalid QEMU graphical console list.");
+ } else if (!(v->pending_consoles=g_variant_n_children(ids))) {
+  fatal(v,"QEMU provides no graphical desktop console.");
  } else for (gsize i=0;i<g_variant_n_children(ids);i++) {
   guint id;g_variant_get_child(ids,i,"u",&id);
-  char *path=g_strdup_printf(CONSOLE_PREFIX "%u",id);
-  GDBusProxy *console=g_dbus_proxy_new_sync(v->bus,G_DBUS_PROXY_FLAGS_NONE,NULL,"org.qemu",path,IFACE "Console",NULL,&error);
-  if (!console) {fatal(v,error->message);g_clear_error(&error);g_free(path);break;}
-  GVariant *type=g_dbus_proxy_get_cached_property(console,"Type"),*label=g_dbus_proxy_get_cached_property(console,"Label"),
-           *head=g_dbus_proxy_get_cached_property(console,"Head");
-  gboolean graphic=type && g_variant_is_of_type(type,G_VARIANT_TYPE_STRING) && !strcmp(g_variant_get_string(type,NULL),"Graphic");
-  /* The default desktop is head 0; do not replace it with an extended monitor. */
-  if (graphic && (!head || g_variant_get_uint32(head)==0)) {
-   Viewer *d=g_new0(Viewer,1);*d=*v;d->parent=v;d->consoles=NULL;d->console_path=path;path=NULL;d->console_id=id;
-   const char *name=label?g_variant_get_string(label,NULL):"";
-   d->accelerated=strstr(name,"virtio") || strstr(name,"Helios");
-   d->mouse=g_dbus_proxy_new_sync(v->bus,G_DBUS_PROXY_FLAGS_NONE,NULL,"org.qemu",d->console_path,IFACE "Mouse",NULL,&error);
-   if (!d->mouse) {fatal(v,error->message);g_clear_error(&error);g_free(d->console_path);g_free(d);}
-   else {
-    glGenTextures(1,&d->texture);glBindTexture(GL_TEXTURE_2D,d->texture);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
-    g_ptr_array_add(v->consoles,d);
-    g_dbus_connection_call_with_unix_fd_list(v->bus,"org.qemu",d->console_path,IFACE "Console","RegisterListenerReverse",NULL,
-     G_VARIANT_TYPE("(h)"),G_DBUS_CALL_FLAGS_NONE,10000,NULL,NULL,registered,d);
-   }
-  }
-  g_clear_pointer(&type,g_variant_unref);g_clear_pointer(&label,g_variant_unref);g_clear_pointer(&head,g_variant_unref);
-  g_object_unref(console);g_free(path);
+  /* Copy only shared resources: another console may already be displaying
+   * frames when its asynchronous sibling finishes discovery. */
+  Viewer *d=g_new0(Viewer,1);
+  d->parent=v;d->area=v->area;d->bus=v->bus;d->info=v->info;d->qemu_uid=v->qemu_uid;
+  d->program=v->program;d->vao=v->vao;d->fbo=v->fbo;
+  d->image=EGL_NO_IMAGE_KHR;d->display=EGL_NO_DISPLAY;d->cursor_visible=TRUE;
+  d->console_path=g_strdup_printf(CONSOLE_PREFIX "%u",id);d->console_id=id;
+  g_dbus_proxy_new(v->bus,G_DBUS_PROXY_FLAGS_DO_NOT_CONNECT_SIGNALS,NULL,"org.qemu",d->console_path,IFACE "Console",NULL,console_ready,d);
  }
  g_variant_unref(ids);g_variant_unref(boxed);g_variant_unref(reply);
- if (!v->consoles->len && !v->exit_code) fatal(v,"QEMU provides no graphical desktop console.");
+}
+static void register_consoles(Viewer *v) {
+ /* Never block GTK while discovering consoles. QEMU may wait for a listener
+  * handshake on its main loop before it can answer another property query. */
+ g_dbus_connection_call(v->bus,"org.qemu",VM,"org.freedesktop.DBus.Properties","Get",
+  g_variant_new("(ss)",IFACE "VM","ConsoleIDs"),G_VARIANT_TYPE("(v)"),G_DBUS_CALL_FLAGS_NONE,5000,NULL,console_ids_ready,v);
 }
 static void select_console(Viewer *v) {
  Viewer *next=v->active && v->active->cache_valid?v->active:NULL;

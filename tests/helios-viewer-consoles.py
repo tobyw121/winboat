@@ -92,7 +92,15 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
 
         def authenticate(identifier, stream):
             try:
-                peers[identifier] = Gio.DBusConnection.new_sync(stream, None, Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT, None, None)
+                # QEMU dispatches display setup on its main loop. Do not service
+                # subsequent property queries until the viewer authenticates.
+                cancel = Gio.Cancellable()
+                watchdog = threading.Timer(6, cancel.cancel)
+                watchdog.start()
+                try:
+                    peers[identifier] = Gio.DBusConnection.new_sync(stream, None, Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT, None, cancel)
+                finally:
+                    watchdog.cancel()
             except Exception as error:
                 failures.append(str(error))
 
@@ -109,7 +117,8 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
             invocation.return_value_with_unix_fd_list(GLib.Variant('(h)', (handle,)), fdlist)
             server.close()
             stream = Gio.UnixConnection(socket=Gio.Socket.new_from_fd(client.detach()))
-            threading.Thread(target=authenticate, args=(identifier, stream), daemon=True).start()
+            connection.flush_sync(None)
+            authenticate(identifier, stream)
 
         bus.register_object('/org/qemu/Display1/VM', info.interfaces[0], None, prop, None)
         for identifier in range(3):
@@ -191,7 +200,7 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
             y = int(height / 2 + (-6 if index < 2 else 6) * scale)
             offset = (y * width + x) * 3
             assert tuple(pixels[offset:offset + 3]) == color, (index, pixels[offset:offset + 3])
-        print('Actual viewer: VGA -> Helios, stale VGA isolation, disable/re-enable handoff, console-1 resize, visible X11 frame and four readback corners passed.')
+        print('Actual viewer: serialized QEMU listener authentication, VGA -> Helios, stale VGA isolation, disable/re-enable handoff, console-1 resize, visible X11 frame and four readback corners passed.')
         # Losing one adapter is recoverable; losing the VM must report failure
         # instead of leaving a permanently blank window marked as connected.
         peers.clear()
@@ -227,6 +236,10 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
     finally:
         if viewer is not None and viewer.poll() is None:
             viewer.terminate()
-            viewer.wait(timeout=5)
+            try:
+                viewer.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                viewer.kill()
+                viewer.wait(timeout=5)
         daemon.terminate()
         daemon.wait(timeout=5)
