@@ -197,6 +197,9 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
                     call(0, 'Disable', '()', ())
                 elif stage == 7:
                     call(1, 'Disable', '()', ())
+                    # Mode transitions can leave an old update queued after
+                    # Disable. It must not be reported as driver failure.
+                    call(1, 'UpdateDMABUF', '(iiii)', (0, 0, 32, 24))
                     call(0, 'Scanout', '(uuuuay)', (32, 24, 128, 0x20020888, red))
                 elif stage == 8:
                     call(1, 'Scanout', '(uuuuay)', (32, 24, 128, 0x20020888, pixels))
@@ -251,6 +254,7 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
         selections = [json.loads(line)['id'] for line in errors.splitlines() if line.startswith('{"event":"console"')]
         assert selections == [0, 1, 0, 1, 0, 1, 0, 1, 0, 1], (selections, errors)
         assert 1 in resizes, 'Guest resize did not follow the selected Helios console'
+        assert all(resizes.count(identifier) == 1 for identifier in set(resizes)), ('Unchanged window repeatedly resized the guest during handoffs', resizes)
         assert visible, 'The actual displayed frame was not checked'
         magic, dimensions, maximum, screen_pixels = (root / 'helios-viewer-smoke.ppm').read_bytes().split(b'\n', 3)
         width, height = map(int, dimensions.split())
@@ -324,6 +328,16 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
                     if peers[0] is old_basic or peers[0].is_closed(): return True
                     call(0, 'Scanout', '(uuuuay)', (32, 24, 128, 0x20020888, red))
                 elif recovery_stage == 12:
+                    # A real Disable clears the image; a late update is ACKed
+                    # without a false driver failure. If no new Scanout comes,
+                    # obtain it by re-registering this console only.
+                    old_helios = peers[1]
+                    call(1, 'Disable', '()', ())
+                    call(1, 'UpdateDMABUF', '(iiii)', (0, 0, 32, 24))
+                elif recovery_stage == 13:
+                    if peers[1] is old_helios or peers[1].is_closed(): return True
+                    call(1, 'Scanout', '(uuuuay)', (32, 24, 128, 0x20020888, pixels))
+                elif recovery_stage == 14:
                     visible_frame();viewer.terminate();loop.quit();return False
                 recovery_stage += 1
                 return True
@@ -335,9 +349,11 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
         if failures: viewer.terminate()
         output, errors = viewer.communicate(timeout=3)
         assert not failures, (failures, errors)
-        assert viewer.returncode == 0 and recovery_stage == 12, errors
+        assert viewer.returncode == 0 and recovery_stage == 14, errors
         selections = [json.loads(line)['id'] for line in errors.splitlines() if line.startswith('{"event":"console"')]
-        assert selections == [0, 1, 0, 1, 0, 1], (selections, errors)
+        assert selections == [0, 1, 0, 1, 0, 1, 0, 1], (selections, errors)
+        recovery_events = [json.loads(line) for line in output.splitlines() if line.startswith('{"event":"display-recovery"')]
+        assert not any(event['accelerated'] for event in recovery_events), ('Normal Disable triggered Helios driver recovery', output)
         print('Both adapters recover from silent disable/re-enable through viewer-requested fresh baselines; corrupt Basic frames cannot replace healthy Helios; one viewer process/window stays alive.')
         # Losing one adapter is recoverable; losing the VM must report failure
         # instead of leaving a permanently blank window marked as connected.

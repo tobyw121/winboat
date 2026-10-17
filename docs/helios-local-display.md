@@ -547,6 +547,23 @@ gehören, werden bis dahin ohne Zugriff auf deren Speicher verworfen und
 bestätigt. Das Fenster und die andere Konsole bleiben geöffnet. Fehlerhafte
 Cursor-Metadaten verwerfen keinen gültigen Desktop mehr.
 
+Viewer 10 erhält beim Wechsel auf einen gleich großen DMA-BUF die zuletzt
+vollständig kopierte Bildtextur. `ScanoutDMABUF2` ersetzt die Quelle; erst
+`UpdateDMABUF` veröffentlicht deren neue Pixel. Die private Textur wird deshalb
+nicht bei jedem Pufferwechsel neu angelegt. Dadurch bleibt Helios während
+normaler Pufferwechsel ausgewählt, ohne kurzzeitig auf VGA zurückzufallen.
+Ein echtes `Disable`, ein Treiberfehler oder eine ungültige Bildquelle macht
+den betroffenen Desktop weiterhin unverfügbar.
+
+Verspätete Updates nach `Disable` werden ohne Zugriff auf den freigegebenen
+Puffer bestätigt. Fehlt anschließend ein neuer Scanout, fordert der Viewer
+ihn über eine erneute Listener-Anmeldung an. Dieser normale Anzeigeübergang
+meldet keinen Treiberabsturz an die Guest API. Auflösungsanforderungen werden
+pro Konsole gespeichert, damit derselbe Fensterinhalt beim Zurückschalten
+nicht erneut eine Windows-Modusänderung auslöst. Die Tests prüfen erhaltene
+Bildpixel unter GL/GLES, verspätete Updates, automatische Wiederherstellung
+und ausbleibende doppelte Auflösungsanforderungen.
+
 Der ursprüngliche Fehlergrund (einschließlich EGL-Fehlercode, Format und
 Modifier bei einem Importfehler) erscheint in WinBoat während der
 Wiederherstellung und in der Terminal-Ausgabe. Sobald wieder ein gültiges Bild

@@ -310,7 +310,11 @@ static void texture_size(Viewer *v,guint w,guint h) {
  glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,w,h,0,GL_RGBA,GL_UNSIGNED_BYTE,NULL);
 }
 static void dma_geometry(Viewer *v,guint x,guint y,guint w,guint h,guint bw,guint bh,gboolean top) {
- texture_size(v,w,h);
+ /* Scanout replaces the producer buffer; Update publishes its pixels. Keep
+  * our completed private copy until then, including its presentation flip.
+  * Reallocating it on every same-size swap made Helios ineligible and caused
+  * a VGA/Helios handoff (and another guest resize) on every buffer change. */
+ if (v->width!=w || v->height!=h) texture_size(v,w,h);
  v->source_x=x;v->source_y=y;
  v->rect[0]=(float)x/bw;v->rect[1]=(float)y/bh;v->rect[2]=(float)w/bw;v->rect[3]=(float)h/bh;
  /* Match QEMU's egl_fb_blit(..., !y0_top): its display-origin flag is
@@ -468,6 +472,12 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
  if (update && v->awaiting_scanout) {
   /* Acknowledge/drop queued updates while QEMU republishes the baseline.
    * No producer buffer is read or displayed in this state. */
+  /* Disable can precede a stale update during a Windows mode transition.
+   * Request a baseline if the producer resumes without one, without treating
+   * the normal transition as a driver failure or triggering guest recovery. */
+  if (!v->width && !v->reconnect_timer && v->parent &&
+      (v->accelerated?v->parent->helios_health:v->parent->basic_health)!=2)
+   refresh_scanout(v);
   g_dbus_method_invocation_return_value(inv,NULL);return;
  }
  g_strlcpy(v->frame_problem,"Invalid adapter frame",sizeof(v->frame_problem));
@@ -513,7 +523,7 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
   ok=region(v,x,y,w,h) && copy_dma(v);
   if (ok) {v->dma_frames++;v->last_dma=TRUE;}
  } else if (!strcmp(name,"Disable")) {
-  discard_source(v);v->width=v->height=0;v->cache_valid=FALSE;v->seen_update=FALSE;release_input(v);
+  discard_source(v);v->width=v->height=0;v->cache_valid=FALSE;v->seen_update=FALSE;v->awaiting_scanout=TRUE;release_input(v);
  } else if (!strcmp(name,"MouseSet")) {
   gint x,y,on;g_variant_get(params,"(iii)",&x,&y,&on);(void)x;(void)y;
   v->cursor_visible=on;update_cursor(v);
@@ -785,7 +795,7 @@ static void select_console(Viewer *v) {
   if (!next || (d->accelerated && !next->accelerated)) next=d;
  }
  if (next==v->active) return;
- release_input(v);v->active=next;v->requested_width=v->requested_height=0;
+ release_input(v);v->active=next;
  if (v->resize_timer) {g_source_remove(v->resize_timer);v->resize_timer=0;}
  update_cursor(v);
  if (next) {
@@ -891,8 +901,8 @@ static gboolean request_resize(gpointer data) {
  if (!v->auto_resize || !d->console_path) return G_SOURCE_REMOVE;
  guint scale=gtk_widget_get_scale_factor(v->area);
  guint w=gtk_widget_get_width(v->area)*scale,h=gtk_widget_get_height(v->area)*scale;
- if (!dimensions(w,h) || w<640 || h<480 || (w==v->requested_width && h==v->requested_height)) return G_SOURCE_REMOVE;
- v->requested_width=w;v->requested_height=h;
+ if (!dimensions(w,h) || w<640 || h<480 || (w==d->requested_width && h==d->requested_height)) return G_SOURCE_REMOVE;
+ d->requested_width=w;d->requested_height=h;
  g_dbus_connection_call(v->bus,"org.qemu",d->console_path,IFACE "Console","SetUIInfo",
   g_variant_new("(qqiiuu)",(guint16)(w*25.4/96),(guint16)(h*25.4/96),0,0,w,h),
   NULL,G_DBUS_CALL_FLAGS_NONE,2000,NULL,resize_finished,v);
@@ -906,6 +916,9 @@ static void resized(GtkGLArea *area,int width,int height,Viewer *v) {
 }
 static void resize_toggled(GtkCheckButton *button,Viewer *v) {
  v->auto_resize=gtk_check_button_get_active(button);v->requested_width=0;v->requested_height=0;
+ for (guint i=0;i<v->consoles->len;i++) {
+  Viewer *d=g_ptr_array_index(v->consoles,i);d->requested_width=d->requested_height=0;
+ }
  resized(GTK_GL_AREA(v->area),0,0,v);gtk_widget_grab_focus(v->area);
 }
 static void aspect_toggled(GtkCheckButton *button,Viewer *v) {
@@ -956,7 +969,7 @@ int main(int argc,char **argv) {
  const char *version_error=gtk_check_version(4,8,0);
  if (version_error) {g_printerr("GTK 4.8 or newer is required: %s\n",version_error);return 1;}
  configure_gl();
- if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 9");return 0;}
+ if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 10");return 0;}
  if (argc==2 && !strcmp(argv[1],"--check-gl")) {
   if (!gtk_init_check()) {g_printerr("GTK cannot open the host X11/Wayland display.\n");return 1;}
   GtkWidget *window=gtk_window_new(),*area=display_area();

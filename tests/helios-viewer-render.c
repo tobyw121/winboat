@@ -79,6 +79,13 @@ int main(void) {
   g_assert_true(copy_dma(&v));
   glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,4,4);
   draw(&v,v.texture,full,v.flip);expect_corners(fbo);
+  /* A replacement DMA-BUF of the same size has not yet received Update.
+   * Keep the last completed frame instead of exposing uninitialized storage
+   * or making the selector fall back to VGA on every buffer swap. */
+  dma_geometry(&v,1,2,4,4,6,8,top);
+  g_assert_true(v.cache_valid);
+  glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,4,4);
+  draw(&v,v.texture,full,v.flip);expect_corners(fbo);
  }
  /* Software scanouts remain top-down and must still flip on presentation. */
  const guint8 software[][4]={{255,0,0,255},{0,255,0,255},{0,0,255,255},{255,255,0,255}};
