@@ -1,4 +1,5 @@
 import { hostEnvironment } from './host-environment';
+import { nativeDesktopEnvironment } from '../../shared/native-desktop-environment';
 import { HELIOS_IMAGE } from '../../shared/helios';
 import { HELIOS_DISPLAY_CAPABILITY, HELIOS_DISPLAY_VERSION, HELIOS_DISPLAY_MOUNT,
     heliosDisplayAddress, heliosDisplayBusConfig, heliosDisplayDirectory } from '../../shared/helios-display';
@@ -17,9 +18,13 @@ export const localDisplayState = ref<ViewerState>('closed');
 export const localDisplayMessage = ref('');
 let openingConsole: Promise<void> | undefined;
 const viewer = new HeliosViewer(() => child.spawn(binary(), ['--address', heliosDisplayAddress(localDisplayDirectory())],
-    { stdio: ['ignore', 'pipe', 'pipe'] }), (state, message) => {
+    { env: desktopEnvironment(), stdio: ['ignore', 'pipe', 'pipe'] }), (state, message) => {
     localDisplayState.value = state; localDisplayMessage.value = message;
 });
+
+function desktopEnvironment(): NodeJS.ProcessEnv {
+    return nativeDesktopEnvironment(hostEnvironment(), remote.app.isPackaged ? path.dirname(process.resourcesPath) : undefined);
+}
 
 function binary(): string {
     return remote.app.isPackaged ? path.join(process.resourcesPath, 'native', 'winboat-helios-viewer')
@@ -31,10 +36,15 @@ export function localDisplayDirectory(): string {
 export async function requireLocalDisplay(): Promise<void> {
     if (!hostEnvironment().DISPLAY && !hostEnvironment().WAYLAND_DISPLAY) throw new Error('Local Desktop needs a running X11 or Wayland desktop session.');
     try {
-        const { stdout } = await execFile(binary(), ['--version'], { timeout: 3000 });
+        const { stdout } = await execFile(binary(), ['--version'], { timeout: 3000, env: desktopEnvironment() });
         if (stdout.trim() !== 'winboat-helios-viewer 3') throw new Error('Viewer protocol mismatch.');
     }
     catch { throw new Error('The local Helios viewer needs its bundled executable, GTK 4.8+, libepoxy and a desktop session. Install the GTK4 runtime or use Browser Display.'); }
+    try { await execFile(binary(), ['--check-gl'], {timeout: 8000, env: desktopEnvironment()}); }
+    catch (error) {
+        const detail = (error as Error & {stderr?: string}).stderr?.trim() || (error as Error).message;
+        throw new Error(`Local Desktop cannot create a host OpenGL 3.3 context: ${detail.slice(-1500)}`);
+    }
     const { stdout } = await execFile('docker', ['image', 'inspect', '--format', `{{ index .Config.Labels "${HELIOS_DISPLAY_CAPABILITY}" }}`, HELIOS_IMAGE], { timeout: 5000 });
     if (stdout.trim() !== HELIOS_DISPLAY_VERSION) throw new Error('Rebuild the Helios host image to enable local display support.');
 }
@@ -57,7 +67,7 @@ async function startBus(): Promise<void> {
     if (fs.existsSync(socket)) {
         const info = fs.lstatSync(socket);
         if (!info.isSocket() || info.uid !== process.getuid!()) throw new Error('Unexpected local display socket.');
-        try { await execFile(binary(), ['--ping', heliosDisplayAddress(directory)], { timeout: 3000 }); return; }
+        try { await execFile(binary(), ['--ping', heliosDisplayAddress(directory)], { timeout: 3000, env: desktopEnvironment() }); return; }
         catch {
             // Unlink only a refused socket. A live, unresponsive bus may still
             // serve the VM and must not be replaced underneath it.
@@ -74,8 +84,8 @@ async function startBus(): Promise<void> {
     }
     const config = path.join(directory, 'bus.conf');
     fs.writeFileSync(config, heliosDisplayBusConfig(directory, process.getuid!()), { mode: 0o600 });
-    await execFile('dbus-daemon', [`--config-file=${config}`, '--fork'], { timeout: 5000 });
-    await execFile(binary(), ['--ping', heliosDisplayAddress(directory)], { timeout: 3000 });
+    await execFile('dbus-daemon', [`--config-file=${config}`, '--fork'], { timeout: 5000, env: desktopEnvironment() });
+    await execFile(binary(), ['--ping', heliosDisplayAddress(directory)], { timeout: 3000, env: desktopEnvironment() });
 }
 export async function prepareLocalDisplay(compose: ComposeConfig): Promise<void> {
     const service = compose.services.windows;

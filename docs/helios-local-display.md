@@ -267,3 +267,24 @@ docker compose -f "$HOME/.winboat/docker-compose.yml" up -d --force-recreate win
 
 Für den nativen Modus muss der private Display-Bus noch verfügbar sein. Die neue
 WinBoat-Anwendung vor dem Containerstart auf derselben Desktop-Sitzung öffnen.
+
+### GTK-OpenGL auf dem Host prüfen
+
+Der native Viewer benötigt einen GTK-OpenGL-3.3-Kontext in der tatsächlichen
+X11-/Wayland-Sitzung. `glxinfo -B` bestätigt unter X11 nur den GLX-Pfad und reicht
+allein nicht als GTK-/EGL-Nachweis. Vor der Auswahl des nativen Transports startet
+WinBoat deshalb `winboat-helios-viewer --check-gl` ohne Verbindung zur VM. Bei einem
+Fehler wird vor der Einrichtung Browser Display gewählt; die gespeicherte
+Local-Desktop-Präferenz bleibt für einen späteren Versuch erhalten.
+
+Für Viewer und GL-Prüfung werden Bibliotheks-/Modulpfade innerhalb der AppImage
+entfernt. Electron bringt eigene EGL-Bibliotheken mit, die beim Start eines
+externen GTK-Prozesses nicht die Host-NVIDIA-/Mesa-Bibliotheken verdrängen dürfen.
+Host-Bibliothekspfade, NVIDIA-EGL-Konfiguration, X11-/Wayland-Zugangsdaten und
+explizite GDK-Einstellungen bleiben erhalten. Es wird kein Software-Rendering
+erzwungen. Ein erfolgreicher Software-Test ersetzt weiterhin keinen Test mit
+der physischen Host-GPU.
+
+Diese Änderung benötigt nur eine neu gebaute Linux-Anwendung einschließlich des
+nativen Viewers. Das Host-Image mit `dbus-v4` und die Windows-Installation müssen
+dafür nicht ersetzt werden.

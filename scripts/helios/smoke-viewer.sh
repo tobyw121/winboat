@@ -35,6 +35,11 @@ docker run -d --name "$client" --user "$(id -u):$(id -g)" --pid=host --network n
 for ((i=0;i<100;i++)); do [[ -S "$temporary/bus" ]] && break; sleep 0.1; done
 [[ -S "$temporary/bus" ]]
 docker exec "$client" bash /source/native/helios-viewer/build.sh /test/viewer
+docker exec -e DISPLAY=:99 -e GDK_BACKEND=x11 -e LIBGL_ALWAYS_SOFTWARE=1 -e GTK_A11Y=none \
+    "$client" /test/viewer --check-gl
+if docker exec -e DISPLAY=:65534 -e GDK_BACKEND=x11 -e GTK_A11Y=none "$client" /test/viewer --check-gl; then
+    echo 'The GL preflight unexpectedly accepted an unavailable desktop.' >&2; exit 1
+fi
 docker exec "$client" python3 /source/native/helios-viewer/test-auth.py
 docker run -d --name "$qemu" --network none "${auth_debug[@]}" -v "$temporary:/test:ro" \
     --entrypoint qemu-system-x86_64 "$host_image" -machine q35,accel=tcg -m 128M \

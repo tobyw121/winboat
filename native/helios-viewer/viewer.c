@@ -394,7 +394,10 @@ static void registered(GObject *object,GAsyncResult *result,gpointer data) {
 static void realize(GtkGLArea *area,Viewer *v) {
  gtk_gl_area_make_current(area);
  const GError *gl_error=gtk_gl_area_get_error(area);
- if (gl_error) {fatal(v,gl_error->message);return;}
+ if (gl_error) {
+  char *message=g_strdup_printf("Host GTK OpenGL (%s): %s",G_OBJECT_TYPE_NAME(gdk_display_get_default()),gl_error->message);
+  fatal(v,message);g_free(message);return;
+ }
  const char *vertex="#version 330\nout vec2 uv;void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);uv=p;gl_Position=vec4(p*2-1,0,1);}";
  const char *fragment="#version 330\nin vec2 uv;out vec4 color;uniform sampler2D image;uniform vec4 rect;uniform bool flip;void main(){vec2 p=uv;if(flip)p.y=1-p.y;color=vec4(texture(image,rect.xy+p*rect.zw).rgb,1);}";
  GLuint vs=shader(GL_VERTEX_SHADER,vertex),fs=shader(GL_FRAGMENT_SHADER,fragment);
@@ -515,6 +518,19 @@ int main(int argc,char **argv) {
  const char *version_error=gtk_check_version(4,8,0);
  if (version_error) {g_printerr("GTK 4.8 or newer is required: %s\n",version_error);return 1;}
  if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 3");return 0;}
+ if (argc==2 && !strcmp(argv[1],"--check-gl")) {
+  if (!gtk_init_check()) {g_printerr("GTK cannot open the host X11/Wayland display.\n");return 1;}
+  GtkWidget *window=gtk_window_new(),*area=gtk_gl_area_new();
+  gtk_gl_area_set_required_version(GTK_GL_AREA(area),3,3);
+  gtk_window_set_child(GTK_WINDOW(window),area);gtk_widget_realize(window);gtk_widget_realize(area);
+  gtk_gl_area_make_current(GTK_GL_AREA(area));
+  const GError *error=gtk_gl_area_get_error(GTK_GL_AREA(area));
+  int result=error?1:0;
+  if (error) g_printerr("Host GTK OpenGL: %s\n",error->message);
+  else if (!glGetString(GL_VERSION) || !glGetString(GL_RENDERER)) {g_printerr("Host GTK OpenGL returned no version/renderer.\n");result=1;}
+  else g_print("Host GTK OpenGL: %s; renderer: %s; backend: %s\n",glGetString(GL_VERSION),glGetString(GL_RENDERER),G_OBJECT_TYPE_NAME(gdk_display_get_default()));
+  gtk_window_destroy(GTK_WINDOW(window));return result;
+ }
  if (argc==2 && !strcmp(argv[1],"--self-test")) {
   g_assert(dimensions(1920,1080));g_assert(!dimensions(0,1));g_assert(!dimensions(UINT32_MAX,2));g_assert(!dimensions(8192,8192));
   g_assert_cmpuint(qnum(38),==,30);g_assert_cmpuint(qnum(105),==,0x9d);g_assert_cmpuint(qnum(119),==,0xd3);g_assert_cmpuint(qnum(1),==,0);
