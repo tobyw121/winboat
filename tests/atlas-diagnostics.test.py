@@ -134,7 +134,7 @@ class UpdatePayloadTests(unittest.TestCase):
                     self.end_headers()
                     self.wfile.write(b'{"status":"blocked","message":"No console token","errorCode":1008}')
                     return
-                operation = 'launch-ame-ui' if self.path.endswith('launch-ui') else 'restart-oobe'
+                operation = 'restart-ame-ui' if self.path.endswith('restart-ui') else 'launch-ame-ui' if self.path.endswith('launch-ui') else 'restart-oobe'
                 self.send_response(202 if self.headers.get('X-WinBoat-Recovery') == operation else 400)
                 self.end_headers()
                 self.wfile.write(b'{"status":"queued"}')
@@ -145,7 +145,7 @@ class UpdatePayloadTests(unittest.TestCase):
         thread.start()
         try:
             base = f'http://127.0.0.1:{server.server_port}'
-            for flag in [None, '--recover-oobe', '--launch-ame-ui']:
+            for flag in [None, '--recover-oobe', '--launch-ame-ui', '--restart-ame-ui']:
                 requests.clear()
                 argv = ['diagnose-vm.py'] + ([flag] if flag else [])
                 with patch.object(helper, 'endpoint_and_oem', return_value=(base, self.oem)), \
@@ -158,7 +158,7 @@ class UpdatePayloadTests(unittest.TestCase):
                 self.assertEqual(result['atlasStatus']['status'], 'waiting')
                 self.assertEqual(output.stat().st_mode & 0o777, 0o600)
                 expected = ['/version', '/provisioning/atlas/diagnostics', '/provisioning/atlas', '/provisioning/atlas/recovery']
-                route = 'launch-ui' if flag == '--launch-ame-ui' else 'recovery'
+                route = 'restart-ui' if flag == '--restart-ame-ui' else 'launch-ui' if flag == '--launch-ame-ui' else 'recovery'
                 self.assertEqual(requests, expected + (['/provisioning/atlas/' + route + ':POST'] if flag else []))
             fail_launch = True
             capture = io.StringIO()

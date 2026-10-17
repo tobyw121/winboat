@@ -11,6 +11,15 @@ function Select-AtlasStartupLines([string[]]$Lines) {
         }
     }
 }
+function Get-AtlasHandoffPhase([string[]]$Lines) {
+    $phase='unknown'
+    foreach ($line in $Lines) {
+        if ($line -match 'Worker Start["'']?\s*$') { $phase='waiting-for-ui' }
+        elseif ($line -match '(?:WNF Waited|\d{2}:\d{2}:\d{2}\.\d{4}: L)["'']?\s*$') { $phase='handshake-ended-without-window' }
+        elseif ($line -match '(?:Window Launched|WNF Published 104)["'']?\s*$') { $phase='window-launched' }
+    }
+    return $phase
+}
 function Get-AtlasShellKind([string]$Shell, [string]$Client) {
     # The pinned shim embeds repeated separators; Windows accepts those paths.
     if (($Shell -replace '\\{2,}', '\') -eq ('"{0}" --oobe' -f ($Client -replace '\\{2,}', '\'))) { return 'ame-oobe' }
@@ -87,8 +96,12 @@ try {
 $result.observer = [ordered]@{state='unknown';lastResult=$null}
 try {
     $task = Get-ScheduledTask -TaskName 'WinBoatAtlasOOBE'
-    $info = $task | Get-ScheduledTaskInfo
-    $result.observer = [ordered]@{ state = $task.State.ToString(); lastResult = $info.LastTaskResult }
+    if ($null -eq $task) {
+        $result.observer.state = 'not-registered'
+    } else {
+        $info = $task | Get-ScheduledTaskInfo
+        $result.observer = [ordered]@{ state = $task.State.ToString(); lastResult = $info.LastTaskResult }
+    }
 } catch {
     if ($_.FullyQualifiedErrorId -match 'NoMatchingMSFT_ScheduledTaskObjectsFound') {
         $result.observer.state = 'not-registered'
@@ -100,6 +113,7 @@ try {
 try {
     $lines = @(Get-Content -LiteralPath (Join-Path $root 'Logs\Log.yml') -Tail 400)
     $result.startup = @(Select-AtlasStartupLines $lines)
+    $result.handoffPhase = Get-AtlasHandoffPhase $lines
     $result.failureKinds = @(Select-AtlasFailureKinds $lines)
 } catch { $result.errors += 'AME startup log unavailable' }
 try {

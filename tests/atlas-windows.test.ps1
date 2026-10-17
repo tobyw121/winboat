@@ -113,3 +113,6 @@ if ((Get-AtlasWindowKind 'An unexpected initialization error occured') -ne 'init
 Write-Host 'Application crash event and window classification allowlists passed.'
 
 if (Get-AtlasHandoffFailure ([pscustomobject]@{State='Stopped';ExitCode=1067}) 'user' $true) { throw 'A live AME client was treated as a failed playbook solely from the service exit code.' }
+if ((Get-AtlasHandoffPhase @('Message: "06:41:05.2244: Worker Start"','Message: "23:45:08.7598: WNF Waited"')) -ne 'handshake-ended-without-window') {throw 'Ended UI handshake was not classified.'}
+if ((Get-AtlasHandoffPhase @('06:41:05.2244: Worker Start','23:45:08.7598: WNF Waited','23:45:09.1111: Window Launched')) -ne 'window-launched') {throw 'A successful UI launch was mistaken for a stalled client.'}
+if ((Get-AtlasHandoffPhase @('23:45:08.7598: L','23:46:01.1111: Worker Start')) -ne 'waiting-for-ui') {throw 'An earlier timeout was reused for a new service start.'}

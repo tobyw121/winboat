@@ -1,4 +1,6 @@
 using System;
+using System.Diagnostics;
+using System.IO;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
@@ -33,6 +35,32 @@ namespace WinBoat {
         [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
         [DllImport("kernel32.dll", SetLastError = true)] static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
         [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetExitCodeProcess(IntPtr handle, out uint code);
+        [DllImport("advapi32.dll", SetLastError = true)]
+        static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+        public static void ValidateStalled(uint pid, string executable, string setupSid) { Stalled(pid, executable, setupSid, false); }
+        public static void StopStalled(uint pid, string executable, string setupSid) { Stalled(pid, executable, setupSid, true); }
+        static void Stalled(uint pid, string executable, string setupSid, bool stop) {
+            var session = Run(null, setupSid, false).SessionId;
+            using (var process = Process.GetProcessById(checked((int)pid))) {
+                // Hold the process handle through validation and termination.
+                var handle = process.Handle;
+                if (process.SessionId != session || process.MainModule == null ||
+                    !String.Equals(Path.GetFullPath(process.MainModule.FileName), Path.GetFullPath(executable), StringComparison.OrdinalIgnoreCase) ||
+                    (DateTime.UtcNow - process.StartTime.ToUniversalTime()).TotalMinutes < 5)
+                    throw new InvalidOperationException("Not the old setup client in the active console session.");
+                IntPtr token;
+                if (!OpenProcessToken(handle, 8, out token)) throw new Win32Exception(Marshal.GetLastWin32Error());
+                try {
+                    using (var identity = new WindowsIdentity(token)) {
+                        if (identity.User == null || identity.User.Value != setupSid)
+                            throw new InvalidOperationException("The stalled client belongs to another user.");
+                    }
+                } finally { CloseHandle(token); }
+                if (!stop) return;
+                process.Kill();
+                if (!process.WaitForExit(5000)) throw new InvalidOperationException("The stalled client did not exit.");
+            }
+        }
         public static Result Start(string executable, string setupSid) { return Run(executable, setupSid, true); }
         public static void ValidateSession(string setupSid) { Run(null, setupSid, false); }
         static Result Run(string executable, string setupSid, bool launch) {

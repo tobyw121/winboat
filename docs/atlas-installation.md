@@ -330,3 +330,34 @@ Bestätigung wird nach dem Zeitlimit ein unbestätigtes Update gemeldet, statt a
 Diagnosen als neue auszugeben. Die Windows-VM wird dabei nicht neu gestartet.
 Ein bereits entfernter Observer-Task wird als `not-registered` ausgewiesen; echte
 Abfragefehler werden weiterhin separat gemeldet.
+
+### Einmaliger Wiederanlauf nach beendetem UI-Handshake
+
+Der gepinnte AME-Dienst wartet bis zu vier Minuten auf die GUI-Rückmeldung.
+`WNF Waited` ohne anschließendes `Window Launched` und ein beendeter Dienst
+passen zu einem fehlgeschlagenen Handshake; Fehler 1067 allein beweist keinen
+gewöhnlichen Prozessabsturz. `handoffPhase` wertet nur den letzten protokollierten
+Dienststart aus. `windowKind: none` ist keine Desktop-übergreifende Sichtprüfung.
+
+Bei einem verbliebenen AME-Client kann ausdrücklich ein Versuch gestartet werden:
+
+```bash
+python3 scripts/atlas/diagnose-vm.py --update-guest --restart-ame-ui
+```
+
+Dieser Aufruf kann den alten AME-Prozess beenden. Er verlangt einen beendeten
+Handshake ohne protokollierten Fensterstart, Dienstcode 1067, genau einen Client,
+keine anderen Windows-Setup-Prozesse und keinen registrierten Playbook-Abschluss.
+Der native Helfer prüft aktive Konsolensitzung, exakten Exe-Pfad, Setup-SID als
+Prozessbesitzer und mindestens fünf Minuten Prozessalter vor dem Beenden. Er
+hält dabei den Prozesshandle und startet keine Programme als SYSTEM-Desktop-UI.
+Danach startet der originale AME-Client über den vorhandenen Setup-Sitzungstoken
+mit seinem Runtime-Verzeichnis als Arbeitsverzeichnis. Die aktuelle Observer-
+Registrierung wird im Hintergrund angefordert. Alle AME-Aktionsrouten teilen
+sich eine Sperre; eine persistente Markierung verhindert Wiederholungsschleifen.
+
+Die Aktion startet Windows nicht neu, verändert keine Kennwörter und bestätigt
+keinen Atlas-Erfolg. Ein `launched` bestätigt nur den Prozessstart; die Konsole
+und ein späterer Diagnoseabruf müssen Oberfläche und Fortschritt bestätigen.
+Die Tests prüfen Guards, Aktionsrouting und Kompilierung; die tatsächlichen
+Windows-APIs benötigen zusätzlich einen Windows-VM-Lauf.

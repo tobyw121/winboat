@@ -10,9 +10,10 @@ import (
 	"time"
 )
 
+var atlasActionMutex sync.Mutex
+
 // One fixed operation, guarded again inside Windows. No command/path arguments.
 func atlasRecoveryHandler(operation string, recoverOOBE func(context.Context) ([]byte, error)) http.HandlerFunc {
-	var active sync.Mutex
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
@@ -24,11 +25,11 @@ func atlasRecoveryHandler(operation string, recoverOOBE func(context.Context) ([
 			fail(http.StatusBadRequest, "Explicit OOBE recovery header required")
 			return
 		}
-		if !active.TryLock() {
+		if !atlasActionMutex.TryLock() {
 			fail(http.StatusConflict, "Recovery request already active")
 			return
 		}
-		defer active.Unlock()
+		defer atlasActionMutex.Unlock()
 		ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
 		defer cancel()
 		data, err := recoverOOBE(ctx)
