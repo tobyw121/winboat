@@ -1,3 +1,4 @@
+import { hostEnvironment } from './host-environment';
 import { HELIOS_REVISION, HELIOS_GUEST_REVISION, HELIOS_IMAGE, HELIOS_LABEL, HELIOS_RUNTIME_LABEL, HELIOS_RUNTIME_VERSION } from '../../shared/helios';
 const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
@@ -13,7 +14,7 @@ export function heliosBundlePath(): string {
 }
 
 export function getHeliosHost(): { renderNode: string; nvidia: boolean } {
-    const requested = process.env.WINBOAT_HELIOS_RENDER_NODE;
+    const requested = hostEnvironment().WINBOAT_HELIOS_RENDER_NODE;
     if (requested && !/^\/dev\/dri\/renderD\d+$/.test(requested)) throw new Error('Invalid WINBOAT_HELIOS_RENDER_NODE.');
     const nodes = requested ? [path.basename(requested)] : fs.existsSync('/dev/dri') ? fs.readdirSync('/dev/dri').filter(name => /^renderD\d+$/.test(name)).sort() : [];
     for (const name of nodes) {

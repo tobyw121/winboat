@@ -200,3 +200,12 @@ Nur ein ausdrücklich angeforderter Screenshot liest Pixel zur CPU zurück; der
 normale DMA-BUF-Anzeigeweg bleibt davon unberührt. Ohne aktives Bild oder bei
 Dateifehlern zeigt die Statuszeile einen Fehler. Der native Funktionstest prüft
 auch PNG-Erstellung und Bildabmessungen.
+
+### Desktop-Sitzung im Produktionsbuild
+
+Desktop-Variablen werden über Electrons Node-Laufzeit gelesen. Direkte
+`process.env`-Zugriffe im Renderer werden von Vite bei Client-Produktionsbuilds
+ersetzt und können eine vorhandene X11-/Wayland-Sitzung übersehen. Die Korrektur
+benötigt einen neuen WinBoat-Anwendungsbuild; ein Gastdienst-Update allein ändert
+die Desktop-Erkennung nicht. Ein Produktionstest mit Vite prüft DISPLAY,
+WAYLAND_DISPLAY und XDG_RUNTIME_DIR ohne Zugriff auf die echte Benutzerumgebung.

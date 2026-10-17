@@ -1,3 +1,4 @@
+import { hostEnvironment } from './host-environment';
 import { HELIOS_IMAGE } from '../../shared/helios';
 import { HELIOS_DISPLAY_CAPABILITY, HELIOS_DISPLAY_VERSION, HELIOS_DISPLAY_MOUNT,
     heliosDisplayAddress, heliosDisplayBusConfig, heliosDisplayDirectory } from '../../shared/helios-display';
@@ -25,10 +26,10 @@ function binary(): string {
         : path.resolve(remote.app.getAppPath(), '..', '..', 'build/native/winboat-helios-viewer');
 }
 export function localDisplayDirectory(): string {
-    return heliosDisplayDirectory(process.getuid!(), process.env.XDG_RUNTIME_DIR);
+    return heliosDisplayDirectory(process.getuid!(), hostEnvironment().XDG_RUNTIME_DIR);
 }
 export async function requireLocalDisplay(): Promise<void> {
-    if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) throw new Error('Local Desktop needs a running X11 or Wayland desktop session.');
+    if (!hostEnvironment().DISPLAY && !hostEnvironment().WAYLAND_DISPLAY) throw new Error('Local Desktop needs a running X11 or Wayland desktop session.');
     try {
         const { stdout } = await execFile(binary(), ['--version'], { timeout: 3000 });
         if (stdout.trim() !== 'winboat-helios-viewer 3') throw new Error('Viewer protocol mismatch.');
@@ -39,8 +40,9 @@ export async function requireLocalDisplay(): Promise<void> {
 }
 
 async function startBus(): Promise<void> {
-    if (process.env.XDG_RUNTIME_DIR) {
-        const runtime = fs.lstatSync(process.env.XDG_RUNTIME_DIR);
+    const runtimeDirectory = hostEnvironment().XDG_RUNTIME_DIR;
+    if (runtimeDirectory) {
+        const runtime = fs.lstatSync(runtimeDirectory);
         if (!runtime.isDirectory() || runtime.isSymbolicLink() || runtime.uid !== process.getuid!() || (runtime.mode & 0o077)) {
             throw new Error('XDG_RUNTIME_DIR must be a private directory owned by your user.');
         }
