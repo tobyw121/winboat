@@ -1,5 +1,6 @@
 import { requireHelios } from './helios';
-import { prepareLocalDisplay, openLocalDesktop, closeLocalDisplay } from './helios-display';
+import { prepareLocalDisplay, localDisplayDirectory, localDisplayMessage, openLocalDesktop, closeLocalDisplay } from './helios-display';
+import { resolveHeliosDisplay } from '../../shared/helios-display';
 import { ref, type Ref } from "vue";
 import { WINBOAT_DIR, GUEST_API_PORT, GUEST_RDP_PORT, GUEST_QMP_PORT, GUEST_NOVNC_PORT } from "./constants";
 import type { ComposeConfig, GuestServerUpdateResponse, GuestServerVersion, Metrics, WinApp, CustomAppCallbacks } from "../../types";
@@ -488,10 +489,15 @@ export class Winboat {
         try {
             const compose = this.parseCompose();
             if (compose.services.windows.environment.HELIOS === '1') await requireHelios();
-            await prepareLocalDisplay(compose);
+            const preferred = this.#wbConfig!.config.localDisplayPreferred ?? compose.services.windows.environment.HELIOS_DISPLAY === 'dbus';
+            const display = await resolveHeliosDisplay(compose.services.windows, preferred, localDisplayDirectory,
+                candidate => prepareLocalDisplay({ ...compose, services: { ...compose.services, windows: candidate } }));
+            const displayChanged = JSON.stringify(display.service) !== JSON.stringify(compose.services.windows);
+            compose.services.windows = display.service;
+            localDisplayMessage.value = display.unavailableReason ? `Local Desktop remains selected; Browser Display is active. ${display.unavailableReason}` : '';
             this.portMgr.value = await PortManager.parseCompose(compose);
 
-            if(!this.portMgr.value!.composeFormat.every((elem) => compose.services.windows.ports.includes(elem))) {
+            if(displayChanged || !this.portMgr.value!.composeFormat.every((elem) => compose.services.windows.ports.includes(elem))) {
                 compose.services.windows.ports = this.portMgr.value!.composeFormat;
                 await this.replaceCompose(compose);
             }

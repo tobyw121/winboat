@@ -93,13 +93,14 @@
                         <h1 class="text-lg font-semibold my-0 mb-2">Local desktop (experimental)</h1>
                         <p class="text-neutral-400 text-[0.9rem] !pt-0 !mt-0">
                             Open Windows in a native window. Requires GTK4. Browser Display remains available.
-                            Saving this option restarts the VM. Audio and captured gaming mouse input are not included yet.
+                            Applying a display change restarts the VM. Audio and captured gaming mouse input are not included yet.
                             Host boot auto-start is disabled when this mode is enabled. Start the VM from your desktop session.
                         </p>
                     </div>
                     <div class="flex flex-col gap-2 items-end">
-                        <x-switch :toggled="localDisplayEnabled" @toggle="toggleLocalDisplay" size="large"></x-switch>
-                        <x-button v-if="origLocalDisplayEnabled" :disabled="isApplyingChanges || localDisplayState === 'opening'" @click="openLocalDesktop(localBrowserURL)">Open Local Desktop</x-button>
+                        <x-switch :toggled="localDisplayEnabled" :disabled="isApplyingChanges" @toggle="toggleLocalDisplay" size="large"></x-switch>
+                        <x-button v-if="origLocalDisplayEnabled && compose?.services.windows.environment.HELIOS_DISPLAY === 'dbus'" :disabled="isApplyingChanges || localDisplayState === 'opening'" @click="openLocalDesktop(localBrowserURL)">Open Local Desktop</x-button>
+                        <x-button v-else-if="origLocalDisplayEnabled" :disabled="isApplyingChanges" @click="saveDockerCompose()">Retry Local Desktop</x-button>
                         <span v-if="localDisplayMessage" class="text-sm text-neutral-400 max-w-sm">{{ localDisplayMessage }}</span>
                     </div>
                 </x-card>
@@ -502,8 +503,8 @@
 <script setup lang="ts">
 import { configureHelios, HELIOS_IMAGE } from '../../shared/helios';
 import { requireHelios } from '../lib/helios';
-import { configureHeliosDisplay } from '../../shared/helios-display';
-import { requireLocalDisplay, localDisplayDirectory, openLocalDesktop, localDisplayState, localDisplayMessage } from '../lib/helios-display';
+import { resolveHeliosDisplay } from '../../shared/helios-display';
+import { requireLocalDisplay, prepareLocalDisplay, localDisplayDirectory, openLocalDesktop, localDisplayState, localDisplayMessage } from '../lib/helios-display';
 
 import { computed, onMounted, ref } from 'vue';
 import { ContainerStatus, Winboat } from '../lib/winboat';
@@ -563,12 +564,13 @@ const origHeliosEnabled = ref(false);
 const localDisplayEnabled = ref(false);
 const localBrowserURL = computed(() => `http://127.0.0.1:${qmpPortManager.value?.getHostPort(GUEST_NOVNC_PORT) ?? GUEST_NOVNC_PORT}`);
 async function toggleLocalDisplay() {
-    if (!localDisplayEnabled.value) {
-        try { await requireLocalDisplay(); }
-        catch (error) { localDisplayMessage.value = error instanceof Error ? error.message : String(error); return; }
-        autoStartContainer.value = false;
-    }
     localDisplayEnabled.value = !localDisplayEnabled.value;
+    localDisplayMessage.value = '';
+    if (localDisplayEnabled.value) {
+        autoStartContainer.value = false;
+        try { await requireLocalDisplay(); }
+        catch (error) { localDisplayMessage.value = `Selection can be saved. Browser Display will remain active: ${error instanceof Error ? error.message : String(error)}`; }
+    }
 }
 const origLocalDisplayEnabled = ref(false);
 const heliosSupportAvailable = ref(checkHeliosSupport());
@@ -639,7 +641,7 @@ async function assignValues() {
 
     heliosEnabled.value = compose.value.services.windows.image === HELIOS_IMAGE && compose.value.services.windows.environment.HELIOS === '1';
     origHeliosEnabled.value = heliosEnabled.value;
-    localDisplayEnabled.value = compose.value.services.windows.environment.HELIOS_DISPLAY === 'dbus';
+    localDisplayEnabled.value = wbConfig.config.localDisplayPreferred ?? compose.value.services.windows.environment.HELIOS_DISPLAY === 'dbus';
     origLocalDisplayEnabled.value = localDisplayEnabled.value;
     heliosSupportAvailable.value = checkHeliosSupport();
 
@@ -661,6 +663,7 @@ async function assignValues() {
  */
 async function saveDockerCompose() {
     try {
+        const previousCompose = JSON.stringify(winboat.parseCompose());
         compose.value!.services.windows.environment.RAM_SIZE = `${ramGB.value}G`;
         compose.value!.services.windows.environment.CPU_CORES = `${numCores.value}`;
 
@@ -679,9 +682,9 @@ async function saveDockerCompose() {
             heliosEnabled.value, host?.renderNode, host?.nvidia);
         const local = heliosEnabled.value && localDisplayEnabled.value;
         if (local) { autoStartContainer.value = false; compose.value!.services.windows.restart = RESTART_NO; }
-        if (local) await requireLocalDisplay();
-        compose.value!.services.windows = configureHeliosDisplay(compose.value!.services.windows,
-            local, local ? localDisplayDirectory() : undefined);
+        const display = await resolveHeliosDisplay(compose.value!.services.windows, local, localDisplayDirectory,
+            candidate => prepareLocalDisplay({ ...compose.value!, services: { ...compose.value!.services, windows: candidate } }));
+        compose.value!.services.windows = display.service;
         if (heliosEnabled.value && !origHeliosEnabled.value) {
             // The Windows driver needs Venus during its first boot. Switching
             // the host adapter must precede installing it on an existing VM.
@@ -709,7 +712,9 @@ async function saveDockerCompose() {
 
         isApplyingChanges.value = true;
         try {
-            await winboat.replaceCompose(compose.value!);
+            wbConfig.config.localDisplayPreferred = local;
+            localDisplayMessage.value = display.unavailableReason ? `Local Desktop selection saved; Browser Display is active. ${display.unavailableReason}` : '';
+            if (JSON.stringify(compose.value!) !== previousCompose) await winboat.replaceCompose(compose.value!);
             await assignValues();
         } finally {
             isApplyingChanges.value = false;

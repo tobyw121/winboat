@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
 import { build } from 'vite';
+import { createRequire } from 'node:module';
 
 test('production renderer retains Electron desktop variables despite Vite process.env replacement', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'winboat-env-'));
@@ -22,4 +23,27 @@ test('production renderer retains Electron desktop variables despite Vite proces
         assert.equal(window.control, undefined, 'control must reproduce the production replacement');
         assert.equal(window.actual, env);
     } finally { await fs.rm(root, { recursive: true, force: true }); }
+});
+
+test('Local Desktop preference is persisted and reloaded independently of the active Compose transport', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'winboat-preference-'));
+    try {
+        const source = path.resolve('src/renderer/lib/config.ts').replaceAll('\\', '/');
+        await fs.writeFile(path.join(root,'entry.ts'), `import {WinboatConfig} from ${JSON.stringify(source)}; window.config=new WinboatConfig();`);
+        const result = await build({configFile:false,root,logLevel:'silent',build:{write:false,modulePreload:{polyfill:false},rollupOptions:{input:path.join(root,'entry.ts')}}});
+        assert(!Array.isArray(result) && 'output' in result);
+        const output = result.output.find(item => item.type === 'chunk'); assert(output && 'code' in output);
+        const nativeRequire = createRequire(import.meta.url);
+        const reload = () => {
+            const window: {config?: {config:{localDisplayPreferred?:boolean}}} = {};
+            vm.runInNewContext(output.code, {window,console:{log(){},info(){},error(){}},require:(name:string) => name === 'os' ? {...os,homedir:()=>root} : nativeRequire(name)});
+            return window.config!;
+        };
+        const config = reload(); assert.equal(config.config.localDisplayPreferred,undefined);
+        config.config.localDisplayPreferred=true;
+        assert.equal(reload().config.localDisplayPreferred,true);
+        assert.equal(JSON.parse(await fs.readFile(path.join(root,'.winboat/winboat.config.json'),'utf8')).localDisplayPreferred,true);
+        reload().config.localDisplayPreferred=false;
+        assert.equal(reload().config.localDisplayPreferred,false);
+    } finally {await fs.rm(root,{recursive:true,force:true});}
 });

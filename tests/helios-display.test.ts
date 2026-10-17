@@ -2,10 +2,25 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ref, isProxy } from 'vue';
 import { configureHelios } from '../src/shared/helios';
-import { configureHeliosDisplay, preferHeliosDisplay, heliosDisplayAddress, heliosDisplayBusConfig, heliosDisplayDirectory } from '../src/shared/helios-display';
+import { configureHeliosDisplay, preferHeliosDisplay, resolveHeliosDisplay, heliosDisplayAddress, heliosDisplayBusConfig, heliosDisplayDirectory } from '../src/shared/helios-display';
 
 const service = () => ({ image: 'standard', devices: [], environment: { HELIOS: '1', ARGUMENTS: '-qmp tcp:0.0.0.0:7149,server,wait=off' },
     volumes: ['disk:/storage', '/home/alice:/shared'], ports: ['3389:3389'] });
+
+test('a saved native display preference survives unavailable runtime and activates on a later start', async () => {
+    const original = {...service(), restart:'unless-stopped'};
+    const savedPreference = true;
+    const first = await resolveHeliosDisplay(original, savedPreference, () => '/tmp/display', async () => {throw new Error('No desktop session');});
+    assert.equal(first.service.environment.HELIOS_DISPLAY, undefined);
+    assert.equal(first.service.restart, 'no');
+    assert.equal(first.unavailableReason, 'No desktop session');
+    const next = await resolveHeliosDisplay(first.service, savedPreference, () => '/tmp/display', async () => {});
+    assert.equal(next.service.environment.HELIOS_DISPLAY, 'dbus');
+    const disabled = await resolveHeliosDisplay(next.service, false, () => {throw new Error('must not probe');}, async () => {});
+    assert.equal(disabled.service.environment.HELIOS_DISPLAY, undefined);
+    assert.deepEqual(disabled.service.volumes, original.volumes);
+    assert.deepEqual(disabled.service.ports, original.ports);
+});
 
 test('new Helios VMs prefer native display only after its session and runtime are prepared', async () => {
     const original = { ...service(), restart: 'unless-stopped' };

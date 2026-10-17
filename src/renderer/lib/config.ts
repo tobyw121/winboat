@@ -13,6 +13,7 @@ export type WinboatConfigObj = {
     customApps: WinApp[]
     experimentalFeatures: boolean
     multiMonitor: number
+    localDisplayPreferred?: boolean
 };
 
 const defaultConfig: WinboatConfigObj = {

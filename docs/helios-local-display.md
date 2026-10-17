@@ -8,6 +8,19 @@ in der Einrichtung angezeigt. Vorhandene VMs werden nicht automatisch umgestellt
 RemoteApps bleiben verfügbar. Windows und die Grafiktreiber werden durch diesen
 Viewer nicht ersetzt.
 
+Die Auswahl wird unabhängig vom aktiven Anzeigetransport als
+`localDisplayPreferred` in `winboat.config.json` gespeichert. Fehlt beim Speichern
+eine Voraussetzung, bleibt die Auswahl eingeschaltet und Browser Display aktiv.
+**Retry Local Desktop** prüft die Voraussetzungen erneut und übernimmt den
+nativen Transport, sobald er verfügbar ist. Auch beim nächsten VM-Start prüft
+WinBoat die gespeicherte Auswahl erneut. Ein vorübergehender Fehler setzt sie
+nicht zurück. Der automatische Containerstart am Host-Boot bleibt bei dieser
+Auswahl deaktiviert. Ältere Konfigurationen übernehmen zunächst den Compose-Modus.
+
+Für diese Änderung muss die Linux-Anwendung neu gebaut und das neue AppImage
+gestartet werden. `diagnose-vm.py --update-guest` aktualisiert nur den Windows-
+Gastdienst und ersetzt keine laufende WinBoat-Anwendung.
+
 ## Bauen und einschalten
 
 ```bash

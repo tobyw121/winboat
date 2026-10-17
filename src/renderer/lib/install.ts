@@ -1,7 +1,8 @@
 import { configureHelios, validateHeliosProgress, HELIOS_REVISION } from '../../shared/helios';
 import { requireHelios, heliosBundlePath } from './helios';
 import { prepareLocalDisplay, localDisplayDirectory } from './helios-display';
-import { preferHeliosDisplay } from '../../shared/helios-display';
+import { resolveHeliosDisplay } from '../../shared/helios-display';
+import { WinboatConfig } from './config';
 import { configureVmIdentity } from '../../shared/vm-identity';
 import { loadOrCreateVmIdentity } from '../../shared/vm-identity-store';
 import { validateAtlasSelection, validateAtlasProgress, configureAtlasIso, ATLAS_ISO_LABEL, ATLAS_ISO_VERSION } from '../../shared/atlas';
@@ -170,13 +171,12 @@ export class InstallManager {
         const host = this.conf.heliosEnabled ? await requireHelios() : undefined;
         composeContent.services.windows = configureHelios(composeContent.services.windows,
             this.conf.heliosEnabled, host?.renderNode, host?.nvidia);
-        try {
-            const windows = await preferHeliosDisplay(composeContent.services.windows, this.conf.localDisplayEnabled,
-                localDisplayDirectory, candidate => prepareLocalDisplay({ ...composeContent, services: { ...composeContent.services, windows: candidate } }));
-            composeContent.services.windows = windows;
-            this.localDisplayConfigured = windows.environment.HELIOS_DISPLAY === 'dbus';
-        } catch (error) {
-            this.localDisplayUnavailableReason = error instanceof Error ? error.message : String(error);
+        const display = await resolveHeliosDisplay(composeContent.services.windows, this.conf.localDisplayEnabled !== false,
+            localDisplayDirectory, candidate => prepareLocalDisplay({ ...composeContent, services: { ...composeContent.services, windows: candidate } }));
+        composeContent.services.windows = display.service;
+        this.localDisplayConfigured = display.service.environment.HELIOS_DISPLAY === 'dbus';
+        this.localDisplayUnavailableReason = display.unavailableReason;
+        if (this.localDisplayUnavailableReason) {
             logger.warn(`Local Desktop unavailable; using Browser Display: ${this.localDisplayUnavailableReason}`);
         }
         if (this.conf.hardwareIdentityEnabled) {
@@ -220,6 +220,7 @@ export class InstallManager {
         // Write the compose file
         const composeYAML = YAML.stringify(composeContent).replaceAll("null", "");
         fs.writeFileSync(composeFilePath, composeYAML, { encoding: 'utf8' });
+        new WinboatConfig().config.localDisplayPreferred = this.conf.heliosEnabled && this.conf.localDisplayEnabled !== false;
         logger.info(`Creating compose file at: ${composeFilePath}`);
 
     }

@@ -55,3 +55,19 @@ export async function preferHeliosDisplay<T extends { environment: Record<string
     await prepare(candidate);
     return candidate;
 }
+
+/** Resolve a saved preference without overwriting it when the runtime is absent. */
+export async function resolveHeliosDisplay<T extends { environment: Record<string, string>; volumes: string[]; restart: string }>(
+    service: T, preferred: boolean, directory: () => string, prepare: (candidate: T) => Promise<void>,
+): Promise<{ service: T; unavailableReason: string }> {
+    if (!preferred || service.environment.HELIOS !== '1') {
+        return { service: configureHeliosDisplay(service, false), unavailableReason: '' };
+    }
+    try {
+        return { service: await preferHeliosDisplay(service, true, directory, prepare), unavailableReason: '' };
+    } catch (error) {
+        const fallback = configureHeliosDisplay(service, false);
+        fallback.restart = 'no';
+        return { service: fallback, unavailableReason: error instanceof Error ? error.message : String(error) };
+    }
+}
