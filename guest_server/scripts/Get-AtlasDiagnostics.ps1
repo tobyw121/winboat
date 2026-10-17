@@ -170,6 +170,20 @@ try {
     })
 } catch { $result.errors += 'AME setup-account permissions unavailable' }
 try {
+    $result.uiRestartAttempted = Test-Path -LiteralPath (Join-Path $env:ProgramData 'WinBoat\Atlas\ui-restart-attempt.json')
+    $result.clientInspection = @()
+    # Windows PowerShell 5.1 has no $IsWindows automatic variable.
+    if ($env:OS -eq 'Windows_NT') {
+        if (-not ('WinBoat.AtlasProcessDiagnostics' -as [type])) {
+            Add-Type -Path (Join-Path $PSScriptRoot 'AtlasProcessDiagnostics.cs')
+        }
+        $setupSid = if ($account.Count -eq 1) { [string]$account[0].SID } else { '' }
+        $result.clientInspection = @(foreach ($client in @($result.processes | Where-Object {$_.ProcessName -eq 'AME.Client'} | Select-Object -First 2)) {
+            [WinBoat.AtlasProcessDiagnostics]::Inspect([uint32]$client.Id, (Join-Path $root 'OOBE\AME.Client.exe'), $setupSid)
+        })
+    }
+} catch { $result.errors += 'AME native client inspection unavailable' }
+try {
     $key = Get-ItemProperty 'HKLM:\SYSTEM\Setup'
     $result.windowsSetup = [ordered]@{}
     foreach ($name in @('OOBEInProgress','SystemSetupInProgress','SetupType')) {

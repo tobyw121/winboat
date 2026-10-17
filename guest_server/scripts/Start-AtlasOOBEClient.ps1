@@ -32,6 +32,7 @@ function Invoke-AtlasSessionLaunch([string]$Executable, [string]$SID) {
     return [WinBoat.AtlasSessionLauncher]::Start($Executable, $SID)
 }
 if ($LibraryOnly) { return }
+$stage = 'preflight'
 try {
     $root = Join-Path $env:ProgramData 'AME\OOBE'
     $mode = Get-Content -LiteralPath (Join-Path $env:ProgramData 'WinBoat\Atlas\oobe-mode.json') -Raw | ConvertFrom-Json
@@ -47,6 +48,7 @@ try {
     $account = @(Get-CimInstance Win32_UserAccount -Filter "LocalAccount=True AND Name='defaultuser0'")
     if ($account.Count -ne 1) { throw 'Setup account is unavailable.' }
     if ($restartRequested) {
+        $stage = 'validate-stalled-client'
         Import-AtlasSessionLauncher
         $client = @($d.processes | Where-Object {$_.ProcessName -eq 'AME.Client'})[0]
         [WinBoat.AtlasSessionLauncher]::ValidateStalled([uint32]$client.Id, $executable, [string]$account[0].SID)
@@ -61,6 +63,7 @@ try {
         [WinBoat.AtlasSessionLauncher]::StopStalled([uint32]$client.Id, $executable, [string]$account[0].SID)
         if (@(Get-Process -Name 'AME.Client' -ErrorAction SilentlyContinue).Count) { throw 'Another AME client appeared; refusing a duplicate.' }
     }
+    $stage = 'start-service-and-client'
     $launch = Invoke-AtlasSessionLaunch $executable ([string]$account[0].SID)
     if ($null -ne $launch.EarlyExitCode) {
         @{status='failed'; message='The original AME client exited during startup.'; exitCode=$launch.EarlyExitCode} | ConvertTo-Json -Compress
@@ -76,5 +79,8 @@ try {
     $exception = $_.Exception
     while ($null -ne $exception.InnerException) { $exception = $exception.InnerException }
     $code = if ($exception -is [ComponentModel.Win32Exception]) { $exception.NativeErrorCode } else { $exception.HResult }
-    @{status='blocked'; message='Cannot launch AME in an existing setup-user session. No logon, password reset or Windows restart was performed.'; errorCode=$code} | ConvertTo-Json -Compress
+    $reason = if ($null -ne $exception.PSObject.Properties['ReasonCode']) { [string]$exception.ReasonCode } else { 'operation-failed' }
+    # Only our native helper's fixed reason codes, never exception messages.
+    if ($reason -notin @('client-session-mismatch','client-path-mismatch','client-clock-inconsistent','client-younger-than-five-minutes','client-owner-mismatch','client-did-not-exit','console-user-mismatch')) { $reason='operation-failed' }
+    @{status='blocked'; message='AME action could not finish. No logon, password reset or Windows restart was performed.'; stage=$stage; reason=$reason; errorCode=$code} | ConvertTo-Json -Compress
 }

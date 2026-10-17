@@ -333,6 +333,30 @@ Abfragefehler werden weiterhin separat gemeldet.
 
 ### Einmaliger Wiederanlauf nach beendetem UI-Handshake
 
+Wenn ein Wiederanlauf `launched` meldet, aber die Konsole weiterhin „Just a
+moment“ zeigt, keine neue VM anlegen und den Wiederanlauf nicht wiederholen.
+`launched` bestätigt nur den Prozessstart. Zunächst rein lesend prüfen:
+
+```bash
+python3 scripts/atlas/diagnose-vm.py --update-guest
+```
+
+`clientInspection` zeigt für höchstens zwei AME-Prozesse den Besitzer als
+Kategorie, die Übereinstimmung von Programmpfad und Konsolensitzung, Prozessalter,
+bekannte Runtime-Module und Thread-Wartezustände. Die Wartekette des ältesten
+Threads enthält nur numerische Objekttypen und Statuscodes; keine Locknamen,
+fremden Prozess-IDs, Speicherinhalte oder Benutzerinformationen. Desktopnamen
+werden auf `default`, `winlogon`, `other` oder `unavailable` begrenzt. Eine
+fehlgeschlagene native Abfrage wird separat mit Fehlercode ausgewiesen. Diese
+Prüfung beendet keine Prozesse und startet AME nicht erneut.
+
+`uiRestartAttempted` zeigt die persistente Wiederanlaufsperre. Ein blockierter
+Aufruf liefert nun zusätzlich `stage` und einen festen `reason` wie
+`client-owner-mismatch`, `client-path-mismatch` oder
+`client-younger-than-five-minutes`. Ein negatives Prozessalter wird als
+`client-clock-inconsistent` abgelehnt. Keine dieser Prüfungen wird umgangen;
+rohe Ausnahmemeldungen und Anmeldedaten werden nicht ausgegeben.
+
 Der gepinnte AME-Dienst wartet bis zu vier Minuten auf die GUI-Rückmeldung.
 `WNF Waited` ohne anschließendes `Window Launched` und ein beendeter Dienst
 passen zu einem fehlgeschlagenen Handshake; Fehler 1067 allein beweist keinen

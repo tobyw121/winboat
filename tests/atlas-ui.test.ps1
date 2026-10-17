@@ -106,6 +106,14 @@ try {
     $repeat=& (Join-Path $scripts 'Start-AtlasOOBEClient.ps1') -RestartStalled | ConvertFrom-Json
     if ($repeat.status -ne 'blocked' -or [WinBoat.AtlasSessionLauncher]::Stops -ne 1) {throw 'A repeated action bypassed its persistent guard.'}
     Write-Host 'Complete retry dispatch, stop/start sequencing, observer refresh and one-attempt persistence passed with Windows API fixtures.'
+    Remove-Item (Join-Path $root 'ui-restart-attempt.json')
+    [WinBoat.AtlasSessionLauncher]::ValidSession=$false
+    $stops=[WinBoat.AtlasSessionLauncher]::Stops
+    $blocked=& (Join-Path $scripts 'Start-AtlasOOBEClient.ps1') -RestartStalled | ConvertFrom-Json
+    if ($blocked.status -ne 'blocked' -or $blocked.stage -ne 'validate-stalled-client' -or
+        $blocked.errorCode -ne 1008 -or $blocked.reason -ne 'operation-failed' -or
+        [WinBoat.AtlasSessionLauncher]::Stops -ne $stops -or (Test-Path (Join-Path $root 'ui-restart-attempt.json'))) {throw 'Native refusal lost its stage or changed a client before validation.'}
+    Write-Host 'Native validation failure preserves its stage/code and does not consume a retry or stop a client.'
 } finally {
     $env:ProgramData=$oldData; $env:SystemRoot=$oldRoot
     Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue

@@ -10,6 +10,11 @@ namespace WinBoat {
     // Start the original UI as the existing setup user, never as SYSTEM or a
     // different logged-on user. No password, new logon, or profile creation.
     public static class AtlasSessionLauncher {
+        public sealed class GuardException : InvalidOperationException {
+            public string ReasonCode { get; private set; }
+            public GuardException(string code) : base("AME session guard refused the operation.") { ReasonCode = code; }
+        }
+        static void Require(bool condition, string code) { if (!condition) throw new GuardException(code); }
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         struct StartupInfo {
             public int cb;
@@ -44,21 +49,22 @@ namespace WinBoat {
             using (var process = Process.GetProcessById(checked((int)pid))) {
                 // Hold the process handle through validation and termination.
                 var handle = process.Handle;
-                if (process.SessionId != session || process.MainModule == null ||
-                    !String.Equals(Path.GetFullPath(process.MainModule.FileName), Path.GetFullPath(executable), StringComparison.OrdinalIgnoreCase) ||
-                    (DateTime.UtcNow - process.StartTime.ToUniversalTime()).TotalMinutes < 5)
-                    throw new InvalidOperationException("Not the old setup client in the active console session.");
+                Require(process.SessionId == session, "client-session-mismatch");
+                Require(process.MainModule != null && String.Equals(Path.GetFullPath(process.MainModule.FileName),
+                    Path.GetFullPath(executable), StringComparison.OrdinalIgnoreCase), "client-path-mismatch");
+                double age = (DateTime.UtcNow - process.StartTime.ToUniversalTime()).TotalMinutes;
+                Require(age >= 0, "client-clock-inconsistent");
+                Require(age >= 5, "client-younger-than-five-minutes");
                 IntPtr token;
                 if (!OpenProcessToken(handle, 8, out token)) throw new Win32Exception(Marshal.GetLastWin32Error());
                 try {
                     using (var identity = new WindowsIdentity(token)) {
-                        if (identity.User == null || identity.User.Value != setupSid)
-                            throw new InvalidOperationException("The stalled client belongs to another user.");
+                        Require(identity.User != null && identity.User.Value == setupSid, "client-owner-mismatch");
                     }
                 } finally { CloseHandle(token); }
                 if (!stop) return;
                 process.Kill();
-                if (!process.WaitForExit(5000)) throw new InvalidOperationException("The stalled client did not exit.");
+                Require(process.WaitForExit(5000), "client-did-not-exit");
             }
         }
         public static Result Start(string executable, string setupSid) { return Run(executable, setupSid, true); }
@@ -71,8 +77,7 @@ namespace WinBoat {
                 if (session == UInt32.MaxValue) throw new Win32Exception(1008);
                 if (!WTSQueryUserToken(session, out token)) throw new Win32Exception(Marshal.GetLastWin32Error());
                 using (var identity = new WindowsIdentity(token)) {
-                    if (identity.User == null || identity.User.Value != setupSid)
-                        throw new InvalidOperationException("The active session is not the temporary setup account.");
+                    Require(identity.User != null && identity.User.Value == setupSid, "console-user-mismatch");
                     if (!launch) return new Result { SessionId = session };
                     if (!CreateEnvironmentBlock(out environment, token, false))
                         throw new Win32Exception(Marshal.GetLastWin32Error());

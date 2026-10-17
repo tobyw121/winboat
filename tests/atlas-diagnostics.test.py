@@ -85,6 +85,8 @@ class UpdatePayloadTests(unittest.TestCase):
                              (ROOT / 'guest_server/scripts/Get-AtlasDiagnostics.ps1').read_bytes())
             self.assertEqual(archive.read('scripts/AtlasSessionLauncher.cs'),
                              (ROOT / 'guest_server/scripts/AtlasSessionLauncher.cs').read_bytes())
+            self.assertEqual(archive.read('scripts/AtlasProcessDiagnostics.cs'),
+                             (ROOT / 'guest_server/scripts/AtlasProcessDiagnostics.cs').read_bytes())
             for name in ['atlas/oobe-credentials.json', 'atlas/AtlasPlaybook.apbx',
                          'atlas/AME-Beta-v0.8.4.exe', '.winboat-hardware/private.json']:
                 self.assertNotIn(name, names)
