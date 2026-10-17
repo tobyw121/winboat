@@ -140,7 +140,7 @@ npm run test:helios:viewer
 
 Der Viewer-Test baut aus den aktuellen Quellen, prüft die tatsächlichen
 Authentifizierungs-Callbacks aus dem Patch, startet einen privaten Bus und
-QEMU/TCG mit VGA sowie einen GTK-Viewer unter Xvfb. Nur der Test-Viewer-Container
+QEMU/TCG mit VirtIO-VGA sowie einen GTK-Viewer unter Xvfb. Nur der Test-Viewer-Container
 verwendet den Host-PID-Namespace, um einen nativen Host-Viewer nachzubilden.
 Die VM behält ihren eigenen PID-Namespace. QEMU läuft als root, der Viewer als
 Desktop-UID. Der Test verlangt erfolgreiche Registrierung, Softwareframes
@@ -175,3 +175,18 @@ Passwörter aus Dockers `Config.Env` werden nicht abgefragt oder exportiert.
 Mitschnitt an. Dafür sind Python 3 und die lokale Docker-CLI erforderlich.
 Der Recorder wurde mit einem echten QEMU/TCG-Container und kontrolliertem
 `host-signal`-Shutdown geprüft; ein Windows-/GPU-Lauf ist eine gesonderte Prüfung.
+
+### Fenstergröße und Bildpfad
+
+**Resize guest** fordert nach Größenänderungen mit 300 ms Verzögerung die
+Fensterauflösung über QEMUs `Console.SetUIInfo` an. Die Option ist zunächst aus;
+der Windows-Grafiktreiber muss die Anfrage unterstützen. Eine bestätigte
+D-Bus-Anfrage beweist noch keine Auflösungsänderung im Gast. **Keep aspect**
+bewahrt das Seitenverhältnis; ausgeschaltet wird das Bild auf die Fensterfläche
+gestreckt. Die Mauskoordinaten folgen derselben Darstellung. Klicks in schwarze Ränder
+werden nicht an eine alte Mausposition im Gast weitergegeben.
+
+Die Statuszeile nennt die tatsächlich empfangene Auflösung und den bisher
+verwendeten Software-/DMA-BUF-Bildpfad. Der native Softwaretest verlangt auch
+eine erfolgreich beantwortete Auflösungsanfrage. Audio, Zwischenablage, HDR/VRR
+und unbeschränkte Gaming-Maussteuerung bleiben separate Erweiterungen.

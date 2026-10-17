@@ -38,7 +38,7 @@ docker exec "$client" bash /source/native/helios-viewer/build.sh /test/viewer
 docker exec "$client" python3 /source/native/helios-viewer/test-auth.py
 docker run -d --name "$qemu" --network none "${auth_debug[@]}" -v "$temporary:/test:ro" \
     --entrypoint qemu-system-x86_64 "$host_image" -machine q35,accel=tcg -m 128M \
-    -nodefaults -device VGA -display dbus,addr=unix:path=/test/bus >/dev/null
+    -nodefaults -device virtio-vga -display dbus,addr=unix:path=/test/bus >/dev/null
 for ((i=0;i<100;i++)); do
     if docker exec "$client" dbus-send --bus=unix:path=/test/bus --print-reply \
         --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.ListNames | grep -q '"org.qemu"'; then break; fi

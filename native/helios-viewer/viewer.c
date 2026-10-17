@@ -37,7 +37,7 @@ static const char xml[] =
  "</method></interface></node>";
 
 typedef struct {
- GtkWidget *window, *area, *waiting;
+ GtkWidget *window, *area, *waiting, *status;
  GMainLoop *loop;
  GDBusConnection *bus, *peer;
  GDBusProxy *mouse;
@@ -46,7 +46,9 @@ typedef struct {
  GLuint program, vao, texture, source, fbo;
  EGLImageKHR image;
  EGLDisplay display;
- guint width, height;
+ guint width, height, resize_timer, requested_width, requested_height;
+ gboolean auto_resize, stretch, resize_failed, last_dma;
+ guint64 resize_requests;
  guint32 qemu_uid;
  float rect[4];
  gboolean flip, source_flip, ready, registered, cache_valid, held[256], buttons[7], have_position;
@@ -124,6 +126,7 @@ static void key_release(GtkEventControllerKey *controller, guint value, guint co
 }
 static void focus_leave(GtkEventControllerFocus *controller, Viewer *v) {(void)controller;release_input(v);}
 static void viewport(Viewer *v, int w, int h, int *x, int *y, int *dw, int *dh) {
+ if (v->stretch) {*x=0;*y=0;*dw=w;*dh=h;return;}
  double scale=MIN((double)w/MAX(v->width,1u),(double)h/MAX(v->height,1u));
  *dw=MAX(1,(int)(v->width*scale));*dh=MAX(1,(int)(v->height*scale));
  *x=(w-*dw)/2;*y=(h-*dh)/2;
@@ -142,12 +145,17 @@ static void motion(GtkEventControllerMotion *controller, double x, double y, Vie
  v->last_x=x;v->last_y=y;v->have_position=TRUE;
 }
 static void click(GtkGestureClick *gesture, int count, double x, double y, Viewer *v) {
- (void)count;(void)x;(void)y;
+ (void)count;
  guint b=gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture));
  int n=b==1?0:b==2?1:b==3?2:b==8?5:b==9?6:-1;
  if (n<0) return;
  gtk_widget_grab_focus(v->area);
  gboolean pressed=gdk_event_get_event_type(gtk_event_controller_get_current_event(GTK_EVENT_CONTROLLER(gesture)))==GDK_BUTTON_PRESS;
+ if (pressed) {
+  int ox,oy,w,h;viewport(v,gtk_widget_get_width(v->area),gtk_widget_get_height(v->area),&ox,&oy,&w,&h);
+  if (!v->cache_valid || x<ox || y<oy || x>=ox+w || y>=oy+h) return;
+  motion(NULL,x,y,v);
+ }
  input(v,IFACE "Mouse",pressed?"Press":"Release",g_variant_new("(u)",(guint)n));v->buttons[n]=pressed;
 }
 static gboolean scroll(GtkEventControllerScroll *controller, double dx, double dy, Viewer *v) {
@@ -268,7 +276,7 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
   if (ok) {
    glBindTexture(GL_TEXTURE_2D,v->texture);glPixelStorei(GL_UNPACK_ROW_LENGTH,stride/4);
    glTexSubImage2D(GL_TEXTURE_2D,0,x,y,w,h,(format&0x000f0000)==0x00020000?GL_BGRA:GL_RGBA,GL_UNSIGNED_BYTE,bytes);
-   glPixelStorei(GL_UNPACK_ROW_LENGTH,0);v->flip=TRUE;v->cache_valid=TRUE;v->software_frames++;
+   glPixelStorei(GL_UNPACK_ROW_LENGTH,0);v->flip=TRUE;v->cache_valid=TRUE;v->software_frames++;v->last_dma=FALSE;
    gtk_gl_area_queue_render(GTK_GL_AREA(v->area));
   }
   g_variant_unref(pixels);
@@ -289,7 +297,7 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
  } else if (!strcmp(name,"UpdateDMABUF")) {
   gint x,y,w,h;g_variant_get(params,"(iiii)",&x,&y,&w,&h);
   ok=region(v,x,y,w,h) && copy_dma(v);
-  if (ok) {v->dma_frames++;gtk_gl_area_queue_render(GTK_GL_AREA(v->area));}
+  if (ok) {v->dma_frames++;v->last_dma=TRUE;gtk_gl_area_queue_render(GTK_GL_AREA(v->area));}
  } else if (!strcmp(name,"Disable")) {
   discard_source(v);v->width=v->height=0;v->cache_valid=FALSE;release_input(v);gtk_gl_area_queue_render(GTK_GL_AREA(v->area));
  } else if (!strcmp(name,"MouseSet")) {
@@ -393,12 +401,50 @@ static void secure_attention(GtkButton *button,Viewer *v) {
  for (guint i=G_N_ELEMENTS(keys);i>0;i--) input(v,IFACE "Keyboard","Release",g_variant_new("(u)",keys[i-1]));
  gtk_widget_grab_focus(v->area);
 }
+static void resize_finished(GObject *object,GAsyncResult *result,gpointer data) {
+ Viewer *v=data;GError *error=NULL;
+ GVariant *reply=g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),result,&error);
+ if (!reply) {
+  v->resize_failed=TRUE;
+  gtk_label_set_text(GTK_LABEL(v->status),"Guest resolution request failed; scaling remains available.");
+  g_printerr("Guest resize request failed: %s\n",error->message);g_error_free(error);
+ } else {v->resize_failed=FALSE;v->resize_requests++;g_variant_unref(reply);}
+}
+static gboolean request_resize(gpointer data) {
+ Viewer *v=data;v->resize_timer=0;
+ if (!v->auto_resize) return G_SOURCE_REMOVE;
+ guint scale=gtk_widget_get_scale_factor(v->area);
+ guint w=gtk_widget_get_width(v->area)*scale,h=gtk_widget_get_height(v->area)*scale;
+ if (!dimensions(w,h) || w<640 || h<480 || (w==v->requested_width && h==v->requested_height)) return G_SOURCE_REMOVE;
+ v->requested_width=w;v->requested_height=h;
+ g_dbus_connection_call(v->bus,"org.qemu",CONSOLE,IFACE "Console","SetUIInfo",
+  g_variant_new("(qqiiuu)",(guint16)(w*25.4/96),(guint16)(h*25.4/96),0,0,w,h),
+  NULL,G_DBUS_CALL_FLAGS_NONE,2000,NULL,resize_finished,v);
+ return G_SOURCE_REMOVE;
+}
+static void resized(GtkGLArea *area,int width,int height,Viewer *v) {
+ (void)area;(void)width;(void)height;v->have_position=FALSE;
+ if (v->resize_timer) g_source_remove(v->resize_timer);
+ v->resize_timer=v->auto_resize?g_timeout_add(300,request_resize,v):0;
+ gtk_gl_area_queue_render(GTK_GL_AREA(v->area));
+}
+static void resize_toggled(GtkCheckButton *button,Viewer *v) {
+ v->auto_resize=gtk_check_button_get_active(button);v->requested_width=0;v->requested_height=0;
+ resized(GTK_GL_AREA(v->area),0,0,v);gtk_widget_grab_focus(v->area);
+}
+static void aspect_toggled(GtkCheckButton *button,Viewer *v) {
+ v->stretch=!gtk_check_button_get_active(button);v->have_position=FALSE;
+ gtk_gl_area_queue_render(GTK_GL_AREA(v->area));gtk_widget_grab_focus(v->area);
+}
 static gboolean stats(Viewer *v) {
+ char *text=g_strdup_printf("%u × %u · %s · guest resize: %s (%" G_GUINT64_FORMAT " accepted)",
+  v->width,v->height,v->last_dma?"DMA-BUF / OpenGL":"Software / OpenGL",v->resize_failed?"unsupported/failed":v->auto_resize?"enabled":"off",v->resize_requests);
+ gtk_label_set_text(GTK_LABEL(v->status),text);g_free(text);
  g_printerr("{\"event\":\"statistics\",\"dmabufFrames\":%" G_GUINT64_FORMAT ",\"softwareFrames\":%" G_GUINT64_FORMAT ",\"renderedFrames\":%" G_GUINT64_FORMAT "}\n",v->dma_frames,v->software_frames,v->rendered_frames);return G_SOURCE_CONTINUE;
 }
 static gboolean smoke_done(Viewer *v) {
  stats(v);
- if (!v->ready || !v->software_frames || !v->rendered_frames) fatal(v,"Software display smoke test received no rendered frame.");
+ if (!v->ready || !v->software_frames || !v->rendered_frames || !v->resize_requests) fatal(v,"Software display smoke test requires rendered frames and an accepted guest resize request.");
  else {
   /* Readback exists only in this explicit test mode, not the normal viewer. */
   gtk_gl_area_make_current(GTK_GL_AREA(v->area));gtk_gl_area_attach_buffers(GTK_GL_AREA(v->area));
@@ -426,6 +472,9 @@ int main(int argc,char **argv) {
  if (argc==2 && !strcmp(argv[1],"--self-test")) {
   g_assert(dimensions(1920,1080));g_assert(!dimensions(0,1));g_assert(!dimensions(UINT32_MAX,2));g_assert(!dimensions(8192,8192));
   g_assert_cmpuint(qnum(38),==,30);g_assert_cmpuint(qnum(105),==,0x9d);g_assert_cmpuint(qnum(119),==,0xd3);g_assert_cmpuint(qnum(1),==,0);
+  Viewer geometry={.width=1920,.height=1080};int x,y,w,h;
+  viewport(&geometry,800,600,&x,&y,&w,&h);g_assert_cmpint(w,==,800);g_assert_cmpint(h,==,450);g_assert_cmpint(y,==,75);
+  geometry.stretch=TRUE;viewport(&geometry,800,600,&x,&y,&w,&h);g_assert_cmpint(h,==,600);g_assert_cmpint(y,==,0);
   Viewer check={.qemu_uid=1234};GCredentials *credentials=g_credentials_new();
   g_assert_true(g_credentials_set_unix_user(credentials,1234,NULL));
   g_assert_true(authorize_qemu(NULL,NULL,credentials,&check));check.qemu_uid=5678;
@@ -461,11 +510,21 @@ int main(int argc,char **argv) {
  v.waiting=gtk_label_new("Waiting for the Windows display…\nCtrl+Alt+Enter toggles fullscreen.");
  gtk_widget_set_halign(v.waiting,GTK_ALIGN_CENTER);gtk_widget_set_valign(v.waiting,GTK_ALIGN_CENTER);
  gtk_widget_set_can_target(v.waiting,FALSE);gtk_overlay_add_overlay(GTK_OVERLAY(overlay),v.waiting);
- gtk_window_set_child(GTK_WINDOW(v.window),overlay);
+ GtkWidget *layout=gtk_box_new(GTK_ORIENTATION_VERTICAL,0);gtk_widget_set_vexpand(overlay,TRUE);
+ v.status=gtk_label_new("Connecting to Windows display…");gtk_widget_set_can_target(v.status,FALSE);
+ gtk_box_append(GTK_BOX(layout),overlay);gtk_box_append(GTK_BOX(layout),v.status);
+ gtk_window_set_child(GTK_WINDOW(v.window),layout);
  GtkWidget *bar=gtk_header_bar_new(),*full=gtk_button_new_with_label("Fullscreen"),*attention=gtk_button_new_with_label("Ctrl+Alt+Del");
  gtk_widget_set_tooltip_text(full,"Toggle fullscreen (Ctrl+Alt+Enter)");
  gtk_widget_set_tooltip_text(attention,"Send Ctrl+Alt+Delete to Windows");
  gtk_header_bar_pack_start(GTK_HEADER_BAR(bar),attention);gtk_header_bar_pack_end(GTK_HEADER_BAR(bar),full);
+ GtkWidget *resize=gtk_check_button_new_with_label("Resize guest"),*aspect=gtk_check_button_new_with_label("Keep aspect");
+ gtk_check_button_set_active(GTK_CHECK_BUTTON(aspect),TRUE);
+ gtk_widget_set_tooltip_text(resize,"Request window resolution from Windows; requires guest driver support.");
+ gtk_header_bar_pack_start(GTK_HEADER_BAR(bar),resize);gtk_header_bar_pack_start(GTK_HEADER_BAR(bar),aspect);
+ g_signal_connect(resize,"toggled",G_CALLBACK(resize_toggled),&v);g_signal_connect(aspect,"toggled",G_CALLBACK(aspect_toggled),&v);
+ g_signal_connect(v.area,"resize",G_CALLBACK(resized),&v);
+ if (smoke) gtk_check_button_set_active(GTK_CHECK_BUTTON(resize),TRUE);
  gtk_window_set_titlebar(GTK_WINDOW(v.window),bar);
  g_signal_connect(full,"clicked",G_CALLBACK(fullscreen_clicked),&v);g_signal_connect(attention,"clicked",G_CALLBACK(secure_attention),&v);
  g_unix_signal_add(SIGTERM,terminate_viewer,&v);g_unix_signal_add(SIGINT,terminate_viewer,&v);
@@ -480,6 +539,7 @@ int main(int argc,char **argv) {
  gtk_window_present(GTK_WINDOW(v.window));gtk_widget_grab_focus(v.area);g_timeout_add_seconds(5,(GSourceFunc)stats,&v);
  if (smoke) g_timeout_add_seconds(8,(GSourceFunc)smoke_done,&v);
  if (!v.exit_code) g_main_loop_run(v.loop);
+ if (v.resize_timer) g_source_remove(v.resize_timer);
  release_input(&v);g_dbus_connection_flush_sync(v.bus,NULL,NULL);
  if (v.peer) {g_signal_handlers_disconnect_by_data(v.peer,&v);g_dbus_connection_close_sync(v.peer,NULL,NULL);g_object_unref(v.peer);}
  g_signal_handlers_disconnect_by_data(v.bus,&v);
