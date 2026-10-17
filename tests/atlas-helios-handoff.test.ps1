@@ -19,6 +19,11 @@ try {
     @{username='ConfiguredUser'} | ConvertTo-Json | Set-Content (Join-Path $media 'atlas.json')
     '12345' | Set-Content (Join-Path $root 'helios-started') # obsolete PID must not suppress recovery
     $global:handoffRegistrations=0; $global:handoffLaunches=0; $global:handoffStarts=0; $global:handoffRemovals=0
+    $global:handoffRestarts=0
+    function shutdown.exe {
+        if($global:handoffActive -or $global:handoffApplied.ErrorLevel -ne 0){throw 'Restart interrupted AME or unverified Atlas.'}
+        $global:handoffRestarts++;$global:LASTEXITCODE=0
+    }
     function Get-ItemProperty {[CmdletBinding()]param($Path) return $global:handoffApplied}
     function Get-CimInstance {
         param($ClassName,$Filter)
@@ -53,9 +58,15 @@ try {
     $registered=& $script -Register | ConvertFrom-Json
     if($registered.status -ne 'queued' -or $global:handoffRegistrations -ne 1 -or $global:handoffLaunches -or
         -not (Test-Path (Join-Path $env:ProgramData 'WinBoat/Helios/helios-build.json'))){throw 'Registration launched a driver before Atlas rebooted or did not stage the API receipt.'}
+    $global:handoffActive=$true
+    & $script
+    if($global:handoffRestarts){throw 'An active AME client was interrupted.'}
+    $global:handoffActive=$false
     & $script
     $state=Get-Content (Join-Path $root 'helios-handoff.json') -Raw | ConvertFrom-Json
-    if($state.status -ne 'waiting' -or $global:handoffLaunches){throw 'Same-boot Atlas completion must wait for its restart.'}
+    if($state.status -ne 'waiting' -or $global:handoffLaunches -or $global:handoffRestarts -ne 1){throw 'Same-boot Atlas completion did not queue its one required restart.'}
+    & $script
+    if($global:handoffRestarts -ne 1){throw 'Same-boot logon duplicated the Atlas restart.'}
     $global:handoffBoot=$now
     $global:handoffActive=$true
     & $script
@@ -83,7 +94,12 @@ try {
     $global:handoffApplied.ErrorLevel=1
     $failed=& $script -Register | ConvertFrom-Json
     if($failed.status -ne 'failed' -or $global:handoffRegistrations -ne 1 -or $global:handoffLaunches -ne 2){throw 'Unconfirmed Atlas completion launched Helios.'}
-    Write-Host 'Durable post-Atlas handoff, reboot ordering, old PID recovery, resume ownership and installed-driver preservation passed with Windows API fixtures.'
+    $global:handoffApplied.ErrorLevel=0
+    $global:handoffBoot=$now.AddMinutes(-90)
+    & $script
+    $state=Get-Content (Join-Path $root 'helios-handoff.json') -Raw | ConvertFrom-Json
+    if($state.status -ne 'failed' -or $state.message -notmatch 'reboot loop prevented' -or $global:handoffRestarts -ne 1){throw 'An unconfirmed post-Atlas reboot loop was accepted.'}
+    Write-Host 'Durable post-Atlas handoff, one guarded reboot after AME exits, reboot ordering, old PID/cache recovery, resume ownership and installed-driver preservation passed with Windows API fixtures.'
 } finally {
     $env:ProgramData=$previousData; $env:ProgramFiles=$previousFiles; $env:SystemRoot=$previousSystem
     Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue

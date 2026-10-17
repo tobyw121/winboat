@@ -122,6 +122,10 @@ and stage guard prevents repeated reboot loops. Failures stop this task and are
 published to the UI. Installation only completes after the guest status says
 `finished`, an installation record exists, and the revision matches the pinned guest revision in the host/guest compatibility lock.
 No unauthenticated driver-install or reboot API endpoint is added.
+For Atlas/OOBE, the handoff first verifies the selected playbook's success and
+the configured Windows account. If AME has exited without restarting Windows,
+it schedules one guarded Atlas restart before handing control to Helios. It
+never interrupts an active AME GUI; Helios's two driver restarts are separate.
 
 ## Existing VMs and rollback
 

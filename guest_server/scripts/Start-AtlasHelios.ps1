@@ -50,7 +50,25 @@ try {
         $queued | ConvertTo-Json -Compress
         exit 0
     }
-    if ($phase -ne 'ready') {Publish-Handoff 'waiting' 'Waiting for Atlas to finish its Windows restart before starting Helios.' | Out-Null; exit 0}
+    if ($phase -ne 'ready') {
+        # The observer already confirmed the selected playbook and account.
+        # AME may exit without rebooting. Finish that handoff once, but never
+        # interrupt its GUI or start a driver in the pre-reboot Atlas session.
+        if (-not $active) {
+            $restartPath=Join-Path $root 'helios-reboot.json'
+            if (Test-Path -LiteralPath $restartPath) {
+                $restart=Get-Content -LiteralPath $restartPath -Raw | ConvertFrom-Json
+                if ($restart.boot -ne $boot.ToString('o')) {throw 'Atlas-to-Helios reboot loop prevented. Inspect the Atlas completion record.'}
+            } else {
+                @{boot=$boot.ToString('o');createdAtUtc=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content -LiteralPath $restartPath -Encoding UTF8
+                Publish-Handoff 'waiting' 'Atlas completed and its client exited. Restarting Windows once before automatic Helios installation.' | Out-Null
+                & shutdown.exe /r /t 15 /d p:2:4 /c 'WinBoat: completing Atlas before the selected Helios installation'
+                if ($LASTEXITCODE -ne 0) {throw 'Windows refused the Atlas-to-Helios restart.'}
+            }
+        }
+        Publish-Handoff 'waiting' 'Waiting for Atlas to finish its Windows restart before starting Helios.' | Out-Null
+        exit 0
+    }
     $statePath=Join-Path $env:ProgramData 'Helios\provisioning-status.json'
     $state=if (Test-Path -LiteralPath $statePath) {Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json} else {$null}
     $installed=Test-Path -LiteralPath (Join-Path $env:ProgramData 'Helios\install-state.json')
