@@ -8,11 +8,37 @@ on:
       - 'helios/host/**'
       - 'helios/source.lock.json'
       - 'tests/helios-qemu-dbus.*'
+      - 'native/helios-viewer/**'
+      - 'src/shared/helios-viewer.ts'
+      - 'src/shared/helios-display.ts'
+      - 'src/renderer/lib/helios-display.ts'
+      - 'src/renderer/lib/specs.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'src/shared/prerequisites.ts'
+      - 'src/renderer/lib/winboat.ts'
+      - 'src/renderer/lib/install.ts'
+      - 'tests/helios-viewer*'
+      - 'tests/host-environment.test.ts'
+      - 'tests/specs.test.ts'
   pull_request:
     paths:
       - 'helios/host/**'
       - 'helios/source.lock.json'
       - 'tests/helios-qemu-dbus.*'
+      - 'native/helios-viewer/**'
+      - 'src/shared/helios-viewer.ts'
+      - 'src/shared/helios-display.ts'
+      - 'src/renderer/lib/helios-display.ts'
+      - 'src/renderer/lib/specs.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'src/shared/prerequisites.ts'
+      - 'src/renderer/lib/winboat.ts'
+      - 'src/renderer/lib/install.ts'
+      - 'tests/helios-viewer*'
+      - 'tests/host-environment.test.ts'
+      - 'tests/specs.test.ts'
 permissions:
   contents: read
 jobs:
@@ -29,3 +55,24 @@ jobs:
           sudo apt-get install -y --no-install-recommends gcc pkg-config libglib2.0-dev libepoxy-dev libpixman-1-dev libegl-mesa0 libgl1-mesa-dri
       - name: Test pinned QEMU patches with real Mesa and protocol fixtures
         run: python3 tests/helios-qemu-dbus.py
+
+  viewer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install viewer test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential pkg-config libgtk-4-dev libepoxy-dev xvfb xauth dbus python3-gi libgl1-mesa-dri
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Test automatic session lifecycle and optional FreeRDP
+        run: npm run test:helios
+      - name: Test real viewer adapter loss, fallback and recovery
+        run: bash tests/helios-viewer-render.sh

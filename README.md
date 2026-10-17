@@ -49,7 +49,7 @@ Before running WinBoat, ensure your system meets the following requirements:
   - [Installation Guide](https://docs.docker.com/compose/install/#plugin-linux-only)
 - **Docker User Group**: Add your user to the `docker` group
   - [Setup Instructions](https://docs.docker.com/engine/install/linux-postinstall/#manage-docker-as-a-non-root-user)
-- **FreeRDP**: Required for remote desktop connection (Please make sure you have **Version 3.x.x** with sound support included)
+- **FreeRDP** (optional): Required for RemoteApps and RDP desktop connections. Local Desktop and Browser Display work without it. Use **Version 3.x.x** with sound support when needed.
   - [Installation Guide](https://github.com/FreeRDP/FreeRDP/wiki/PreBuilds)
 - [OPTIONAL] **Kernel Modules**: The `iptables` / `nftables` and `iptable_nat` kernel modules can be loaded for network autodiscovery and better shared filesystem performance, but this is not obligatory in newer versions of WinBoat
   - [Module loading instructions](https://rentry.org/rmfq2e5e)

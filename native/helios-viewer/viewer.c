@@ -67,7 +67,7 @@ struct Viewer {
  Viewer *parent, *active;
  GPtrArray *consoles;
  char *console_path;
- guint console_id, pending_consoles;
+ guint console_id, pending_consoles, reconnect_timer;
  gboolean accelerated, seen_update, cursor_visible;
 };
 static Viewer *displayed(Viewer *v) {return v->active?v->active:v;}
@@ -398,6 +398,9 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
   }
   g_variant_unref(pixels);
  } else ok=FALSE;
+ GLenum frame_error=GL_NO_ERROR;
+ if (!gtk_gl_area_get_error(GTK_GL_AREA(v->area))) frame_error=glGetError();
+ if (frame_error!=GL_NO_ERROR) ok=FALSE;
  if (ok) {
   if (!strcmp(name,"Update") || !strcmp(name,"UpdateDMABUF")) v->seen_update=TRUE;
   if (v->parent) select_console(v->parent);
@@ -406,9 +409,18 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
   g_dbus_method_invocation_return_value(inv,NULL);
  }
  else {
-  g_dbus_method_invocation_return_dbus_error(inv,"org.winboat.Helios.DisplayError","Unsupported or invalid frame; use Browser Display.");
-  char *message=g_strdup_printf("%s failed. Browser Display remains available.",name);
-  fatal(v,message);g_free(message);
+  g_dbus_method_invocation_return_dbus_error(inv,"org.winboat.Helios.DisplayError","Invalid adapter frame; waiting for the next scanout.");
+  if (v->parent && frame_error!=GL_CONTEXT_LOST && !gtk_gl_area_get_error(GTK_GL_AREA(v->area))) {
+   /* A broken adapter frame must not tear down another working console. */
+   discard_source(v);
+   for (int i=0;i<8 && glGetError()!=GL_NO_ERROR;i++) {} /* Isolate adapter GL errors. */
+   v->cache_valid=FALSE;v->seen_update=FALSE;v->width=v->height=0;
+   select_console(v->parent);gtk_gl_area_queue_render(GTK_GL_AREA(v->area));
+   g_printerr("Console %u: %s failed; waiting for a new scanout.\n",v->console_id,name);
+  } else {
+   char *message=g_strdup_printf("%s failed: host OpenGL display error.",name);
+   fatal(v,message);g_free(message);
+  }
  }
 }
 static GVariant *property(GDBusConnection *conn,const gchar *sender,const gchar *path,const gchar *iface,const gchar *name,GError **err,gpointer data) {
@@ -422,6 +434,30 @@ static void maybe_ready(Viewer *v) {
   root->ready=TRUE;g_print("{\"event\":\"ready\",\"transport\":\"dbus\"}\n");fflush(stdout);
  }
 }
+static void registered(GObject *object,GAsyncResult *result,gpointer data);
+static gboolean reconnect_console(gpointer data) {
+ Viewer *d=data;d->reconnect_timer=0;d->registered=FALSE;
+ if (d->peer) {
+  g_signal_handlers_disconnect_by_data(d->peer,d);
+  if (!g_dbus_connection_is_closed(d->peer)) g_dbus_connection_close_sync(d->peer,NULL,NULL);
+  g_clear_object(&d->peer);
+ }
+ g_dbus_connection_call_with_unix_fd_list(d->bus,"org.qemu",d->console_path,IFACE "Console","RegisterListenerReverse",NULL,
+  G_VARIANT_TYPE("(h)"),G_DBUS_CALL_FLAGS_NONE,10000,NULL,NULL,registered,d);
+ return G_SOURCE_REMOVE;
+}
+static void listener_failed(Viewer *d,const char *message) {
+ Viewer *root=d->parent;
+ gboolean other=FALSE;
+ if (root && root->ready) for (guint i=0;i<root->consoles->len;i++) {
+  Viewer *candidate=g_ptr_array_index(root->consoles,i);
+  if (candidate!=d && candidate->peer && !g_dbus_connection_is_closed(candidate->peer)) other=TRUE;
+ }
+ if (!other) {fatal(d,message);return;}
+ d->cache_valid=FALSE;d->seen_update=FALSE;d->registered=FALSE;select_console(root);
+ g_printerr("Console %u: %s; reconnecting this adapter.\n",d->console_id,message);
+ if (!d->reconnect_timer) d->reconnect_timer=g_timeout_add_seconds(1,reconnect_console,d);
+}
 static void closed(GDBusConnection *conn,gboolean vanished,GError *err,Viewer *v) {
  (void)conn;(void)vanished;(void)err;
  if (v->parent) {
@@ -433,6 +469,7 @@ static void closed(GDBusConnection *conn,gboolean vanished,GError *err,Viewer *v
    if (!d->peer || !g_dbus_connection_is_closed(d->peer)) disconnected=FALSE;
   }
   if (disconnected) fatal(root,"All QEMU display consoles disconnected.");
+  else listener_failed(v,"Display listener disconnected");
   return;
  }
  fatal(v,"The QEMU display disconnected. Browser Display remains available.");
@@ -440,7 +477,7 @@ static void closed(GDBusConnection *conn,gboolean vanished,GError *err,Viewer *v
 static void peer_ready(GObject *object,GAsyncResult *result,gpointer data) {
  (void)object;Viewer *v=data;GError *err=NULL;
  v->peer=g_dbus_connection_new_finish(result,&err);
- if (!v->peer) {fatal(v,err->message);g_error_free(err);return;}
+ if (!v->peer) {listener_failed(v,err->message);g_error_free(err);return;}
  for (int i=0;v->info->interfaces[i];i++) {
   if (!g_dbus_connection_register_object(v->peer,LISTENER,v->info->interfaces[i],&vtable,v,NULL,&err)) {
    fatal(v,err->message);g_error_free(err);return;
@@ -453,13 +490,13 @@ static void registered(GObject *object,GAsyncResult *result,gpointer data) {
  Viewer *v=data;GError *err=NULL;
  GUnixFDList *fds=NULL;
  GVariant *reply=g_dbus_connection_call_with_unix_fd_list_finish(G_DBUS_CONNECTION(object),&fds,result,&err);
- if (!reply) {fatal(v,err->message);g_error_free(err);return;}
+ if (!reply) {listener_failed(v,err->message);g_error_free(err);return;}
  int handle;g_variant_get(reply,"(h)",&handle);g_variant_unref(reply);
  int fd=fds?g_unix_fd_list_get(fds,handle,&err):-1;
  g_clear_object(&fds);
- if (fd<0) {fatal(v,err?err->message:"QEMU returned no listener FD");g_clear_error(&err);return;}
+ if (fd<0) {listener_failed(v,err?err->message:"QEMU returned no listener FD");g_clear_error(&err);return;}
  GSocket *socket=g_socket_new_from_fd(fd,&err);
- if (!socket) {close(fd);fatal(v,err->message);g_error_free(err);return;}
+ if (!socket) {close(fd);listener_failed(v,err->message);g_error_free(err);return;}
  GSocketConnection *stream=g_socket_connection_factory_create_connection(socket);g_object_unref(socket);
  /* QEMU creates the socket pair: SO_PEERCRED must identify QEMU, rather than
   * this viewer. Authenticate on the host, where its process is visible.
@@ -778,13 +815,14 @@ int main(int argc,char **argv) {
  g_signal_connect(buttons,"pressed",G_CALLBACK(click),&v);g_signal_connect(buttons,"released",G_CALLBACK(click),&v);gtk_widget_add_controller(v.area,GTK_EVENT_CONTROLLER(buttons));
  GtkEventController *wheel=gtk_event_controller_scroll_new(GTK_EVENT_CONTROLLER_SCROLL_BOTH_AXES|GTK_EVENT_CONTROLLER_SCROLL_DISCRETE);g_signal_connect(wheel,"scroll",G_CALLBACK(scroll),&v);gtk_widget_add_controller(v.area,wheel);
  gtk_window_present(GTK_WINDOW(v.window));gtk_widget_grab_focus(v.area);g_timeout_add_seconds(5,(GSourceFunc)stats,&v);
- if (smoke) g_timeout_add_seconds(8,(GSourceFunc)smoke_done,&v);
+ if (smoke) g_timeout_add_seconds(12,(GSourceFunc)smoke_done,&v);
  if (!v.exit_code) g_main_loop_run(v.loop);
  if (v.resize_timer) g_source_remove(v.resize_timer);
  g_clear_pointer(&v.screenshot_path,g_free);
  release_input(&v);g_dbus_connection_flush_sync(v.bus,NULL,NULL);
  for (guint i=0;i<v.consoles->len;i++) {
   Viewer *d=g_ptr_array_index(v.consoles,i);
+  if (d->reconnect_timer) g_source_remove(d->reconnect_timer);
   if (d->peer) {g_signal_handlers_disconnect_by_data(d->peer,d);g_dbus_connection_close_sync(d->peer,NULL,NULL);g_object_unref(d->peer);}
   g_clear_object(&d->mouse);g_clear_object(&d->cursor);g_free(d->console_path);g_free(d);
  }

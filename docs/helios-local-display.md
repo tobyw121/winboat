@@ -97,7 +97,7 @@ werden beim normalen Schließen und beim Stoppsignal freigegeben. Anzeige und
 Windows-Anmeldung sind unabhängig: Ein fehlender Windows-Benutzer oder eine
 blockierte AME-OOBE wird durch den Wechsel des Anzeigefensters nicht repariert.
 
-Die Einstellung prüft Viewer-Version und Image-Fähigkeitslabel `dbus-v5`.
+Die Einstellung prüft Viewer-Version und Image-Fähigkeitslabel `dbus-v6`.
 Ein älteres Host-Image muss neu gebaut werden. Schlägt die Viewer-Anmeldung oder
 Frame-Übernahme fehl, meldet WinBoat den Fehler und bietet einen erneuten
 Verbindungsversuch. Ein laufender nativer GL-Modus besitzt keinen VNC-Listener.
@@ -344,7 +344,7 @@ erzwungen. Ein erfolgreicher Software-Test ersetzt weiterhin keinen Test mit
 der physischen Host-GPU.
 
 Diese Änderung benötigt nur eine neu gebaute Linux-Anwendung einschließlich des
-nativen Viewers. Das Host-Image mit `dbus-v5` und die Windows-Installation müssen
+nativen Viewers. Das Host-Image mit `dbus-v6` und die Windows-Installation müssen
 dafür nicht ersetzt werden.
 
 Wenn der neue Viewer weiterhin keinen GL-Kontext erstellen kann, liefert
@@ -380,7 +380,7 @@ Dafür das **Host-Image neu bauen**, einschließlich der QEMU-Patches:
 ```
 
 `--skip-host` und der Austausch allein des AppImages reichen für diesen
-QEMU-Fix nicht. Das neue AppImage verlangt das Host-Label `dbus-v5`, sodass
+QEMU-Fix nicht. Das neue AppImage verlangt das Host-Label `dbus-v6`, sodass
 ein altes Image vor dem nächsten lokalen VM-Start erkannt wird. Danach die
 bestehende VM mit dem neuen Image erneut starten; die Windows-Festplatte
 muss dafür nicht gelöscht werden.
@@ -392,3 +392,35 @@ Entwicklungspakete für GLib/GIO, libepoxy und pixman. Die ursprünglichen
 Textur-Callbacks müssen im Regressionstest scheitern; die gepatchten Varianten
 müssen mit und ohne pixman-Änderungsregionen bestehen. Windows und ein echter
 DMA-BUF-Export über die physische GPU werden dadurch nicht getestet.
+
+### Automatisches Öffnen, Wiederverbinden und VGA-Rückfall
+
+Im lokalen Modus öffnet sich Local Desktop beim VM-Start und beim Erkennen einer
+bereits laufenden VM. Die Windows-Installation startet denselben automatischen
+Verbindungsaufbau, ohne auf den Gastdienst oder eine RDP-Sitzung zu warten.
+Solange die VM läuft, werden Startfehler und unerwartete Viewer-Abbrüche mit
+1 bis höchstens 10 Sekunden Abstand erneut versucht. Gleichzeitige Öffnungen
+erzeugen nur ein Fenster. Ein absichtlich geschlossenes Fenster bleibt bis zum
+nächsten VM-Start oder einem manuellen Öffnen geschlossen. Stoppen der VM beendet
+Viewer und ausstehende Wiederverbindungen; eine Pause lässt das Fenster stehen.
+
+Das Host-Image `dbus-v6` behält im lokalen Modus VGA auch nach abgeschlossener
+Treiberinstallation bei. Bei `Disable`, fehlerhaften Helios-Bildern oder einem
+verlorenen Adapter-Listener wechselt der Viewer zur verfügbaren VGA-Ausgabe.
+Ein verlorener Listener wird im bestehenden Fenster erneut angemeldet. Sobald
+Helios wieder gültige Scanout- und Update-Nachrichten liefert, wechselt das Bild
+zurück. Die anderen Adapter-Listener bleiben währenddessen geöffnet.
+
+Die VGA-Ausgabe muss in Windows aktiviert sein. Ein stiller Treiberhänger ohne
+Fehler- oder Disable-Nachricht lässt sich allein an ausbleibenden Bildern nicht
+zuverlässig von einem unveränderten Desktop unterscheiden. Ein vollständiger
+Windows-/QEMU-Absturz benötigt weiterhin einen VM-Neustart.
+
+FreeRDP ist für Local Desktop und Browser Display optional. Es startet erst bei
+Nutzung einer RemoteApp oder eines RDP-Desktops. **RDP Monitoring** bleibt
+standardmäßig ausgeschaltet. Der lokale Viewer startet keine RDP-Sitzung.
+
+Für `dbus-v6` Host-Image und Anwendung über `./scripts/build-helios.sh`
+aktualisieren und die bestehende VM neu starten, damit VGA wieder angehängt ist.
+Eine ausdrücklich gesetzte `HELIOS_BOOTSTRAP_DISPLAY=0` bleibt ein Opt-out;
+damit ist kein separater VGA-Rückfall möglich.

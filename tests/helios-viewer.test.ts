@@ -52,3 +52,44 @@ test('a process exiting before its handshake rejects startup', async () => {
     const f = fixture(); const rejected = assert.rejects(f.open(), /disconnected/);
     f.children[0].emit('close', 0); await rejected; assert.equal(f.states.at(-1), 'failed');
 });
+
+test('automatic startup retries until QEMU is ready and recovers a crashed viewer', async t => {
+    t.mock.timers.enable({apis: ['setTimeout']});
+    const f = fixture();
+    f.viewer.setAutomatic(true, message => f.failures.push(message));
+    f.viewer.setAutomatic(true, message => f.failures.push(message));
+    assert.equal(f.children.length, 1);
+    f.children[0].emit('close', 1);
+    await Promise.resolve();
+    t.mock.timers.tick(1000);
+    assert.equal(f.children.length, 2);
+    f.children[1].ready(); await Promise.resolve();
+    assert.equal(f.states.at(-1), 'ready');
+    f.children[1].emit('close', 1);
+    t.mock.timers.tick(1000);
+    assert.equal(f.children.length, 3);
+    f.children[2].ready(); await Promise.resolve();
+    f.viewer.close();
+});
+test('VM stop cancels a pending automatic reconnect and stale events cannot reopen it', async t => {
+    t.mock.timers.enable({apis: ['setTimeout']});
+    const f = fixture(); f.viewer.setAutomatic(true, () => {});
+    f.children[0].emit('close', 1); await Promise.resolve();
+    f.viewer.setAutomatic(false, () => {});
+    t.mock.timers.tick(30000);
+    assert.equal(f.children.length, 1);assert.equal(f.states.at(-1), 'closed');
+    f.children[0].emit('error', new Error('late failure'));
+    t.mock.timers.tick(30000);assert.equal(f.children.length, 1);
+    f.viewer.setAutomatic(true, () => {});
+    assert.equal(f.children.length, 2);
+    f.children[1].ready(); await Promise.resolve(); f.viewer.close();
+});
+test('an intentional window close remains closed until a new VM lifecycle', async t => {
+    t.mock.timers.enable({apis: ['setTimeout']});
+    const f = fixture(); f.viewer.setAutomatic(true, () => {});
+    f.children[0].ready(); await Promise.resolve(); f.children[0].emit('close', 0);
+    f.viewer.setAutomatic(true, () => {});t.mock.timers.tick(30000);
+    assert.equal(f.children.length, 1);
+    f.viewer.setAutomatic(false, () => {});f.viewer.setAutomatic(true, () => {});
+    assert.equal(f.children.length, 2);f.children[1].ready();await Promise.resolve();f.viewer.close();
+});

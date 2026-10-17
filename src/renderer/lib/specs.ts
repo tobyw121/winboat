@@ -5,27 +5,8 @@ const { exec }: typeof import('child_process') = require('child_process');
 const { promisify }: typeof import('util') = require('util');
 const execAsync = promisify(exec);
 
-export function satisfiesPrequisites(specs: Specs) {
-    return specs.dockerInstalled &&
-        specs.dockerComposeInstalled &&
-        specs.dockerIsRunning &&
-        specs.dockerIsInUserGroups &&
-        specs.freeRDP3Installed &&
-        specs.kvmEnabled &&
-        specs.ramGB >= 4 &&
-        specs.cpuCores >= 2
-}
-
-export const defaultSpecs: Specs = {
-    cpuCores: 0,
-    ramGB: 0,
-    kvmEnabled: false,
-    dockerInstalled: false,
-    dockerComposeInstalled: false,
-    dockerIsRunning: false,
-    dockerIsInUserGroups: false,
-    freeRDP3Installed: false
-}
+import { defaultSpecs } from '../../shared/prerequisites';
+export { defaultSpecs, satisfiesPrequisites } from '../../shared/prerequisites';
 
 export async function getSpecs() {
     const specs: Specs = { ...defaultSpecs };

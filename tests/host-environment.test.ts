@@ -70,9 +70,9 @@ test('Windows installation opens its native console before the guest health API 
             load(id) {
                 if (id === '\0ports-fixture') return 'export class PortManager {}';
                 if (id === '\0display-fixture') return `
-                    export async function openLocalDesktop() {
-                        window.opens++;
-                        if (window.viewerFails) throw new Error('Viewer unavailable');
+                    export function followLocalDisplay(enabled) {
+                        if (enabled) window.opens++;
+                        window.reconnecting = enabled && window.viewerFails;
                     }
                     export async function prepareLocalDisplay() {}
                     export function localDisplayDirectory() {return '/tmp/display-fixture';}

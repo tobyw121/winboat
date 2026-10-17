@@ -102,16 +102,20 @@ export async function prepareLocalDisplay(compose: ComposeConfig): Promise<void>
 export async function launchLocalDisplay(onFailure: (message: string) => void): Promise<void> {
     await viewer.open(onFailure);
 }
+function displayFailure(message: string): void {
+    console.warn(`Local Helios display: ${message}`);
+    localDisplayState.value = 'failed';
+    localDisplayMessage.value = `${message} Retry Local Desktop, or disable Local desktop in Configuration and save to restart this VM with Browser Display. Windows data is preserved.`;
+}
+
+export function followLocalDisplay(enabled: boolean): void {
+    viewer.setAutomatic(enabled, displayFailure);
+}
 export function closeLocalDisplay(): void { viewer.close(); }
 export function openLocalDesktop(): Promise<void> {
     if (!openingConsole) openingConsole = (async () => {
-        const fallback = (message: string) => {
-            console.warn(`Local Helios display: ${message}`);
-            localDisplayState.value = 'failed';
-            localDisplayMessage.value = `${message} Retry Local Desktop, or disable Local desktop in Configuration and save to restart this VM with Browser Display. Windows data is preserved.`;
-        };
-        try { await launchLocalDisplay(fallback); }
-        catch (error) { if (!(error instanceof Error && error.name === 'AbortError')) fallback(error instanceof Error ? error.message : String(error)); }
+        try { await launchLocalDisplay(displayFailure); }
+        catch (error) { if (!(error instanceof Error && error.name === 'AbortError')) console.warn(`Local Desktop start: ${error}`); }
     })().finally(() => { openingConsole = undefined; });
     return openingConsole;
 }

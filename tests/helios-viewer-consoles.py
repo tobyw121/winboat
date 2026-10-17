@@ -158,16 +158,37 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
                 elif stage == 1:
                     call(1, 'Update', '(iiiiuuay)', (0, 0, 32, 24, 128, 0x20020888, pixels))
                 elif stage == 2:
+                    # A corrupt Helios update must fall back within the same
+                    # viewer process instead of destroying the VGA listener.
+                    try:
+                        call(1, 'Update', '(iiiiuuay)', (8192, 0, 32, 24, 128, 0x20020888, pixels))
+                    except GLib.Error as error:
+                        assert 'DisplayError' in str(error), error
+                    else:
+                        raise AssertionError('Invalid frame was accepted')
+                elif stage == 3:
+                    call(1, 'Scanout', '(uuuuay)', (32, 24, 128, 0x20020888, pixels))
+                    call(1, 'Update', '(iiiiuuay)', (0, 0, 32, 24, 128, 0x20020888, pixels))
+                elif stage == 4:
+                    peers[1].close_sync(None)
+                elif stage == 5:
+                    # The native viewer must re-register the lost adapter;
+                    # this test never reopens the window or restarts QEMU.
+                    if peers[1].is_closed():
+                        return True
+                    call(1, 'Scanout', '(uuuuay)', (32, 24, 128, 0x20020888, pixels))
+                    call(1, 'Update', '(iiiiuuay)', (0, 0, 32, 24, 128, 0x20020888, pixels))
+                elif stage == 6:
                     # Stale VGA updates must not steal the accelerated desktop.
                     call(0, 'Update', '(iiiiuuay)', (0, 0, 32, 24, 128, 0x20020888, red))
                     call(0, 'Disable', '()', ())
-                elif stage == 3:
+                elif stage == 7:
                     call(1, 'Disable', '()', ())
                     call(0, 'Scanout', '(uuuuay)', (32, 24, 128, 0x20020888, red))
-                elif stage == 4:
+                elif stage == 8:
                     call(1, 'Scanout', '(uuuuay)', (32, 24, 128, 0x20020888, pixels))
                     call(1, 'Update', '(iiiiuuay)', (0, 0, 32, 24, 128, 0x20020888, pixels))
-                elif stage == 8:
+                elif stage == 11:
                     visible_frame()
                     visible = True
                 stage += 1
@@ -188,7 +209,7 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
         assert viewer.returncode == 0, errors
         assert '{"event":"ready","transport":"dbus"}' in output, output
         selections = [json.loads(line)['id'] for line in errors.splitlines() if line.startswith('{"event":"console"')]
-        assert selections == [0, 1, 0, 1], (selections, errors)
+        assert selections == [0, 1, 0, 1, 0, 1, 0, 1], (selections, errors)
         assert 1 in resizes, 'Guest resize did not follow the selected Helios console'
         assert visible, 'The actual displayed frame was not checked'
         magic, dimensions, maximum, pixels = (root / 'helios-viewer-smoke.ppm').read_bytes().split(b'\n', 3)
@@ -200,7 +221,7 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
             y = int(height / 2 + (-6 if index < 2 else 6) * scale)
             offset = (y * width + x) * 3
             assert tuple(pixels[offset:offset + 3]) == color, (index, pixels[offset:offset + 3])
-        print('Actual viewer: serialized QEMU listener authentication, VGA -> Helios, stale VGA isolation, disable/re-enable handoff, console-1 resize, visible X11 frame and four readback corners passed.')
+        print('Actual viewer: serialized QEMU listener authentication, VGA -> Helios, invalid Helios frame fallback, lost-adapter reconnect, stale VGA isolation, disable/re-enable handoff, console-1 resize, visible X11 frame and four readback corners passed.')
         # Losing one adapter is recoverable; losing the VM must report failure
         # instead of leaving a permanently blank window marked as connected.
         peers.clear()

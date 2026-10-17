@@ -1,5 +1,5 @@
 import { requireHelios } from './helios';
-import { prepareLocalDisplay, localDisplayDirectory, localDisplayMessage, openLocalDesktop, closeLocalDisplay } from './helios-display';
+import { prepareLocalDisplay, localDisplayDirectory, localDisplayMessage, openLocalDesktop, closeLocalDisplay, followLocalDisplay } from './helios-display';
 import { resolveHeliosDisplay } from '../../shared/helios-display';
 import { ref, type Ref } from "vue";
 import { WINBOAT_DIR, GUEST_API_PORT, GUEST_RDP_PORT, GUEST_QMP_PORT, GUEST_NOVNC_PORT } from "./constants";
@@ -226,7 +226,7 @@ export class Winboat {
         }
         
         // This is a special interval which will never be destroyed
-        this.#containerInterval = setInterval(async () => {
+        this.#containerInterval = setInterval(skipWhileRunning(async () => {
             const _containerStatus = await this.getContainerStatus();
 
             if (_containerStatus !== this.containerStatus.value) {
@@ -234,12 +234,14 @@ export class Winboat {
                 logger.info(`Winboat Container state changed to ${_containerStatus}`);
 
                 if (_containerStatus === ContainerStatus.Running) {
+                    followLocalDisplay(this.parseCompose().services.windows.environment.HELIOS_DISPLAY === 'dbus');
                     await this.createAPIInvervals();
                 } else {
+                    if (_containerStatus !== ContainerStatus.Paused && _containerStatus !== ContainerStatus.Restarting) followLocalDisplay(false);
                     await this.destroyAPIInvervals();
                 }
             }
-        }, 1000);
+        }), 1000);
 
         this.#wbConfig = new WinboatConfig();
 
@@ -509,6 +511,7 @@ export class Winboat {
 
             const { stdout } = await execAsync("docker container start WinBoat");
             logger.info(`Container response: ${stdout}`);
+            followLocalDisplay(compose.services.windows.environment.HELIOS_DISPLAY === 'dbus');
         } catch(e) {
             logger.error("There was an error performing the container action.");
             logger.error(e);
@@ -676,6 +679,11 @@ export class Winboat {
         logger.info(`Launching app: ${app.Name} at path ${app.Path}`);
         
         const freeRDPBin = await getFreeRDP();
+        if (!freeRDPBin) {
+            await remote.dialog.showMessageBox({type: 'info', message: 'FreeRDP 3 is required for this application.',
+                detail: 'Install FreeRDP 3 to use RemoteApps or an RDP desktop. Local Desktop and Browser Display work without it.'});
+            return;
+        }
 
         logger.info(`Using FreeRDP Command: '${freeRDPBin}'`);
 

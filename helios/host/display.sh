@@ -28,7 +28,8 @@ bootstrap="$HELIOS_BOOTSTRAP_DISPLAY"
 if [[ "$bootstrap" == auto ]]; then
     bootstrap=1
     ready="${STORAGE:-/storage}/.winboat-helios-ready"
-    if [[ -f "$ready" && ! -L "$ready" && "$(stat -c%s "$ready")" == 41 && "$(cat "$ready")" == "$HELIOS_REVISION" ]]; then
+    # Local Desktop keeps a VGA recovery console after driver installation.
+    if [[ "${HELIOS_DISPLAY:-novnc}" != dbus && -f "$ready" && ! -L "$ready" && "$(stat -c%s "$ready")" == 41 && "$(cat "$ready")" == "$HELIOS_REVISION" ]]; then
         bootstrap=0
     fi
 fi
