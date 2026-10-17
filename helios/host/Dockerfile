@@ -34,11 +34,15 @@ RUN --mount=type=secret,id=proxy_ca \
     set -eu; \
     if [ -f /run/secrets/proxy_ca ]; then export SSL_CERT_FILE=/run/secrets/proxy_ca PIP_CERT=/run/secrets/proxy_ca; fi; \
     apt-get ${SSL_CERT_FILE:+-o Acquire::https::CaInfo=$SSL_CERT_FILE} update; \
-    apt-get ${SSL_CERT_FILE:+-o Acquire::https::CaInfo=$SSL_CERT_FILE} install -y --no-install-recommends python3 python3-hivex python3-pip; \
+    apt-get ${SSL_CERT_FILE:+-o Acquire::https::CaInfo=$SSL_CERT_FILE} install -y --no-install-recommends python3 python3-hivex python3-pip smbclient passwd; \
     python3 -m pip install --target /opt/winboat-atlas/lib --require-hashes --no-compile -r /tmp/atlas-requirements.txt; \
     rm -rf /var/lib/apt/lists/* /root/.cache/pip
 ENV PYTHONPATH=/opt/winboat-atlas/lib
 LABEL org.winboat.atlas.iso="ame-oobe-v3"
+COPY resources/shared-folders/ /opt/winboat-shares/
+RUN mv /run/samba.sh /run/samba-upstream.sh && \
+    install -m 755 /opt/winboat-shares/samba.sh /run/samba.sh
+LABEL org.winboat.shared-folders="authenticated-v1"
 FROM atlas-runtime AS runtime
 RUN --mount=type=secret,id=proxy_ca \
     set -eu; \

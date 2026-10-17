@@ -69,6 +69,9 @@ You can download the latest Linux builds under the [Releases](https://github.com
 
 ## Building WinBoat
 
+Configurable Linux directories, read-only shares and direct Windows paths are
+documented in [Shared folders](docs/shared-folders.md).
+
 ### Build this branch with Helios
 
 WinBoat and the pinned Helios root sources are included in this repository

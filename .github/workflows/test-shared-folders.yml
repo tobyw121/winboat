@@ -1,0 +1,55 @@
+name: Test shared folders
+on:
+  workflow_dispatch:
+  push:
+    branches: [work]
+    paths:
+      - '.github/workflows/test-shared-folders.yml'
+      - 'resources/shared-folders/**'
+      - 'src/shared/**'
+      - 'src/renderer/components/SharedFolders.vue'
+      - 'src/renderer/lib/shared-folders.ts'
+      - 'src/renderer/views/Config.vue'
+      - 'src/renderer/views/SetupUI.vue'
+      - 'tests/shared-folders*'
+      - 'package*.json'
+  pull_request:
+    paths:
+      - '.github/workflows/test-shared-folders.yml'
+      - 'resources/shared-folders/**'
+      - 'src/shared/**'
+      - 'src/renderer/**'
+      - 'tests/shared-folders*'
+      - 'package*.json'
+permissions:
+  contents: read
+jobs:
+  shares:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Test configuration and volume preservation
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run test:shared-folders
+      - name: Test authenticated SMB3 against the real server
+        shell: bash
+        run: |
+          set -euo pipefail
+          fixture=$(mktemp -d)
+          trap 'rm -rf "$fixture"' EXIT
+          mkdir "$fixture/projects" "$fixture/archive"
+          chmod 700 "$fixture/projects" "$fixture/archive"
+          docker run --rm --entrypoint bash \
+            --mount "type=bind,src=$PWD,dst=/source,readonly" \
+            --mount "type=bind,src=$fixture/projects,dst=/winboat-shares/Projects" \
+            --mount "type=bind,src=$fixture/archive,dst=/winboat-shares/Archive,readonly" \
+            debian:trixie-slim -c \
+            'set -e; apt-get update; apt-get install -y --no-install-recommends python3 samba smbclient passwd; python3 /source/tests/shared-folders-smb.py'

@@ -530,32 +530,14 @@
                         </div>
                     </div>
     
-                    <!-- Home Folder Sharing -->
+                    <!-- Shared Folders -->
                     <div v-if="currentStep.id === StepID.SHOULD_SHARE_HOME_FOLDER" class="step-block">
                         <h1 class="text-3xl font-semibold">{{ currentStep.title }}</h1>
-                        <p class="text-lg text-gray-400">
-                            WinBoat allows you to share your Linux home folder with the Windows virtual machine, here you can choose whether to enable this feature or not.
-                        </p>
-                        <p class="text-lg text-gray-400">
-                            <b>⚠️ WARNING:</b>
-                            Sharing your home folder exposes your Linux files to Windows specific malware and viruses.
-                            Only enable this feature if you understand the risks involved. Always be careful with the files you download and open in Windows.
-                        </p>
-
-                        <x-checkbox
-                            class="my-4"
-                            @toggle="homeFolderSharing = !homeFolderSharing"
-                            :toggled="homeFolderSharing"
-                        >
-                            <x-label><strong>Enable home folder sharing</strong></x-label>
-                            <x-label class="text-gray-400">
-                                By checking this box, you aknowledge the risks mentioned above
-                            </x-label>
-                        </x-checkbox>
+                        <SharedFolders v-model="sharedFolders" />
 
                         <div class="flex flex-row gap-4 mt-6">
                             <x-button class="px-6" @click="currentStepIdx--">Back</x-button>
-                            <x-button toggled class="px-6" @click="currentStepIdx++">Next</x-button>
+                            <x-button toggled class="px-6" :disabled="sharedFolderErrors(sharedFolders).length > 0" @click="currentStepIdx++">Next</x-button>
                         </div>
                     </div>
 
@@ -678,6 +660,8 @@
 </template>
 
 <script setup lang="ts">
+import SharedFolders from '../components/SharedFolders.vue';
+import {sharedFolderErrors, type SharedFolder} from '../../shared/shared-folders';
 import { openLocalDesktop, localDisplayState, localDisplayMessage } from '../lib/helios-display';
 import { Icon } from '@iconify/vue';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
@@ -756,7 +740,7 @@ const steps: Step[] = [
     },
         {
         id: StepID.SHOULD_SHARE_HOME_FOLDER,
-        title: "Home Folder Sharing",
+        title: "Shared Folders",
         icon: "line-md:link",
     },
     {
@@ -796,7 +780,7 @@ const diskSpaceGB = ref(32);
 const username = ref("winboat");
 const password = ref("");
 const confirmPassword = ref("");
-const homeFolderSharing = ref(false);
+const sharedFolders = ref<SharedFolder[]>([]);
 const heliosEnabled = ref(true);
 const localDisplayEnabled = ref(true);
 const localDisplayConfigured = ref(false);
@@ -987,7 +971,8 @@ function install() {
         diskSpaceGB: diskSpaceGB.value,
         username: username.value,
         password: password.value,
-        shareHomeFolder: homeFolderSharing.value,
+        shareHomeFolder: false,
+        sharedFolders: sharedFolders.value,
         heliosEnabled: heliosEnabled.value && heliosSupportAvailable.value,
         localDisplayEnabled: localDisplayEnabled.value,
         hardwareIdentityEnabled: hardwareIdentityEnabled.value,

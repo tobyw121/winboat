@@ -1,3 +1,5 @@
+import type { ComposeVolume } from './shared/compose-volumes';
+import type { SharedFolder } from './shared/shared-folders';
 import { type WindowsVersionKey } from "./renderer/lib/constants";
 import { type Winboat } from "./renderer/lib/winboat";
 
@@ -23,6 +25,7 @@ export type InstallConfiguration = {
     password: string;
     customIsoPath?: string;
     shareHomeFolder: boolean;
+    sharedFolders?: SharedFolder[];
     heliosEnabled: boolean;
     localDisplayEnabled?: boolean;
     hardwareIdentityEnabled: boolean;
@@ -73,7 +76,8 @@ export type ComposeConfig = {
             cap_add: string[];
             stop_grace_period: string;
             restart: string;
-            volumes: string[];
+            volumes: ComposeVolume[];
+            'x-winboat-shared-folders'?: SharedFolder[];
             devices: string[];
         };
     };

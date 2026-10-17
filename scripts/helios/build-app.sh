@@ -11,6 +11,7 @@ python3 scripts/helios/verify-source.py
 python3 tests/helios-build-update.test.py
 npm run helios:stage -- resources/helios
 npm run test:helios
+npm run test:shared-folders
 npm run test:virgl
 npm run test:packaging
 npm run test:atlas
@@ -29,6 +30,7 @@ find dist -maxdepth 1 -type f \( -name '*.AppImage' -o -name '*.deb' -o -name '*
 cp resources/helios/HeliosSetup.exe resources/helios/helios-build.json /out/
 cp docs/build-helios-local.md /out/BUILD-INSTRUCTIONS.md
 cp docs/helios-local-display.md /out/LOCAL-DISPLAY.md
+cp docs/shared-folders.md /out/SHARED-FOLDERS.md
 cp docs/vm-hardware-profile.md /out/vm-hardware-profile.md
 cp docs/atlas-installation.md /out/atlas-installation.md
 node --input-type=module - <<'JS' > /out/BUILD-INFO.json

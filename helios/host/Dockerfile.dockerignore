@@ -12,3 +12,6 @@
 !resources/
 !resources/atlas-tools/
 !resources/atlas-tools/requirements.txt
+
+!resources/shared-folders/
+!resources/shared-folders/**

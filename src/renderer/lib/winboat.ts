@@ -1,3 +1,5 @@
+import { validateConfiguredShares } from './shared-folders';
+import { volumeTarget, volumeSource } from '../../shared/compose-volumes';
 import { requireHelios } from './helios';
 import { prepareLocalDisplay, localDisplayDirectory, localDisplayMessage, openLocalDesktop, closeLocalDisplay, followLocalDisplay } from './helios-display';
 import { resolveHeliosDisplay } from '../../shared/helios-display';
@@ -22,11 +24,12 @@ const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
 const process: typeof import('process') = require('process');
 const { promisify }: typeof import('util') = require('util');
-const { exec }: typeof import('child_process') = require('child_process');
+const { exec, execFile }: typeof import('child_process') = require('child_process');
 const remote: typeof import('@electron/remote') = require('@electron/remote');
 const FormData: typeof import('form-data') = require('form-data');
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 const USAGE_PATH = path.join(WINBOAT_DIR, 'appUsage.json');
 export const logger = createLogger(path.join(WINBOAT_DIR, 'winboat.log'));
 
@@ -496,6 +499,7 @@ export class Winboat {
         try {
             const compose = this.parseCompose();
             if (compose.services.windows.environment.HELIOS === '1') await requireHelios();
+            await validateConfiguredShares(compose.services.windows);
             const preferred = this.#wbConfig!.config.localDisplayPreferred ?? compose.services.windows.environment.HELIOS_DISPLAY === 'dbus';
             const display = await resolveHeliosDisplay(compose.services.windows, preferred, localDisplayDirectory,
                 candidate => prepareLocalDisplay({ ...compose, services: { ...compose.services, windows: candidate } }));
@@ -575,6 +579,7 @@ export class Winboat {
     async replaceCompose(composeConfig: ComposeConfig) {
         if (composeConfig.services.windows.environment.HELIOS === '1') await requireHelios();
         await prepareLocalDisplay(composeConfig);
+        await validateConfiguredShares(composeConfig.services.windows);
         logger.info("Going to replace compose config");
         this.containerActionLoading.value = true;
 
@@ -586,7 +591,7 @@ export class Winboat {
         }
 
         // 1. Compose down the current container
-        await execAsync(`docker compose -f ${composeFilePath} down`);
+        await execFileAsync('docker', ['compose', '-f', composeFilePath, 'down']);
 
         // 2. Create a backup directory if it doesn't exist
         const backupDir = path.join(WINBOAT_DIR, 'backup');
@@ -601,12 +606,12 @@ export class Winboat {
         logger.info(`Backed up current compose at: ${path.join(backupDir, backupFile)}`);
 
         // 4. Write new compose file
-        const newComposeYAML = PrettyYAML.stringify(composeConfig).replaceAll("null", "");
+        const newComposeYAML = PrettyYAML.stringify(composeConfig);
         fs.writeFileSync(composeFilePath, newComposeYAML, { encoding: 'utf8' });
         logger.info(`Wrote new compose file to: ${composeFilePath}`);
 
         // 5. Deploy the container with the new compose file
-        await execAsync(`docker compose -f ${composeFilePath} up -d`);
+        await execFileAsync('docker', ['compose', '-f', composeFilePath, 'up', '-d']);
 
         logger.info("Replace compose config completed, successfully deployed new container");
 
@@ -626,13 +631,13 @@ export class Winboat {
 
         // 3. Remove the container volume or folder
         const compose = this.parseCompose();
-        const storage = compose.services.windows.volumes.find(vol => vol.includes('/storage'));
-        if (storage?.startsWith("data:")) {
+        const storage = compose.services.windows.volumes.find(vol => volumeTarget(vol) === '/storage');
+        if (storage && volumeSource(storage) === "data") {
             // In this case we have a volume (legacy)
             await execAsync("docker volume rm winboat_data");
             console.info("Removed volume");
         } else {
-            const storageFolder = storage?.split(":").at(0) ?? null;
+            const storageFolder = storage ? volumeSource(storage) ?? null : null;
             if (storageFolder && fs.existsSync(storageFolder)) {
                 fs.rmSync(storageFolder, { recursive: true, force: true });
                 console.info(`Removed storage folder at ${storageFolder}`);

@@ -1,3 +1,5 @@
+import { prepareSharedFolders } from './shared-folders';
+import { volumeTarget } from '../../shared/compose-volumes';
 import { configureHelios, validateHeliosProgress, HELIOS_REVISION } from '../../shared/helios';
 import { requireHelios, heliosBundlePath } from './helios';
 import { prepareLocalDisplay, localDisplayDirectory, followLocalDisplay } from './helios-display';
@@ -198,7 +200,7 @@ export class InstallManager {
         }
 
         // Storage folder mapping
-        const storageFolderIdx = composeContent.services.windows.volumes.findIndex(vol => vol.includes('/storage'));
+        const storageFolderIdx = composeContent.services.windows.volumes.findIndex(vol => volumeTarget(vol) === '/storage');
         if (storageFolderIdx !== -1) {
             composeContent.services.windows.volumes[storageFolderIdx] = `${this.conf.installFolder}:/storage`;
         } else {
@@ -206,19 +208,13 @@ export class InstallManager {
             composeContent.services.windows.volumes.push(`${this.conf.installFolder}:/storage`);
         }
 
-        // Home folder mapping
-        if (!this.conf.shareHomeFolder) {
-            const sharedFolderIdx = composeContent.services.windows.volumes.findIndex(vol => vol.includes('/shared'));
-            if (sharedFolderIdx !== -1) {
-                composeContent.services.windows.volumes.splice(sharedFolderIdx, 1);
-                logger.info("Removed home folder sharing as per user configuration");
-            } else {
-                logger.info("No home folder sharing volume found, nothing to remove");
-            }
-        }
+        // Resolve legacy home sharing into explicit, validated bind mounts.
+        const os: typeof import('os') = require('os');
+        const folders = this.conf.sharedFolders ?? (this.conf.shareHomeFolder ? [{name:'Data',hostPath:os.homedir(),enabled:true,readOnly:false}] : []);
+        composeContent.services.windows = await prepareSharedFolders(composeContent.services.windows, folders);
 
         // Write the compose file
-        const composeYAML = YAML.stringify(composeContent).replaceAll("null", "");
+        const composeYAML = YAML.stringify(composeContent);
         fs.writeFileSync(composeFilePath, composeYAML, { encoding: 'utf8' });
         new WinboatConfig().config.localDisplayPreferred = this.conf.heliosEnabled && this.conf.localDisplayEnabled !== false;
         logger.info(`Creating compose file at: ${composeFilePath}`);

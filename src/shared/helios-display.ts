@@ -1,3 +1,4 @@
+import { volumeTarget, type ComposeVolume } from './compose-volumes.ts';
 export const HELIOS_DISPLAY_CAPABILITY = 'org.winboat.helios.display';
 export const HELIOS_DISPLAY_VERSION = 'dbus-v6';
 export const HELIOS_DISPLAY_MOUNT = '/run/helios-display';
@@ -27,13 +28,13 @@ export function heliosDisplayBusConfig(directory: string, uid: number): string {
 </busconfig>`;
 }
 
-export function configureHeliosDisplay<T extends { environment: Record<string, string>; volumes: string[] }>(
+export function configureHeliosDisplay<T extends { environment: Record<string, string>; volumes: ComposeVolume[] }>(
     service: T, enabled: boolean, directory?: string,
 ): T {
     // Settings pass a Vue-reactive service; clone its plain Compose data,
     // including nested proxies, before changing mounts or environment values.
     const next = JSON.parse(JSON.stringify(service)) as T;
-    next.volumes = next.volumes.filter(volume => volume.split(':')[1] !== HELIOS_DISPLAY_MOUNT);
+    next.volumes = next.volumes.filter(volume => volumeTarget(volume) !== HELIOS_DISPLAY_MOUNT);
     delete next.environment.HELIOS_DISPLAY;
     if (enabled) {
         if (next.environment.HELIOS !== '1') throw new Error('Local display requires Helios.');
@@ -46,7 +47,7 @@ export function configureHeliosDisplay<T extends { environment: Record<string, s
     return next;
 }
 
-export async function preferHeliosDisplay<T extends { environment: Record<string, string>; volumes: string[]; restart: string }>(
+export async function preferHeliosDisplay<T extends { environment: Record<string, string>; volumes: ComposeVolume[]; restart: string }>(
     service: T, preferred: boolean | undefined, directory: () => string, prepare: (candidate: T) => Promise<void>,
 ): Promise<T> {
     if (service.environment.HELIOS !== '1' || preferred === false) return service;
@@ -57,7 +58,7 @@ export async function preferHeliosDisplay<T extends { environment: Record<string
 }
 
 /** Resolve a saved preference without overwriting it when the runtime is absent. */
-export async function resolveHeliosDisplay<T extends { environment: Record<string, string>; volumes: string[]; restart: string }>(
+export async function resolveHeliosDisplay<T extends { environment: Record<string, string>; volumes: ComposeVolume[]; restart: string }>(
     service: T, preferred: boolean, directory: () => string, prepare: (candidate: T) => Promise<void>,
 ): Promise<{ service: T; unavailableReason: string }> {
     if (!preferred || service.environment.HELIOS !== '1') {

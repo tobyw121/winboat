@@ -89,6 +89,10 @@ actual_display=$(docker image inspect --format '{{ index .Config.Labels "org.win
 [[ "$actual_display" == "$display_version" ]] || die 'The Helios image lacks the required local display protocol. Rebuild without --skip-host.'
 atlas_tools=$(docker image inspect --format '{{ index .Config.Labels "org.winboat.atlas.iso" }}' "$image")
 [[ "$atlas_tools" == ame-oobe-v3 ]] || die 'The Helios image lacks the required AME offline tools. Rebuild without --skip-host.'
+for share_image in "$image" "$atlas_image"; do
+    share_capability=$(docker image inspect --format '{{ index .Config.Labels "org.winboat.shared-folders" }}' "$share_image")
+    [[ "$share_capability" == authenticated-v1 ]] || die "The image $share_image lacks authenticated shared folders. Rebuild without --skip-host."
+done
 docker run --rm --network none --entrypoint /opt/helios/check-runtime.sh "$image" \
     || die 'Helios OpenGL runtime is missing or incomplete. Rebuild the host image without --skip-host.'
 # Exercise actual QEMU/memfd/QMP without pretending to test a GPU or Windows.

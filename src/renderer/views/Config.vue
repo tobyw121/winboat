@@ -105,27 +105,14 @@
                     </div>
                 </x-card>
 
-                <!-- Shared Home Folder -->
-                <x-card class="flex relative z-20 flex-row justify-between items-center p-2 py-3 my-0 w-full backdrop-blur-xl backdrop-brightness-150 bg-neutral-800/20">
-                    <div>
-                        <div class="flex flex-row items-center gap-2 mb-2">
-                            <Icon class="text-violet-400 inline-flex size-8" icon="fluent:folder-link-32-filled"></Icon>
-                            <h1 class="text-lg my-0 font-semibold">
-                                Shared Home Folder
-                            </h1>
-                        </div>
-                        <p class="text-neutral-400 text-[0.9rem] !pt-0 !mt-0">
-                            If enabled, you will be able to access your Linux home folder within Windows under 
-                            <span class="font-mono bg-neutral-700 rounded-md px-1 py-0.5">Network\host.lan</span>
-                        </p>
+                <x-card class="p-4 my-0 w-full bg-neutral-800/20">
+                    <h1 class="text-lg font-semibold mb-3">Shared Folders</h1>
+                    <SharedFolders v-model="sharedFolders" :disabled="isApplyingChanges" />
+                    <div class="mt-4 flex gap-3 items-center"><x-button :disabled="isApplyingChanges || checkingShares || !sharedFolders.some(folder => folder.enabled) || winboat.containerStatus.value !== ContainerStatus.Running || JSON.stringify(sharedFolders) !== origSharedFolders || !compose?.services.windows['x-winboat-shared-folders']" @click="testShares">Test saved shares</x-button><span class="text-sm text-neutral-400">Save changes and start the VM before testing.</span></div>
+                    <div v-for="result in shareResults" :key="result.name" class="text-sm mt-2" :class="result.ok ? 'text-green-300' : 'text-red-300'">
+                        <p>{{ result.name }}: {{ result.message }}</p><div v-if="result.windowsPath" class="flex gap-2 items-center"><code>{{ result.windowsPath }}</code><x-button @click="copyWindowsPath(result.windowsPath)">Copy direct path</x-button></div>
                     </div>
-                    <div class="flex flex-row justify-center items-center gap-2">
-                        <x-switch
-                            :toggled="shareHomeFolder"
-                            @toggle="(_: any) => shareHomeFolder = !shareHomeFolder"
-                            size="large"
-                        ></x-switch>
-                    </div>
+                    <p v-if="shareTestError" class="text-sm text-red-300 mt-2">{{ shareTestError }}</p>
                 </x-card>
 
                 <!-- Auto Start Container -->
@@ -501,6 +488,9 @@
 </template>
 
 <script setup lang="ts">
+import SharedFolders from '../components/SharedFolders.vue';
+import {sharedFolderErrors, type SharedFolder} from '../../shared/shared-folders';
+import {configuredSharedFolders, prepareSharedFolders, checkSharedFolders, type ShareCheck} from '../lib/shared-folders';
 import { configureHelios, HELIOS_IMAGE } from '../../shared/helios';
 import { requireHelios } from '../lib/helios';
 import { resolveHeliosDisplay } from '../../shared/helios-display';
@@ -535,7 +525,6 @@ const winboat = new Winboat();
 const usbManager = new USBManager();
 
 // Constants
-const HOMEFOLDER_SHARE_STR = "${HOME}:/shared";
 const USB_BUS_PATH = "/dev/bus/usb:/dev/bus/usb";
 const QMP_ARGUMENT = "-qmp tcp:0.0.0.0:7149,server,wait=off"; // 7149 can remain hardcoded as it refers to a guest port
 const GUEST_QMP_PORT = "7149";
@@ -548,8 +537,18 @@ const maxNumCores = ref(0);
 const ramGB = ref(0); 
 const origRamGB = ref(0);
 const maxRamGB = ref(0);
-const origShareHomeFolder = ref(false);
-const shareHomeFolder = ref(false);
+const sharedFolders = ref<SharedFolder[]>([]);
+const origSharedFolders = ref('[]');
+const checkingShares = ref(false);
+const shareResults = ref<ShareCheck[]>([]);
+const shareTestError = ref('');
+function copyWindowsPath(value:string) {const {clipboard}:typeof import('electron')=require('electron');clipboard.writeText(value);}
+async function testShares() {
+    checkingShares.value=true;shareTestError.value='';shareResults.value=[];
+    try {shareResults.value=await checkSharedFolders();}
+    catch(error) {shareTestError.value=error instanceof Error ? error.message : String(error);}
+    finally {checkingShares.value=false;}
+}
 const origAutoStartContainer = ref(false);
 const autoStartContainer = ref(false);
 const freerdpPort = ref(0);
@@ -632,8 +631,8 @@ async function assignValues() {
     ramGB.value = Number(compose.value.services.windows.environment.RAM_SIZE.split("G")[0]);
     origRamGB.value = ramGB.value;
 
-    shareHomeFolder.value = compose.value.services.windows.volumes.includes(HOMEFOLDER_SHARE_STR);
-    origShareHomeFolder.value = shareHomeFolder.value;
+    sharedFolders.value = configuredSharedFolders(compose.value.services.windows);
+    origSharedFolders.value = JSON.stringify(sharedFolders.value);
 
     autoStartContainer.value = compose.value.services.windows.restart === RESTART_ON_FAILURE;
     origAutoStartContainer.value = autoStartContainer.value;
@@ -666,14 +665,6 @@ async function saveDockerCompose() {
         compose.value!.services.windows.environment.RAM_SIZE = `${ramGB.value}G`;
         compose.value!.services.windows.environment.CPU_CORES = `${numCores.value}`;
 
-        const composeHasHomefolderShare = compose.value!.services.windows.volumes.includes(HOMEFOLDER_SHARE_STR);
-
-        if (shareHomeFolder.value && !composeHasHomefolderShare) {
-            compose.value!.services.windows.volumes.push(HOMEFOLDER_SHARE_STR);
-        } else if (!shareHomeFolder.value && composeHasHomefolderShare) {
-            compose.value!.services.windows.volumes = compose.value!.services.windows.volumes.filter(v => v !== HOMEFOLDER_SHARE_STR);
-        }
-
         compose.value!.services.windows.restart = autoStartContainer.value ? RESTART_ON_FAILURE : RESTART_NO;
 
         const host = heliosEnabled.value ? await requireHelios() : undefined;
@@ -684,6 +675,7 @@ async function saveDockerCompose() {
         const display = await resolveHeliosDisplay(compose.value!.services.windows, local, localDisplayDirectory,
             candidate => prepareLocalDisplay({ ...compose.value!, services: { ...compose.value!.services, windows: candidate } }));
         compose.value!.services.windows = display.service;
+        compose.value!.services.windows = await prepareSharedFolders(compose.value!.services.windows, sharedFolders.value);
         if (heliosEnabled.value && !origHeliosEnabled.value) {
             // The Windows driver needs Venus during its first boot. Switching
             // the host adapter must precede installing it on an existing VM.
@@ -720,7 +712,7 @@ async function saveDockerCompose() {
         }
     } catch (error) {
         const { dialog } = require('@electron/remote');
-        await dialog.showMessageBox({ type: 'error', title: 'Helios configuration', message: error instanceof Error ? error.message : String(error) });
+        await dialog.showMessageBox({ type: 'error', title: 'WinBoat configuration', message: error instanceof Error ? error.message : String(error) });
     }
 
 }
@@ -799,14 +791,15 @@ const saveButtonDisabled = computed(() => {
     const hasResourceChanges = 
         origNumCores.value !== numCores.value ||
         origRamGB.value !== ramGB.value ||
-        shareHomeFolder.value !== origShareHomeFolder.value ||
+        JSON.stringify(sharedFolders.value) !== origSharedFolders.value ||
+        (!compose.value?.services.windows['x-winboat-shared-folders'] && sharedFolders.value.some(folder => folder.enabled)) ||
         freerdpPort.value !== origFreerdpPort.value ||
         autoStartContainer.value !== origAutoStartContainer.value ||
         heliosEnabled.value !== origHeliosEnabled.value ||
         localDisplayEnabled.value !== origLocalDisplayEnabled.value;
 
     const shouldBeDisabled = 
-        errors.value.length || 
+        errors.value.length || sharedFolderErrors(sharedFolders.value).length ||
         !hasResourceChanges || 
         isApplyingChanges.value;
         
