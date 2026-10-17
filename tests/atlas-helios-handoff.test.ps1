@@ -74,9 +74,15 @@ try {
     & $script
     $state=Get-Content (Join-Path $root 'helios-handoff.json') -Raw | ConvertFrom-Json
     if($state.status -ne 'finished' -or $global:handoffLaunches -ne 1 -or $global:handoffRemovals -ne 1){throw 'An already installed matching manual driver was reinstalled.'}
+    # Upgrade a partial installation left by the old worker: its receipt exists,
+    # but it never cached HeliosSetup.exe. Stage the full bundle, not -Resume.
+    $global:handoffResume=$null
+    @{status='driver-restart-required'} | ConvertTo-Json | Set-Content (Join-Path $helios 'provisioning-status.json')
+    & $script
+    if($global:handoffLaunches -ne 2){throw 'A partial legacy installation did not restage its missing recovery installer.'}
     $global:handoffApplied.ErrorLevel=1
     $failed=& $script -Register | ConvertFrom-Json
-    if($failed.status -ne 'failed' -or $global:handoffRegistrations -ne 1 -or $global:handoffLaunches -ne 1){throw 'Unconfirmed Atlas completion launched Helios.'}
+    if($failed.status -ne 'failed' -or $global:handoffRegistrations -ne 1 -or $global:handoffLaunches -ne 2){throw 'Unconfirmed Atlas completion launched Helios.'}
     Write-Host 'Durable post-Atlas handoff, reboot ordering, old PID recovery, resume ownership and installed-driver preservation passed with Windows API fixtures.'
 } finally {
     $env:ProgramData=$previousData; $env:ProgramFiles=$previousFiles; $env:SystemRoot=$previousSystem

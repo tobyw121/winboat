@@ -56,6 +56,33 @@ im Installationsbildschirm verfügbar, auch wenn Windows-OOBE oder AME noch auf
 Eingaben wartet. Der Windows-Gastdienst muss dafür noch nicht erreichbar sein.
 Vor dem Start der Windows-Konsole bleibt die Schaltfläche deaktiviert.
 
+Der Viewer entdeckt alle grafischen QEMU-Konsolen auf Monitor 0. Während Setup
+zeigt er den Installations-VGA; sobald die Helios-GPU Bildupdates liefert,
+wechselt er zu deren Konsole. Maus, Tastatur und Auflösungsanfragen folgen
+dieser Auswahl. Späte VGA-Updates überschreiben das Helios-Bild nicht.
+Bei einem Treiberneustart kann er vorübergehend auf eine noch aktive Konsole
+zurückfallen und danach wieder zur Helios-Ausgabe wechseln. Dafür muss weder
+der Basic Display Adapter manuell deaktiviert noch die VM neu erstellt werden.
+
+### Bereits unvollständig installierter Helios-Treiber
+
+Zuerst WinBoat einschließlich Viewer und Gastdienst aktualisieren. Für einen
+bestehenden Gast kann `python3 scripts/atlas/diagnose-vm.py --update-guest` die
+aktuellen Gastskripte und den neu gebauten Gastdienst übertragen.
+Danach in einer **administrativen Windows-PowerShell** die automatische
+Installation einmal anstoßen, sofern der ausgewählte OEM-Installer unter
+`C:\Program Files\WinBoat\helios` vorhanden ist:
+
+```powershell
+& 'C:\Program Files\WinBoat\scripts\Start-HeliosProvisioning.ps1' -BundlePath 'C:\Program Files\WinBoat\helios'
+```
+
+Der Worker prüft das Paket und übernimmt die Test-Signing- und Treiber-Neustarts.
+Exitcode 3010 ist eine Neustartanforderung und bestätigt allein keine fertige
+Treiberinstallation. Erst der bestätigte Abschluss mit passender installierter
+Revision beendet die Einrichtung. Der Basic Display Adapter kann währenddessen
+aktiv bleiben; die Anzeige folgt automatisch der Helios-Konsole.
+
 **Open Local Desktop** steht auch direkt in Einstellungen und Einrichtung zur
 Verfügung. Der Verbindungsstatus zeigt Start, Verbindung und Fehler an; bei
 Viewer-Fehlern zeigt WinBoat den Fehler und den Weg zum Browser-Modus an. Mehrfaches Öffnen während des
@@ -211,6 +238,11 @@ oder Spiegelung. Der Software-Bildpfad behält seine eigene Zeilenorientierung.
 `bash tests/helios-viewer-render.sh` prüft die tatsächlichen GL-Shader mit
 Mesa/Xvfb ohne `GDK_DEBUG`: alle vier Bildecken, beide DMA-BUF-Ausrichtungen,
 einen Ausschnitt aus einer größeren Textur und den Software-Bildpfad.
+Zusätzlich startet er den echten Viewer an einem privaten D-Bus-Testserver mit
+VGA- und virtio-Konsole. Er prüft den Wechsel zur Helios-Ausgabe, das Aus- und
+Einschalten der Konsolen, Auflösungsanfragen an die ausgewählte Konsole sowie
+die sichtbaren Bildecken direkt auf dem X11-Bildschirm. Die Frames sind
+synthetisch; das ersetzt keinen Windows-/GPU-Hardwaretest.
 Dafür werden die Entwicklungsbibliotheken GTK4 und libepoxy sowie Xvfb und
 xauth benötigt; der Test ist auch im Viewer-Smoke-Test enthalten.
 

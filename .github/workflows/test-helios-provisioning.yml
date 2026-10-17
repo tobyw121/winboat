@@ -1,0 +1,37 @@
+name: Test Helios provisioning
+on:
+  workflow_dispatch:
+  push:
+    branches: [work]
+    paths:
+      - '.github/workflows/test-helios-provisioning.yml'
+      - 'guest_server/scripts/Start-HeliosProvisioning.ps1'
+      - 'guest_server/scripts/Start-AtlasHelios.ps1'
+      - 'tests/helios-provisioning.test.ps1'
+      - 'tests/atlas-helios-handoff.test.ps1'
+  pull_request:
+    paths:
+      - 'guest_server/scripts/Start-HeliosProvisioning.ps1'
+      - 'guest_server/scripts/Start-AtlasHelios.ps1'
+      - 'tests/helios-provisioning.test.ps1'
+      - 'tests/atlas-helios-handoff.test.ps1'
+permissions:
+  contents: read
+jobs:
+  provisioning:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test provisioning and handoff (PowerShell 7)
+        shell: pwsh
+        run: |
+          ./tests/helios-provisioning.test.ps1
+          ./tests/atlas-helios-handoff.test.ps1
+      - name: Test provisioning and handoff (Windows PowerShell 5.1)
+        shell: powershell
+        run: |
+          ./tests/helios-provisioning.test.ps1
+          ./tests/atlas-helios-handoff.test.ps1

@@ -72,7 +72,10 @@ try {
     }
     $script=Join-Path $install 'scripts\Start-HeliosProvisioning.ps1'
     $arguments='-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"' -f $script
-    if ($installed) {$arguments+=' -Resume'} else {$arguments+=(' -BundlePath "{0}"' -f (Join-Path $install 'helios'))}
+    # Older workers retained only the receipt, not the installer. Stage a full
+    # durable worker before resuming those partially installed machines.
+    if ($installed -and (Test-Path -LiteralPath (Join-Path $env:ProgramData 'WinBoat\Helios\HeliosSetup.exe'))) {$arguments+=' -Resume'}
+    else {$arguments+=(' -BundlePath "{0}"' -f (Join-Path $install 'helios'))}
     Publish-Handoff 'started' 'Starting the selected Helios installer/resume worker after Atlas.' | Out-Null
     $process=Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList $arguments -Wait -PassThru
     if ($process.ExitCode -ne 0) {throw 'Helios provisioning failed; inspect its installer status and log.'}

@@ -109,10 +109,15 @@ remain part of the VM. The GPU device is `virtio-gpu-gl-pci` with Venus and blob
 resources and shared memfd-backed guest RAM; EGL-headless and VNC/WebSocket expose its console.
 
 WinBoat places the verified installer in the OEM directory. After guest-server
-installation, the OEM helper invokes `HeliosSetup.exe --silent --automatic`.
+installation, the OEM helper queues a durable SYSTEM worker which invokes
+`HeliosSetup.exe --silent --automatic`. The first invocation runs independently
+of the SetupComplete/AME session. The verified installer, receipt and worker
+are retained in the protected `C:\ProgramData\WinBoat\Helios` directory.
 The upstream installer owns driver backup/registration, signature verification,
-repair and its resume task. WinBoat's additional SYSTEM startup task observes
-fresh results and performs at most two Windows-only restarts. A persisted boot
+repair and its resume task. WinBoat's worker starts at startup/logon, resumes a
+missed or disabled official task, and recovers a missing task through its cached
+verified installer. It never starts a second installer while the official task
+is running. It observes fresh results and performs at most two Windows-only restarts. A persisted boot
 and stage guard prevents repeated reboot loops. Failures stop this task and are
 published to the UI. Installation only completes after the guest status says
 `finished`, an installation record exists, and the revision matches the pinned guest revision in the host/guest compatibility lock.

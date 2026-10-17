@@ -18,7 +18,8 @@
 #include <string.h>
 #include <signal.h>
 
-#define CONSOLE "/org/qemu/Display1/Console_0"
+#define VM "/org/qemu/Display1/VM"
+#define CONSOLE_PREFIX "/org/qemu/Display1/Console_"
 #define LISTENER "/org/qemu/Display1/Listener"
 #define IFACE "org.qemu.Display1."
 #define MAX_DIM 8192u
@@ -40,7 +41,8 @@ static const char xml[] =
  "<arg type='au' direction='in'/><arg type='au' direction='in'/><arg type='u' direction='in'/><arg type='u' direction='in'/><arg type='u' direction='in'/><arg type='u' direction='in'/><arg type='t' direction='in'/><arg type='b' direction='in'/>"
  "</method></interface></node>";
 
-typedef struct {
+typedef struct Viewer Viewer;
+struct Viewer {
  GtkWidget *window, *area, *waiting, *status;
  char *screenshot_path;
  GMainLoop *loop;
@@ -60,7 +62,23 @@ typedef struct {
  double last_x, last_y;
  guint64 dma_frames, software_frames, rendered_frames;
  int exit_code;
-} Viewer;
+ /* One frame cache/listener per graphical console; only the root owns the UI.
+  * Keeping listeners alive lets a driver handoff happen without restarting QEMU. */
+ Viewer *parent, *active;
+ GPtrArray *consoles;
+ char *console_path;
+ guint console_id;
+ gboolean accelerated, seen_update, cursor_visible;
+};
+static Viewer *displayed(Viewer *v) {return v->active?v->active:v;}
+static void update_cursor(Viewer *v) {
+ if (v->parent && v->parent->active!=v) return;
+ Viewer *d=displayed(v);
+ if (d->cursor_visible && d->cursor) gtk_widget_set_cursor(v->area,d->cursor);
+ else gtk_widget_set_cursor_from_name(v->area,d->cursor_visible?"default":"none");
+}
+static void select_console(Viewer *v);
+static gboolean request_resize(gpointer data);
 
 static gboolean external_only(GDBusAuthObserver *observer,const char *mechanism,gpointer data) {
  (void)observer;(void)data;return !strcmp(mechanism,"EXTERNAL");
@@ -74,6 +92,7 @@ static gboolean authorize_qemu(GDBusAuthObserver *observer,GIOStream *stream,GCr
 }
 
 static void fatal(Viewer *v, const char *message) {
+ if (v->parent) v=v->parent;
  g_printerr("Helios viewer: %s\n", message);
  v->exit_code = 1;
  g_main_loop_quit(v->loop);
@@ -98,7 +117,9 @@ static guint qnum(guint code) {
  }
 }
 static void input(Viewer *v, const char *iface, const char *method, GVariant *args) {
- g_dbus_connection_call(v->bus,"org.qemu",CONSOLE,iface,method,args,NULL,
+ Viewer *d=displayed(v);
+ if (!d->console_path) return;
+ g_dbus_connection_call(v->bus,"org.qemu",d->console_path,iface,method,args,NULL,
                         G_DBUS_CALL_FLAGS_NONE,2000,NULL,NULL,NULL);
 }
 static void release_input(Viewer *v) {
@@ -132,20 +153,22 @@ static void key_release(GtkEventControllerKey *controller, guint value, guint co
 static void focus_leave(GtkEventControllerFocus *controller, Viewer *v) {(void)controller;release_input(v);}
 static void viewport(Viewer *v, int w, int h, int *x, int *y, int *dw, int *dh) {
  if (v->stretch) {*x=0;*y=0;*dw=w;*dh=h;return;}
- double scale=MIN((double)w/MAX(v->width,1u),(double)h/MAX(v->height,1u));
- *dw=MAX(1,(int)(v->width*scale));*dh=MAX(1,(int)(v->height*scale));
+ Viewer *d=displayed(v);
+ double scale=MIN((double)w/MAX(d->width,1u),(double)h/MAX(d->height,1u));
+ *dw=MAX(1,(int)(d->width*scale));*dh=MAX(1,(int)(d->height*scale));
  *x=(w-*dw)/2;*y=(h-*dh)/2;
 }
 static void motion(GtkEventControllerMotion *controller, double x, double y, Viewer *v) {
  (void)controller;
- if (!v->width || !v->height) return;
+ Viewer *d=displayed(v);
+ if (!d->width || !d->height) return;
  int ox,oy,w,h;viewport(v,gtk_widget_get_width(v->area),gtk_widget_get_height(v->area),&ox,&oy,&w,&h);
  if (x<ox || y<oy || x>=ox+w || y>=oy+h) {v->have_position=FALSE;return;}
- GVariant *mode=g_dbus_proxy_get_cached_property(v->mouse,"IsAbsolute");
+ GVariant *mode=g_dbus_proxy_get_cached_property(d->mouse,"IsAbsolute");
  gboolean absolute=mode && g_variant_get_boolean(mode);
  if (mode) g_variant_unref(mode);
  if (absolute) input(v,IFACE "Mouse","SetAbsPosition",g_variant_new("(uu)",
-   (guint)((x-ox)*v->width/w),(guint)((y-oy)*v->height/h)));
+   (guint)((x-ox)*d->width/w),(guint)((y-oy)*d->height/h)));
  else if (v->have_position) input(v,IFACE "Mouse","RelMotion",g_variant_new("(ii)",(int)(x-v->last_x),(int)(y-v->last_y)));
  v->last_x=x;v->last_y=y;v->have_position=TRUE;
 }
@@ -158,7 +181,7 @@ static void click(GtkGestureClick *gesture, int count, double x, double y, Viewe
  gboolean pressed=gdk_event_get_event_type(gtk_event_controller_get_current_event(GTK_EVENT_CONTROLLER(gesture)))==GDK_BUTTON_PRESS;
  if (pressed) {
   int ox,oy,w,h;viewport(v,gtk_widget_get_width(v->area),gtk_widget_get_height(v->area),&ox,&oy,&w,&h);
-  if (!v->cache_valid || x<ox || y<oy || x>=ox+w || y>=oy+h) return;
+  if (!displayed(v)->cache_valid || x<ox || y<oy || x>=ox+w || y>=oy+h) return;
   motion(NULL,x,y,v);
  }
  input(v,IFACE "Mouse",pressed?"Press":"Release",g_variant_new("(u)",(guint)n));v->buttons[n]=pressed;
@@ -213,7 +236,7 @@ static void draw(Viewer *v, GLuint texture, const float *rect, gboolean flip) {
 }
 static gboolean save_screenshot(Viewer *v,const char *path) {
  int scale=gtk_widget_get_scale_factor(v->area),w=gtk_widget_get_width(v->area)*scale,h=gtk_widget_get_height(v->area)*scale;
- if (!v->cache_valid || !dimensions(w,h)) return FALSE;
+ if (!displayed(v)->cache_valid || !dimensions(w,h)) return FALSE;
  /* Explicit screenshots alone read back pixels; normal DMA-BUF rendering does not. */
  GdkPixbuf *pixels=gdk_pixbuf_new(GDK_COLORSPACE_RGB,FALSE,8,w,h);
  if (!pixels) return FALSE;
@@ -228,13 +251,14 @@ static gboolean save_screenshot(Viewer *v,const char *path) {
 }
 static gboolean render(GtkGLArea *area,GdkGLContext *context,Viewer *v) {
  (void)area;(void)context;
- gtk_widget_set_visible(v->waiting,!v->width || !v->cache_valid);
+ Viewer *d=displayed(v);
+ gtk_widget_set_visible(v->waiting,!d->width || !d->cache_valid);
  int scale=gtk_widget_get_scale_factor(v->area), x,y,w,h;
  glDisable(GL_BLEND);glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT);
  viewport(v,gtk_widget_get_width(v->area)*scale,gtk_widget_get_height(v->area)*scale,&x,&y,&w,&h);
  glViewport(x,y,w,h);
- if (v->texture && v->width && v->cache_valid) {
-  const float rect[]={0,0,1,1};draw(v,v->texture,rect,v->flip);v->rendered_frames++;
+ if (d->texture && d->width && d->cache_valid) {
+  const float rect[]={0,0,1,1};draw(v,d->texture,rect,d->flip);v->rendered_frames++;
  }
  if (glGetError()!=GL_NO_ERROR) fatal(v,"OpenGL window rendering failed.");
  if (v->screenshot_path) {
@@ -248,7 +272,7 @@ static void discard_source(Viewer *v) {
  if (v->image!=EGL_NO_IMAGE_KHR) {eglDestroyImageKHR(v->display,v->image);v->image=EGL_NO_IMAGE_KHR;}
 }
 static void texture_size(Viewer *v,guint w,guint h) {
- v->width=w;v->height=h;v->cache_valid=FALSE;glBindTexture(GL_TEXTURE_2D,v->texture);
+ v->width=w;v->height=h;v->cache_valid=FALSE;v->seen_update=FALSE;glBindTexture(GL_TEXTURE_2D,v->texture);
  glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,w,h,0,GL_RGBA,GL_UNSIGNED_BYTE,NULL);
 }
 static void dma_geometry(Viewer *v,guint x,guint y,guint w,guint h,guint bw,guint bh,gboolean top) {
@@ -336,7 +360,6 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
    glBindTexture(GL_TEXTURE_2D,v->texture);glPixelStorei(GL_UNPACK_ROW_LENGTH,stride/4);
    glTexSubImage2D(GL_TEXTURE_2D,0,x,y,w,h,(format&0x000f0000)==0x00020000?GL_BGRA:GL_RGBA,GL_UNSIGNED_BYTE,bytes);
    glPixelStorei(GL_UNPACK_ROW_LENGTH,0);v->flip=TRUE;v->cache_valid=TRUE;v->software_frames++;v->last_dma=FALSE;
-   gtk_gl_area_queue_render(GTK_GL_AREA(v->area));
   }
   g_variant_unref(pixels);
  } else if (!strcmp(name,"ScanoutDMABUF")) {
@@ -356,13 +379,12 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
  } else if (!strcmp(name,"UpdateDMABUF")) {
   gint x,y,w,h;g_variant_get(params,"(iiii)",&x,&y,&w,&h);
   ok=region(v,x,y,w,h) && copy_dma(v);
-  if (ok) {v->dma_frames++;v->last_dma=TRUE;gtk_gl_area_queue_render(GTK_GL_AREA(v->area));}
+  if (ok) {v->dma_frames++;v->last_dma=TRUE;}
  } else if (!strcmp(name,"Disable")) {
-  discard_source(v);v->width=v->height=0;v->cache_valid=FALSE;release_input(v);gtk_gl_area_queue_render(GTK_GL_AREA(v->area));
+  discard_source(v);v->width=v->height=0;v->cache_valid=FALSE;v->seen_update=FALSE;release_input(v);
  } else if (!strcmp(name,"MouseSet")) {
   gint x,y,on;g_variant_get(params,"(iii)",&x,&y,&on);(void)x;(void)y;
-  if (on && v->cursor) gtk_widget_set_cursor(v->area,v->cursor);
-  else gtk_widget_set_cursor_from_name(v->area,on?"default":"none");
+  v->cursor_visible=on;update_cursor(v);
  } else if (!strcmp(name,"CursorDefine")) {
   gint w,h,x,y;GVariant *pixels;g_variant_get(params,"(iiii@ay)",&w,&h,&x,&y,&pixels);
   gsize len;const void *bytes=g_variant_get_fixed_array(pixels,&len,1);
@@ -371,11 +393,18 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
    GBytes *copy=g_bytes_new(bytes,len);
    GdkTexture *texture=GDK_TEXTURE(gdk_memory_texture_new(w,h,GDK_MEMORY_B8G8R8A8_PREMULTIPLIED,copy,w*4));
    g_clear_object(&v->cursor);v->cursor=gdk_cursor_new_from_texture(texture,x,y,NULL);
-   gtk_widget_set_cursor(v->area,v->cursor);g_object_unref(texture);g_bytes_unref(copy);
+   update_cursor(v);
+   g_object_unref(texture);g_bytes_unref(copy);
   }
   g_variant_unref(pixels);
  } else ok=FALSE;
- if (ok) g_dbus_method_invocation_return_value(inv,NULL);
+ if (ok) {
+  if (!strcmp(name,"Update") || !strcmp(name,"UpdateDMABUF")) v->seen_update=TRUE;
+  if (v->parent) select_console(v->parent);
+  if (!strcmp(name,"Scanout") || !strcmp(name,"Update") || !strcmp(name,"UpdateDMABUF") || !strcmp(name,"Disable"))
+   gtk_gl_area_queue_render(GTK_GL_AREA(v->area));
+  g_dbus_method_invocation_return_value(inv,NULL);
+ }
  else {
   g_dbus_method_invocation_return_dbus_error(inv,"org.winboat.Helios.DisplayError","Unsupported or invalid frame; use Browser Display.");
   char *message=g_strdup_printf("%s failed. Browser Display remains available.",name);
@@ -388,12 +417,16 @@ static GVariant *property(GDBusConnection *conn,const gchar *sender,const gchar 
 }
 static const GDBusInterfaceVTable vtable={.method_call=method,.get_property=property};
 static void maybe_ready(Viewer *v) {
- if (v->registered && v->peer && !v->ready) {
-  v->ready=TRUE;g_print("{\"event\":\"ready\",\"transport\":\"dbus\"}\n");fflush(stdout);
+ Viewer *root=v->parent?v->parent:v;
+ if (v->registered && v->peer && !root->ready) {
+  root->ready=TRUE;g_print("{\"event\":\"ready\",\"transport\":\"dbus\"}\n");fflush(stdout);
  }
 }
 static void closed(GDBusConnection *conn,gboolean vanished,GError *err,Viewer *v) {
  (void)conn;(void)vanished;(void)err;
+ if (v->parent) {
+  v->cache_valid=FALSE;v->registered=FALSE;select_console(v->parent);return;
+ }
  fatal(v,"The QEMU display disconnected. Browser Display remains available.");
 }
 static void peer_ready(GObject *object,GAsyncResult *result,gpointer data) {
@@ -442,6 +475,61 @@ static gboolean initialize_gl(Viewer *v) {
  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
  return glGetError()==GL_NO_ERROR;
 }
+static void register_consoles(Viewer *v) {
+ GError *error=NULL;
+ GVariant *reply=g_dbus_connection_call_sync(v->bus,"org.qemu",VM,"org.freedesktop.DBus.Properties","Get",
+  g_variant_new("(ss)",IFACE "VM","ConsoleIDs"),G_VARIANT_TYPE("(v)"),G_DBUS_CALL_FLAGS_NONE,5000,NULL,&error);
+ if (!reply) {fatal(v,error->message);g_error_free(error);return;}
+ GVariant *boxed,*ids;g_variant_get(reply,"(@v)",&boxed);ids=g_variant_get_variant(boxed);
+ if (!g_variant_is_of_type(ids,G_VARIANT_TYPE("au")) || g_variant_n_children(ids)>32) {
+  fatal(v,"Invalid QEMU graphical console list.");
+ } else for (gsize i=0;i<g_variant_n_children(ids);i++) {
+  guint id;g_variant_get_child(ids,i,"u",&id);
+  char *path=g_strdup_printf(CONSOLE_PREFIX "%u",id);
+  GDBusProxy *console=g_dbus_proxy_new_sync(v->bus,G_DBUS_PROXY_FLAGS_NONE,NULL,"org.qemu",path,IFACE "Console",NULL,&error);
+  if (!console) {fatal(v,error->message);g_clear_error(&error);g_free(path);break;}
+  GVariant *type=g_dbus_proxy_get_cached_property(console,"Type"),*label=g_dbus_proxy_get_cached_property(console,"Label"),
+           *head=g_dbus_proxy_get_cached_property(console,"Head");
+  gboolean graphic=type && g_variant_is_of_type(type,G_VARIANT_TYPE_STRING) && !strcmp(g_variant_get_string(type,NULL),"Graphic");
+  /* The default desktop is head 0; do not replace it with an extended monitor. */
+  if (graphic && (!head || g_variant_get_uint32(head)==0)) {
+   Viewer *d=g_new0(Viewer,1);*d=*v;d->parent=v;d->consoles=NULL;d->console_path=path;path=NULL;d->console_id=id;
+   const char *name=label?g_variant_get_string(label,NULL):"";
+   d->accelerated=strstr(name,"virtio") || strstr(name,"Helios");
+   d->mouse=g_dbus_proxy_new_sync(v->bus,G_DBUS_PROXY_FLAGS_NONE,NULL,"org.qemu",d->console_path,IFACE "Mouse",NULL,&error);
+   if (!d->mouse) {fatal(v,error->message);g_clear_error(&error);g_free(d->console_path);g_free(d);}
+   else {
+    glGenTextures(1,&d->texture);glBindTexture(GL_TEXTURE_2D,d->texture);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+    g_ptr_array_add(v->consoles,d);
+    g_dbus_connection_call_with_unix_fd_list(v->bus,"org.qemu",d->console_path,IFACE "Console","RegisterListenerReverse",NULL,
+     G_VARIANT_TYPE("(h)"),G_DBUS_CALL_FLAGS_NONE,10000,NULL,NULL,registered,d);
+   }
+  }
+  g_clear_pointer(&type,g_variant_unref);g_clear_pointer(&label,g_variant_unref);g_clear_pointer(&head,g_variant_unref);
+  g_object_unref(console);g_free(path);
+ }
+ g_variant_unref(ids);g_variant_unref(boxed);g_variant_unref(reply);
+ if (!v->consoles->len && !v->exit_code) fatal(v,"QEMU provides no graphical desktop console.");
+}
+static void select_console(Viewer *v) {
+ Viewer *next=v->active && v->active->cache_valid?v->active:NULL;
+ for (guint i=0;i<v->consoles->len;i++) {
+  Viewer *d=g_ptr_array_index(v->consoles,i);
+  if (!d->cache_valid) continue;
+  if (!next || (d->accelerated && !next->accelerated && d->seen_update)) next=d;
+ }
+ if (next==v->active) return;
+ release_input(v);v->active=next;v->requested_width=v->requested_height=0;
+ if (v->resize_timer) {g_source_remove(v->resize_timer);v->resize_timer=0;}
+ update_cursor(v);
+ if (next) {
+  g_printerr("{\"event\":\"console\",\"id\":%u,\"accelerated\":%s}\n",next->console_id,next->accelerated?"true":"false");
+  request_resize(v);
+ }
+ gtk_gl_area_queue_render(GTK_GL_AREA(v->area));
+}
 static void realize(GtkGLArea *area,Viewer *v) {
  gtk_gl_area_make_current(area);
  const GError *gl_error=gtk_gl_area_get_error(area);
@@ -450,8 +538,7 @@ static void realize(GtkGLArea *area,Viewer *v) {
   fatal(v,message);g_free(message);return;
  }
  if (!initialize_gl(v)) {fatal(v,"OpenGL shader initialization failed.");return;}
- g_dbus_connection_call_with_unix_fd_list(v->bus,"org.qemu",CONSOLE,IFACE "Console","RegisterListenerReverse",NULL,
-  G_VARIANT_TYPE("(h)"),G_DBUS_CALL_FLAGS_NONE,10000,NULL,NULL,registered,v);
+ register_consoles(v);
 }
 static gboolean close_window(GtkWindow *window,Viewer *v) {(void)window;release_input(v);g_main_loop_quit(v->loop);return FALSE;}
 static gboolean terminate_viewer(gpointer data) {Viewer *v=data;release_input(v);g_main_loop_quit(v->loop);return G_SOURCE_REMOVE;}
@@ -497,12 +584,13 @@ static void resize_finished(GObject *object,GAsyncResult *result,gpointer data) 
 }
 static gboolean request_resize(gpointer data) {
  Viewer *v=data;v->resize_timer=0;
- if (!v->auto_resize) return G_SOURCE_REMOVE;
+ Viewer *d=displayed(v);
+ if (!v->auto_resize || !d->console_path) return G_SOURCE_REMOVE;
  guint scale=gtk_widget_get_scale_factor(v->area);
  guint w=gtk_widget_get_width(v->area)*scale,h=gtk_widget_get_height(v->area)*scale;
  if (!dimensions(w,h) || w<640 || h<480 || (w==v->requested_width && h==v->requested_height)) return G_SOURCE_REMOVE;
  v->requested_width=w;v->requested_height=h;
- g_dbus_connection_call(v->bus,"org.qemu",CONSOLE,IFACE "Console","SetUIInfo",
+ g_dbus_connection_call(v->bus,"org.qemu",d->console_path,IFACE "Console","SetUIInfo",
   g_variant_new("(qqiiuu)",(guint16)(w*25.4/96),(guint16)(h*25.4/96),0,0,w,h),
   NULL,G_DBUS_CALL_FLAGS_NONE,2000,NULL,resize_finished,v);
  return G_SOURCE_REMOVE;
@@ -522,17 +610,21 @@ static void aspect_toggled(GtkCheckButton *button,Viewer *v) {
  gtk_gl_area_queue_render(GTK_GL_AREA(v->area));gtk_widget_grab_focus(v->area);
 }
 static gboolean stats(Viewer *v) {
+ Viewer *d=displayed(v);
  char *text=g_strdup_printf("%u × %u · %s · guest resize: %s (%" G_GUINT64_FORMAT " accepted)",
-  v->width,v->height,v->last_dma?"DMA-BUF / OpenGL":"Software / OpenGL",v->resize_failed?"unsupported/failed":v->auto_resize?"enabled":"off",v->resize_requests);
+  d->width,d->height,d->last_dma?"DMA-BUF / OpenGL":"Software / OpenGL",v->resize_failed?"unsupported/failed":v->auto_resize?"enabled":"off",v->resize_requests);
  gtk_label_set_text(GTK_LABEL(v->status),text);g_free(text);
- g_printerr("{\"event\":\"statistics\",\"dmabufFrames\":%" G_GUINT64_FORMAT ",\"softwareFrames\":%" G_GUINT64_FORMAT ",\"renderedFrames\":%" G_GUINT64_FORMAT "}\n",v->dma_frames,v->software_frames,v->rendered_frames);return G_SOURCE_CONTINUE;
+ g_printerr("{\"event\":\"statistics\",\"dmabufFrames\":%" G_GUINT64_FORMAT ",\"softwareFrames\":%" G_GUINT64_FORMAT ",\"renderedFrames\":%" G_GUINT64_FORMAT "}\n",d->dma_frames,d->software_frames,v->rendered_frames);return G_SOURCE_CONTINUE;
 }
 static gboolean smoke_done(Viewer *v) {
  stats(v);
- if (!v->ready || !v->software_frames || !v->rendered_frames || !v->resize_requests) fatal(v,"Software display smoke test requires rendered frames and an accepted guest resize request.");
+ if (!v->ready || !displayed(v)->software_frames || !v->rendered_frames || !v->resize_requests) fatal(v,"Software display smoke test requires rendered frames and an accepted guest resize request.");
  else {
   /* Readback exists only in this explicit test mode, not the normal viewer. */
   gtk_gl_area_make_current(GTK_GL_AREA(v->area));gtk_gl_area_attach_buffers(GTK_GL_AREA(v->area));
+  /* GTK may hand its last front buffer to the compositor and attach a recycled
+   * back buffer. Draw the current cache before explicit test readback. */
+  render(GTK_GL_AREA(v->area),gtk_gl_area_get_context(GTK_GL_AREA(v->area)),v);
   int scale=gtk_widget_get_scale_factor(v->area), w=gtk_widget_get_width(v->area)*scale, h=gtk_widget_get_height(v->area)*scale;
   if (!dimensions(w,h)) {fatal(v,"Invalid smoke-test screenshot size.");return G_SOURCE_REMOVE;}
   guint8 *pixels=g_malloc((gsize)w*h*3);glPixelStorei(GL_PACK_ALIGNMENT,1);
@@ -592,7 +684,7 @@ int main(int argc,char **argv) {
  gboolean smoke=argc==3 && !strcmp(argv[1],"--smoke-test");
  if (argc!=3 || (!ping && !smoke && strcmp(argv[1],"--address"))) {g_printerr("Usage: winboat-helios-viewer --address unix:path=...\n");return 2;}
  if (!g_str_has_prefix(argv[2],"unix:path=")) {g_printerr("Only local Unix display sockets are supported.\n");return 2;}
- Viewer v={.image=EGL_NO_IMAGE_KHR,.display=EGL_NO_DISPLAY};GError *err=NULL;v.loop=g_main_loop_new(NULL,FALSE);
+ Viewer v={.image=EGL_NO_IMAGE_KHR,.display=EGL_NO_DISPLAY,.cursor_visible=TRUE};GError *err=NULL;v.loop=g_main_loop_new(NULL,FALSE);
  v.bus=g_dbus_connection_new_for_address_sync(argv[2],G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT|G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION,NULL,NULL,&err);
  if (!v.bus) {g_printerr("%s\n",err->message);g_error_free(err);return 1;}
  if (ping) {
@@ -604,8 +696,7 @@ int main(int argc,char **argv) {
  GVariant *owner=g_dbus_connection_call_sync(v.bus,"org.freedesktop.DBus","/org/freedesktop/DBus","org.freedesktop.DBus","GetConnectionUnixUser",g_variant_new("(s)","org.qemu"),G_VARIANT_TYPE("(u)"),G_DBUS_CALL_FLAGS_NONE,3000,NULL,&err);
  if (!owner) {g_printerr("No authenticated QEMU display: %s\n",err->message);g_error_free(err);return 1;}
  g_variant_get(owner,"(u)",&v.qemu_uid);g_variant_unref(owner);
- v.mouse=g_dbus_proxy_new_sync(v.bus,G_DBUS_PROXY_FLAGS_NONE,NULL,"org.qemu",CONSOLE,IFACE "Mouse",NULL,&err);
- if (!v.mouse) {g_printerr("%s\n",err->message);g_error_free(err);return 1;}
+ v.consoles=g_ptr_array_new();
  v.info=g_dbus_node_info_new_for_xml(xml,&err);
  if (!gtk_init_check()) {g_printerr("No GTK display available.\n");return 1;}
  v.window=gtk_window_new();gtk_window_set_title(GTK_WINDOW(v.window),"WinBoat — Helios Desktop");gtk_window_set_default_size(GTK_WINDOW(v.window),1024,640);
@@ -649,7 +740,12 @@ int main(int argc,char **argv) {
  if (v.resize_timer) g_source_remove(v.resize_timer);
  g_clear_pointer(&v.screenshot_path,g_free);
  release_input(&v);g_dbus_connection_flush_sync(v.bus,NULL,NULL);
- if (v.peer) {g_signal_handlers_disconnect_by_data(v.peer,&v);g_dbus_connection_close_sync(v.peer,NULL,NULL);g_object_unref(v.peer);}
+ for (guint i=0;i<v.consoles->len;i++) {
+  Viewer *d=g_ptr_array_index(v.consoles,i);
+  if (d->peer) {g_signal_handlers_disconnect_by_data(d->peer,d);g_dbus_connection_close_sync(d->peer,NULL,NULL);g_object_unref(d->peer);}
+  g_clear_object(&d->mouse);g_clear_object(&d->cursor);g_free(d->console_path);g_free(d);
+ }
+ g_ptr_array_free(v.consoles,TRUE);
  g_signal_handlers_disconnect_by_data(v.bus,&v);
  g_clear_object(&v.mouse);g_clear_object(&v.bus);g_clear_object(&v.cursor);g_dbus_node_info_unref(v.info);g_main_loop_unref(v.loop);
  return v.exit_code;
