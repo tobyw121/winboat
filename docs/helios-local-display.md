@@ -190,3 +190,13 @@ Die Statuszeile nennt die tatsächlich empfangene Auflösung und den bisher
 verwendeten Software-/DMA-BUF-Bildpfad. Der native Softwaretest verlangt auch
 eine erfolgreich beantwortete Auflösungsanfrage. Audio, Zwischenablage, HDR/VRR
 und unbeschränkte Gaming-Maussteuerung bleiben separate Erweiterungen.
+
+### Screenshots
+
+**Screenshot** öffnet einen lokalen Speicherdialog und speichert die sichtbare
+Windows-Bildfläche einschließlich schwarzer Ränder als PNG. Der Viewer gibt vor
+dem Dialog gehaltene Eingaben frei und fokussiert danach wieder das Windows-Bild.
+Nur ein ausdrücklich angeforderter Screenshot liest Pixel zur CPU zurück; der
+normale DMA-BUF-Anzeigeweg bleibt davon unberührt. Ohne aktives Bild oder bei
+Dateifehlern zeigt die Statuszeile einen Fehler. Der native Funktionstest prüft
+auch PNG-Erstellung und Bildabmessungen.

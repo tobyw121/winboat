@@ -65,5 +65,5 @@ assert pixels != pixels[:3] * (width * height), 'The rendered BIOS frame is unif
 print(f'Captured a non-uniform {width}x{height} software frame.')
 PY
 mkdir -p "$root/dist"
-cp "$temporary/helios-viewer-smoke.ppm" "$root/dist/"
+cp "$temporary/helios-viewer-smoke.ppm" "$temporary/helios-viewer-smoke.png" "$root/dist/"
 printf '%s\n' 'Private bus, cross-UID listener FD handoff and rendered software frames passed. Physical DMA-BUF/GPU tests remain separate.'

@@ -38,6 +38,7 @@ static const char xml[] =
 
 typedef struct {
  GtkWidget *window, *area, *waiting, *status;
+ char *screenshot_path;
  GMainLoop *loop;
  GDBusConnection *bus, *peer;
  GDBusProxy *mouse;
@@ -177,6 +178,21 @@ static void draw(Viewer *v, GLuint texture, const float *rect, gboolean flip) {
  glUniform4fv(glGetUniformLocation(v->program,"rect"),1,rect);
  glUniform1i(glGetUniformLocation(v->program,"flip"),flip);glDrawArrays(GL_TRIANGLES,0,3);
 }
+static gboolean save_screenshot(Viewer *v,const char *path) {
+ int scale=gtk_widget_get_scale_factor(v->area),w=gtk_widget_get_width(v->area)*scale,h=gtk_widget_get_height(v->area)*scale;
+ if (!v->cache_valid || !dimensions(w,h)) return FALSE;
+ /* Explicit screenshots alone read back pixels; normal DMA-BUF rendering does not. */
+ GdkPixbuf *pixels=gdk_pixbuf_new(GDK_COLORSPACE_RGB,FALSE,8,w,h);
+ if (!pixels) return FALSE;
+ glPixelStorei(GL_PACK_ALIGNMENT,4);
+ glReadPixels(0,0,w,h,GL_RGB,GL_UNSIGNED_BYTE,gdk_pixbuf_get_pixels(pixels));
+ if (glGetError()!=GL_NO_ERROR) {g_object_unref(pixels);return FALSE;}
+ GdkPixbuf *flipped=gdk_pixbuf_flip(pixels,FALSE);g_object_unref(pixels);
+ if (!flipped) return FALSE;
+ GError *error=NULL;gboolean ok=gdk_pixbuf_save(flipped,path,"png",&error,NULL);
+ if (error) {g_printerr("Screenshot: %s\n",error->message);g_error_free(error);}
+ g_object_unref(flipped);return ok;
+}
 static gboolean render(GtkGLArea *area,GdkGLContext *context,Viewer *v) {
  (void)area;(void)context;
  gtk_widget_set_visible(v->waiting,!v->width || !v->cache_valid);
@@ -188,6 +204,10 @@ static gboolean render(GtkGLArea *area,GdkGLContext *context,Viewer *v) {
   const float rect[]={0,0,1,1};draw(v,v->texture,rect,v->flip);v->rendered_frames++;
  }
  if (glGetError()!=GL_NO_ERROR) fatal(v,"OpenGL window rendering failed.");
+ if (v->screenshot_path) {
+  gtk_label_set_text(GTK_LABEL(v->status),save_screenshot(v,v->screenshot_path)?"Screenshot saved.":"Screenshot could not be saved; no active frame or file error.");
+  g_clear_pointer(&v->screenshot_path,g_free);
+ }
  return TRUE;
 }
 static void discard_source(Viewer *v) {
@@ -401,6 +421,25 @@ static void secure_attention(GtkButton *button,Viewer *v) {
  for (guint i=G_N_ELEMENTS(keys);i>0;i--) input(v,IFACE "Keyboard","Release",g_variant_new("(u)",keys[i-1]));
  gtk_widget_grab_focus(v->area);
 }
+static void screenshot_response(GtkNativeDialog *dialog,int response,Viewer *v) {
+ if (response==GTK_RESPONSE_ACCEPT) {
+  GFile *file=gtk_file_chooser_get_file(GTK_FILE_CHOOSER(dialog));
+  g_clear_pointer(&v->screenshot_path,g_free);
+  if (file) {v->screenshot_path=g_file_get_path(file);g_object_unref(file);}
+  if (v->screenshot_path) gtk_gl_area_queue_render(GTK_GL_AREA(v->area));
+  else gtk_label_set_text(GTK_LABEL(v->status),"Choose a local file for the screenshot.");
+ }
+ gtk_native_dialog_destroy(dialog);g_object_unref(dialog);gtk_widget_grab_focus(v->area);
+}
+static void screenshot_clicked(GtkButton *button,Viewer *v) {
+ (void)button;release_input(v);
+ GtkFileChooserNative *dialog=gtk_file_chooser_native_new("Save Windows screenshot",GTK_WINDOW(v->window),GTK_FILE_CHOOSER_ACTION_SAVE,"Save","Cancel");
+ gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog),"WinBoat-screenshot.png");
+ GtkFileFilter *filter=gtk_file_filter_new();gtk_file_filter_set_name(filter,"PNG image");gtk_file_filter_add_pattern(filter,"*.png");
+ gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog),filter);g_object_unref(filter);
+ gtk_native_dialog_set_modal(GTK_NATIVE_DIALOG(dialog),TRUE);
+ g_signal_connect(dialog,"response",G_CALLBACK(screenshot_response),v);gtk_native_dialog_show(GTK_NATIVE_DIALOG(dialog));
+}
 static void resize_finished(GObject *object,GAsyncResult *result,gpointer data) {
  Viewer *v=data;GError *error=NULL;
  GVariant *reply=g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),result,&error);
@@ -452,6 +491,13 @@ static gboolean smoke_done(Viewer *v) {
   if (!dimensions(w,h)) {fatal(v,"Invalid smoke-test screenshot size.");return G_SOURCE_REMOVE;}
   guint8 *pixels=g_malloc((gsize)w*h*3);glPixelStorei(GL_PACK_ALIGNMENT,1);
   glReadPixels(0,0,w,h,GL_RGB,GL_UNSIGNED_BYTE,pixels);glFinish();
+  char *png=g_build_filename(g_get_tmp_dir(),"helios-viewer-smoke.png",NULL);
+  if (!save_screenshot(v,png)) {g_free(png);g_free(pixels);fatal(v,"PNG screenshot test failed.");return G_SOURCE_REMOVE;}
+  GdkPixbuf *check=gdk_pixbuf_new_from_file(png,NULL);g_free(png);
+  if (!check || gdk_pixbuf_get_width(check)!=w || gdk_pixbuf_get_height(check)!=h) {
+   g_clear_object(&check);g_free(pixels);fatal(v,"PNG screenshot dimensions failed.");return G_SOURCE_REMOVE;
+  }
+  g_object_unref(check);
   char *filename=g_build_filename(g_get_tmp_dir(),"helios-viewer-smoke.ppm",NULL);
   FILE *output=glGetError()==GL_NO_ERROR?fopen(filename,"wb"):NULL;
   if (!output) fatal(v,"Could not capture the software display test.");
@@ -525,6 +571,8 @@ int main(int argc,char **argv) {
  g_signal_connect(resize,"toggled",G_CALLBACK(resize_toggled),&v);g_signal_connect(aspect,"toggled",G_CALLBACK(aspect_toggled),&v);
  g_signal_connect(v.area,"resize",G_CALLBACK(resized),&v);
  if (smoke) gtk_check_button_set_active(GTK_CHECK_BUTTON(resize),TRUE);
+ GtkWidget *shot=gtk_button_new_with_label("Screenshot");gtk_header_bar_pack_end(GTK_HEADER_BAR(bar),shot);
+ g_signal_connect(shot,"clicked",G_CALLBACK(screenshot_clicked),&v);
  gtk_window_set_titlebar(GTK_WINDOW(v.window),bar);
  g_signal_connect(full,"clicked",G_CALLBACK(fullscreen_clicked),&v);g_signal_connect(attention,"clicked",G_CALLBACK(secure_attention),&v);
  g_unix_signal_add(SIGTERM,terminate_viewer,&v);g_unix_signal_add(SIGINT,terminate_viewer,&v);
@@ -540,6 +588,7 @@ int main(int argc,char **argv) {
  if (smoke) g_timeout_add_seconds(8,(GSourceFunc)smoke_done,&v);
  if (!v.exit_code) g_main_loop_run(v.loop);
  if (v.resize_timer) g_source_remove(v.resize_timer);
+ g_clear_pointer(&v.screenshot_path,g_free);
  release_input(&v);g_dbus_connection_flush_sync(v.bus,NULL,NULL);
  if (v.peer) {g_signal_handlers_disconnect_by_data(v.peer,&v);g_dbus_connection_close_sync(v.peer,NULL,NULL);g_object_unref(v.peer);}
  g_signal_handlers_disconnect_by_data(v.bus,&v);
