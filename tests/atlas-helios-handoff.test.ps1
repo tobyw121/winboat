@@ -8,10 +8,10 @@ try {
     New-Item -ItemType Directory -Force $root,$media | Out-Null
     $bundle=Join-Path $env:ProgramFiles 'WinBoat/helios'
     New-Item -ItemType Directory -Force $bundle | Out-Null
-    'MZ-installer-fixture' | Set-Content (Join-Path $bundle 'HeliosSetup.exe')
-    @{revision='fecffde64fd32399a877b452332681ef0db7993e';sha256=(Get-FileHash (Join-Path $bundle 'HeliosSetup.exe') -Algorithm SHA256).Hash.ToLowerInvariant()} | ConvertTo-Json | Set-Content (Join-Path $bundle 'helios-build.json')
     $script=Join-Path $RepoRoot 'guest_server/scripts/Start-AtlasHelios.ps1'
     . $script -LibraryOnly
+    'MZ-installer-fixture' | Set-Content (Join-Path $bundle 'HeliosSetup.exe')
+    @{revision='fecffde64fd32399a877b452332681ef0db7993e';sha256=(Get-WinBoatFileSha256 (Join-Path $bundle 'HeliosSetup.exe'))} | ConvertTo-Json | Set-Content (Join-Path $bundle 'helios-build.json')
     $now=[DateTime]::UtcNow
     $global:handoffApplied=[pscustomobject]@{Version='0.5.0';ErrorLevel=0;AppliedTimeUTC=$now.AddHours(-1).ToBinary();SelectedOptions=@('defender-enable','mitigations-default','auto-updates-default')}
     $global:handoffBoot=$now.AddHours(-2); $global:handoffActive=$false; $global:handoffResume=$null

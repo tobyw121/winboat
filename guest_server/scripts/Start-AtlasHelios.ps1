@@ -2,6 +2,7 @@
 param([switch]$Register, [switch]$LibraryOnly)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'Get-WinBoatFileSha256.ps1')
 $handoffRegister=$Register; $handoffLibraryOnly=$LibraryOnly
 $install=Join-Path $env:ProgramFiles 'WinBoat'
 . (Join-Path $PSScriptRoot 'Start-AtlasOOBE.ps1') -LibraryOnly
@@ -36,7 +37,7 @@ try {
         # Make the status API usable while waiting for the post-Atlas boot.
         $bundle=Join-Path $install 'helios'
         $receipt=Get-Content -LiteralPath (Join-Path $bundle 'helios-build.json') -Raw | ConvertFrom-Json
-        if ($receipt.revision -ne $expectedRevision -or (Get-FileHash -LiteralPath (Join-Path $bundle 'HeliosSetup.exe') -Algorithm SHA256).Hash.ToLowerInvariant() -ne $receipt.sha256) {throw 'Selected Helios bundle identity or SHA-256 mismatch.'}
+        if ($receipt.revision -ne $expectedRevision -or (Get-WinBoatFileSha256 (Join-Path $bundle 'HeliosSetup.exe')) -ne $receipt.sha256) {throw 'Selected Helios bundle identity or SHA-256 mismatch.'}
         $identityRoot=Join-Path $env:ProgramData 'WinBoat\Helios'
         New-Item -ItemType Directory -Force $identityRoot | Out-Null
         Set-AtlasTreeAccess $identityRoot '' $false

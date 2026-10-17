@@ -6,12 +6,14 @@ on:
     paths:
       - '.github/workflows/test-helios-provisioning.yml'
       - 'guest_server/scripts/Start-HeliosProvisioning.ps1'
+      - 'guest_server/scripts/Get-WinBoatFileSha256.ps1'
       - 'guest_server/scripts/Start-AtlasHelios.ps1'
       - 'tests/helios-provisioning.test.ps1'
       - 'tests/atlas-helios-handoff.test.ps1'
   pull_request:
     paths:
       - 'guest_server/scripts/Start-HeliosProvisioning.ps1'
+      - 'guest_server/scripts/Get-WinBoatFileSha256.ps1'
       - 'guest_server/scripts/Start-AtlasHelios.ps1'
       - 'tests/helios-provisioning.test.ps1'
       - 'tests/atlas-helios-handoff.test.ps1'

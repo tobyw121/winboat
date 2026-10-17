@@ -2,6 +2,7 @@
 param([string]$BundlePath, [switch]$Resume, [switch]$LibraryOnly)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'Get-WinBoatFileSha256.ps1')
 $taskName = 'WinBoatHeliosReboots'
 $root = Join-Path $env:ProgramData 'WinBoat\Helios'
 $statusPath = Join-Path $env:ProgramData 'Helios\provisioning-status.json'
@@ -16,7 +17,7 @@ function Write-HeliosProgress([string]$Status,[string]$Message) {
 function Assert-HeliosBundle([string]$Folder) {
     $receipt = Get-Content -LiteralPath (Join-Path $Folder 'helios-build.json') -Raw | ConvertFrom-Json
     if ($receipt.revision -ne $expectedRevision -or
-        (Get-FileHash -LiteralPath (Join-Path $Folder 'HeliosSetup.exe') -Algorithm SHA256).Hash.ToLowerInvariant() -ne $receipt.sha256) {
+        (Get-WinBoatFileSha256 (Join-Path $Folder 'HeliosSetup.exe')) -ne $receipt.sha256) {
         throw 'Helios installer identity or SHA-256 mismatch.'
     }
 }
@@ -39,7 +40,7 @@ function Invoke-HeliosProvisioning([string]$Source,[bool]$Continue) {
         Assert-HeliosBundle $Source
         $existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
         if ($null -ne $existing -and $existing.State.ToString() -eq 'Running') {return}
-        foreach ($target in @($root,(Join-Path $root 'HeliosSetup.exe'),(Join-Path $root 'helios-build.json'),(Join-Path $root 'Start-HeliosProvisioning.ps1'))) {
+        foreach ($target in @($root,(Join-Path $root 'HeliosSetup.exe'),(Join-Path $root 'helios-build.json'),(Join-Path $root 'Start-HeliosProvisioning.ps1'),(Join-Path $root 'Get-WinBoatFileSha256.ps1'))) {
             if ((Test-Path -LiteralPath $target) -and ((Get-Item -LiteralPath $target -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
                 throw 'Helios provisioning path contains a reparse point.'
             }
@@ -53,7 +54,8 @@ function Invoke-HeliosProvisioning([string]$Source,[bool]$Continue) {
         }
         $script = Join-Path $root 'Start-HeliosProvisioning.ps1'
         Copy-Item -LiteralPath $PSCommandPath -Destination $script -Force
-        foreach ($name in @('HeliosSetup.exe','helios-build.json','Start-HeliosProvisioning.ps1')) {
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Get-WinBoatFileSha256.ps1') -Destination $root -Force
+        foreach ($name in @('HeliosSetup.exe','helios-build.json','Start-HeliosProvisioning.ps1','Get-WinBoatFileSha256.ps1')) {
             $target=Join-Path $root $name
             $acl=Get-Acl -LiteralPath $target
             $acl.SetSecurityDescriptorSddlForm('O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)')

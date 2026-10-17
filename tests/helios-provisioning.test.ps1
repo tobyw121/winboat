@@ -5,11 +5,14 @@ $previousData=$env:ProgramData; $previousSystem=$env:SystemRoot
 $temporary=Join-Path ([IO.Path]::GetTempPath()) ('helios-provisioning-'+[guid]::NewGuid().ToString('N'))
 try {
     $env:ProgramData=$temporary; $env:SystemRoot=$temporary
-    $source=Join-Path $temporary 'source'; New-Item -ItemType Directory -Force $source | Out-Null
-    'MZ-fixture-not-an-executable' | Set-Content (Join-Path $source 'HeliosSetup.exe')
-    @{revision='fecffde64fd32399a877b452332681ef0db7993e';sha256=(Get-FileHash (Join-Path $source 'HeliosSetup.exe') -Algorithm SHA256).Hash.ToLowerInvariant()} |
-        ConvertTo-Json | Set-Content (Join-Path $source 'helios-build.json')
     . (Join-Path $RepoRoot 'guest_server/scripts/Start-HeliosProvisioning.ps1') -LibraryOnly
+    $source=Join-Path $temporary 'source'; New-Item -ItemType Directory -Force $source | Out-Null
+    $vector=Join-Path $source 'sha256-vector'
+    [IO.File]::WriteAllBytes($vector,[Text.Encoding]::ASCII.GetBytes('abc'))
+    if ((Get-WinBoatFileSha256 $vector) -ne 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad') {throw 'SHA-256 known-answer test failed.'}
+    'MZ-fixture-not-an-executable' | Set-Content (Join-Path $source 'HeliosSetup.exe')
+    @{revision='fecffde64fd32399a877b452332681ef0db7993e';sha256=(Get-WinBoatFileSha256 (Join-Path $source 'HeliosSetup.exe'))} |
+        ConvertTo-Json | Set-Content (Join-Path $source 'helios-build.json')
     $global:heliosBoot=[DateTime]::UtcNow.AddMinutes(-30)
     $global:heliosOfficial=$null; $global:heliosPhase='test-signing-restart-required'
     $global:heliosLaunches=0; $global:heliosRestarts=0; $global:heliosStarts=@(); $global:heliosRemoved=0; $global:heliosEnabled=0
@@ -58,7 +61,8 @@ try {
     }
     Invoke-HeliosProvisioning $source $false
     if($global:heliosLaunches -or $global:heliosRestarts -or $global:heliosStarts.Count -ne 1 -or
-        -not (Test-Path (Join-Path $root 'HeliosSetup.exe')) -or -not (Test-Path (Join-Path $root 'Start-HeliosProvisioning.ps1'))){throw 'OEM caller ran the installer inline or did not persist its verified payload.'}
+        -not (Test-Path (Join-Path $root 'HeliosSetup.exe')) -or -not (Test-Path (Join-Path $root 'Start-HeliosProvisioning.ps1')) -or
+        -not (Test-Path (Join-Path $root 'Get-WinBoatFileSha256.ps1'))){throw 'OEM caller ran the installer inline or did not persist its verified payload.'}
     Invoke-HeliosProvisioning '' $true
     if($global:heliosLaunches -ne 1 -or $global:heliosRestarts -ne 1 -or $global:heliosRemoved){throw 'Test-signing must request a reboot, not completion.'}
     Invoke-HeliosProvisioning '' $true
