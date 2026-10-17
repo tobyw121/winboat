@@ -224,4 +224,10 @@ try {
         if ($null -ne $key.PSObject.Properties[$name]) { $result.windowsSetup[$name] = [int]$key.$name }
     }
 } catch { $result.errors += 'Windows setup state unavailable' }
+try {
+    $handoff=Join-Path $env:ProgramData 'WinBoat\Atlas\helios-handoff.json'
+    if (Test-Path -LiteralPath $handoff) {
+        $result.heliosHandoff=Get-Content -LiteralPath $handoff -Raw | ConvertFrom-Json | Select-Object status,message,updatedAtUtc
+    }
+} catch { $result.heliosHandoff=@{status='unavailable'} }
 $result | ConvertTo-Json -Depth 6 -Compress

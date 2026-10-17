@@ -69,6 +69,7 @@ jobs:
           ./tests/atlas-windows.test.ps1
           ./tests/atlas-recovery.test.ps1
           ./tests/atlas-observer.test.ps1
+          ./tests/atlas-helios-handoff.test.ps1
           ./tests/atlas-acl.test.ps1
           ./tests/atlas-ui.test.ps1
           ./tests/atlas-session-launcher.test.ps1
@@ -79,6 +80,7 @@ jobs:
           ./tests/atlas-windows.test.ps1
           ./tests/atlas-recovery.test.ps1
           ./tests/atlas-observer.test.ps1
+          ./tests/atlas-helios-handoff.test.ps1
           ./tests/atlas-acl.test.ps1
           ./tests/atlas-ui.test.ps1
           ./tests/atlas-session-launcher.test.ps1

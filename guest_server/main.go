@@ -97,6 +97,15 @@ func repairAtlasIPC(ctx context.Context) ([]byte, error) {
 	return exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive",
 		"-ExecutionPolicy", "Bypass", "-File", script).Output()
 }
+func resumeAtlasHelios(ctx context.Context) ([]byte, error) {
+	executable, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	script := filepath.Join(filepath.Dir(executable), "scripts", "Start-AtlasHelios.ps1")
+	return exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive",
+		"-ExecutionPolicy", "Bypass", "-File", script, "-Register").Output()
+}
 func restartAtlasUI(ctx context.Context) ([]byte, error) {
 	return runAtlasUI(ctx, true)
 }
@@ -288,6 +297,7 @@ func main() {
 	r.HandleFunc("/provisioning/atlas/recovery", atlasRecoveryHandler("restart-oobe", recoverAtlasOOBE)).Methods("POST")
 	r.HandleFunc("/provisioning/atlas/restart-ui", atlasRecoveryHandler("restart-ame-ui", restartAtlasUI)).Methods("POST")
 	r.HandleFunc("/provisioning/atlas/repair-ipc", atlasRecoveryHandler("repair-ame-ipc", repairAtlasIPC)).Methods("POST")
+	r.HandleFunc("/provisioning/atlas/resume-helios", atlasRecoveryHandler("resume-helios", resumeAtlasHelios)).Methods("POST")
 	r.HandleFunc("/provisioning/atlas/launch-ui", atlasRecoveryHandler("launch-ame-ui", launchAtlasUI)).Methods("POST")
 	r.HandleFunc("/version", getVersion).Methods("GET")
 	r.HandleFunc("/metrics", getMetrics).Methods("GET")

@@ -430,3 +430,33 @@ keinen Atlas-Erfolg. Ein `launched` bestätigt nur den Prozessstart; die Konsole
 und ein späterer Diagnoseabruf müssen Oberfläche und Fortschritt bestätigen.
 Die Tests prüfen Guards, Aktionsrouting und Kompilierung; die tatsächlichen
 Windows-APIs benötigen zusätzlich einen Windows-VM-Lauf.
+
+### Helios nach dem AME-Abschluss und Neustart
+
+Der Observer registriert nach dem geprüften Atlas-Ergebnis und der Erstellung
+des konfigurierten Kontos den dauerhaften Task `WinBoatHeliosAfterAtlas`.
+Die Übergabe wartet auf einen Windows-Boot nach dem Atlas-Abschluss und auf das
+Ende der AME-Oberfläche. Erst danach darf der ausgewählte Helios-Installer starten.
+Eine alte `helios-started`-Datei mit einer inzwischen ungültigen PID sperrt die
+Übergabe nicht mehr. Startup-/Logon-Trigger mit `IgnoreNew` erhalten den Auftrag
+über Neustarts, ohne parallele Installer zu starten. Ein vorhandener
+`WinBoatHeliosReboots`-Task behält die Kontrolle über die begrenzten Neustarts.
+
+Eine bereits vollständig installierte, passende Helios-Version wird anhand des
+Installationszustands, ihres Manifests und des Abschlussstatus erkannt und nicht
+erneut installiert. Ein vorhandener Fehler wird nicht automatisch übergangen.
+Die Übergabe protokolliert ihren Zustand in
+`C:\ProgramData\WinBoat\Atlas\helios-handoff.json`; der Atlas-Diagnoseabruf zeigt
+ihn unter `heliosHandoff`.
+
+Für eine bestehende VM mit bereits abgeschlossenem Atlas:
+
+```bash
+python3 scripts/atlas/diagnose-vm.py --update-guest --resume-helios
+```
+
+Der Aufruf prüft den Atlas-Abschluss und registriert die fortsetzbare Übergabe.
+Falls der Grafiktreiber noch eingerichtet werden muss, kann Helios Windows wie
+bei der normalen automatischen Installation neu starten. Das ist keine erneute
+Windows-/Atlas-Installation. Die Linux-AppImage muss für Änderungen an Local
+Desktop zusätzlich neu gebaut und gestartet werden.

@@ -169,15 +169,15 @@ try {
     Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name AutoAdminLogon -Value '0'
     Restore-AtlasPreparation (Join-Path $root 'security-backup.json')
     Start-Service -Name WinBoatGuestServer
-    # The playbook result is authoritative; copying files never marks Atlas as finished.
-    Publish-AtlasOOBE 'finished' 'AME OOBE completed Atlas successfully. Helios setup follows if selected.'
-    if ($mode.waitForHelios -and -not (Test-Path -LiteralPath (Join-Path $root 'helios-started'))) {
+    if ($mode.waitForHelios) {
         $install = Join-Path $env:ProgramFiles 'WinBoat'
-        $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}\scripts\Start-HeliosProvisioning.ps1" -BundlePath "{0}\helios"' -f $install
-        # Helios owns its own persistent resume task and bounded restarts.
-        $process = Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList $arguments -PassThru
-        Set-Content -LiteralPath (Join-Path $root 'helios-started') -Value $process.Id
+        # Registration must finish before this observer exits. The durable task
+        # waits for Atlas' reboot and ignores obsolete helios-started PID files.
+        $handoff = & (Join-Path $install 'scripts\Start-AtlasHelios.ps1') -Register | ConvertFrom-Json
+        if ($handoff.status -ne 'queued') {throw 'Cannot register the post-Atlas Helios handoff; inspect helios-handoff.json.'}
     }
+    # Confirm the durable handoff before the host advances to its Helios monitor.
+    Publish-AtlasOOBE 'finished' 'AME OOBE completed Atlas successfully. Helios setup follows if selected.'
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
 } catch {
     $failureMessage = $_.Exception.Message

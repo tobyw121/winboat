@@ -2,6 +2,7 @@
 param([string]$RepoRoot = (Split-Path -Parent $PSScriptRoot))
 $ErrorActionPreference='Stop'
 $oldData=$env:ProgramData
+$oldFiles=$env:ProgramFiles
 $temporary=Join-Path ([IO.Path]::GetTempPath()) ('atlas-observer-'+[Guid]::NewGuid().ToString('N'))
 try {
     $env:ProgramData=$temporary
@@ -47,6 +48,22 @@ try {
     & (Join-Path $RepoRoot 'guest_server/scripts/Start-AtlasOOBE.ps1')
     $status=Get-Content (Join-Path $root 'status.json') -Raw | ConvertFrom-Json
     if ($status.status -ne 'finished' -or $global:atlasObserverWaits -ne 1 -or $global:atlasObserverChanges -ne 1) { throw 'Observer did not wait for final account creation.' }
+    $env:ProgramFiles=Join-Path $temporary 'programs'
+    $scripts=Join-Path $env:ProgramFiles 'WinBoat/scripts'
+    New-Item -ItemType Directory -Force $scripts | Out-Null
+    @'
+param([switch]$Register)
+if(-not $Register){throw 'Expected durable registration.'}
+'registered' | Set-Content (Join-Path $env:ProgramData 'WinBoat/Atlas/handoff-registered')
+@{status='queued'} | ConvertTo-Json -Compress
+'@ | Set-Content (Join-Path $scripts 'Start-AtlasHelios.ps1')
+    $mode=Get-Content (Join-Path $root 'oobe-mode.json') -Raw | ConvertFrom-Json
+    $mode.waitForHelios=$true
+    $mode | ConvertTo-Json | Set-Content (Join-Path $root 'oobe-mode.json')
+    'obsolete-process-id' | Set-Content (Join-Path $root 'helios-started')
+    $global:atlasObserverChecks=0; $global:atlasObserverWaits=0; $global:atlasObserverChanges=0
+    & (Join-Path $RepoRoot 'guest_server/scripts/Start-AtlasOOBE.ps1')
+    if(-not (Test-Path (Join-Path $root 'handoff-registered'))){throw 'A legacy PID suppressed the durable handoff.'}
     $global:atlasObserverFailed=$true; $global:atlasObserverWaits=0
     try { & (Join-Path $RepoRoot 'guest_server/scripts/Start-AtlasOOBE.ps1') } catch { }
     $status=Get-Content (Join-Path $root 'status.json') -Raw | ConvertFrom-Json
@@ -57,5 +74,6 @@ try {
     Write-Host 'Observer waits for both a fresh Atlas result and configured Windows account before disabling setup logon.'
 } finally {
     $env:ProgramData=$oldData
+    $env:ProgramFiles=$oldFiles
     Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue
 }
