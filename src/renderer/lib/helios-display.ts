@@ -60,7 +60,7 @@ export async function requireLocalDisplay(): Promise<void> {
     if (!hostEnvironment().DISPLAY && !hostEnvironment().WAYLAND_DISPLAY) throw new Error('Local Desktop needs a running X11 or Wayland desktop session.');
     try {
         const { stdout } = await execFile(binary(), ['--version'], { timeout: 3000, env: desktopEnvironment() });
-        if (stdout.trim() !== 'winboat-helios-viewer 8') throw new Error('Viewer protocol mismatch.');
+        if (stdout.trim() !== 'winboat-helios-viewer 9') throw new Error('Viewer protocol mismatch.');
     }
     catch { throw new Error('The local Helios viewer needs its bundled executable, GTK 4.8+, libepoxy and a desktop session. Install the GTK4 runtime or use Browser Display.'); }
     try {

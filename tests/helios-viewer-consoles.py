@@ -153,10 +153,14 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
                 if len(peers) != 2:
                     return True
                 if stage == 0:
-                    call(0, 'Scanout', '(uuuuay)', (32, 24, 128, 0x20020888, red))
-                    # An idle secondary scanout must not replace the boot VGA.
+                    call(0, 'Scanout', '(uuuuay)', (32, 24, 128, 0x20020888, pixels))
+                    # Even updating secondary placeholders must not replace
+                    # the installer VGA before the guest confirms its driver.
                     call(1, 'Scanout', '(uuuuay)', (32, 24, 128, 0x20020888, gray))
+                    call(1, 'Update', '(iiiiuuay)', (0, 0, 32, 24, 128, 0x20020888, gray))
                 elif stage == 1:
+                    visible_frame()  # Installation remains visible on VGA.
+                    viewer.stdin.write('adapters 1 1\n');viewer.stdin.flush()
                     call(1, 'Update', '(iiiiuuay)', (0, 0, 32, 24, 128, 0x20020888, pixels))
                 elif stage == 2:
                     failed_peer = peers[1]
@@ -213,6 +217,8 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
                     call(1, 'Scanout', '(uuuuay)', (32, 24, 128, 0x20020888, pixels))
                     viewer.stdin.write('adapters 1 1\n');viewer.stdin.flush()
                 elif stage == 13:
+                    # API loss alone must retain an already confirmed desktop.
+                    viewer.stdin.write('adapters 0 0\n');viewer.stdin.flush()
                     call(0, 'Update', '(iiiiuuay)', (0, 0, 32, 24, 128, 0x20020888, red))
                 elif stage == 14:
                     # Invalid cursor metadata must not invalidate a good frame.

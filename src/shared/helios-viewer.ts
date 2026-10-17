@@ -4,7 +4,7 @@ export type ViewerState = 'closed' | 'opening' | 'ready' | 'failed';
 export class HeliosViewer {
     private session?: { child: ChildProcess; opening: Promise<void>; cancel: () => void };
     private adapterCommand = 'adapters 0 0\n';
-    /** Cached guest health is a hint; stale/invalid data restores QEMU selection. */
+    /** Unknown guest health cannot promote an unverified Helios boot surface. */
     updateAdapters(value: unknown): void {
         const candidate = value as {helios?:{state?:string};basic?:{state?:string};sampleAgeMs?:number} | null;
         const state = (value?:string) => value === 'running' ? 1 : ['disabled','failed','missing'].includes(value || '') ? 2 : 0;

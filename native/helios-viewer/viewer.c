@@ -72,6 +72,7 @@ struct Viewer {
  char *console_path;
  guint console_id, pending_consoles, reconnect_timer;
  gboolean accelerated, seen_update, cursor_visible, awaiting_scanout;
+ gboolean has_basic_console, driver_confirmed;
  guint recovery_attempt;
  char frame_problem[512];
  gint helios_health, basic_health; /* 0 unknown, 1 running, 2 unavailable */
@@ -727,6 +728,7 @@ static void console_ready(GObject *object,GAsyncResult *result,gpointer data) {
   char *normalized=g_ascii_strdown(name,-1);
   /* QEMU labels this VM's device by its explicit id, "heliosgpu". */
   d->accelerated=!strstr(normalized,"bootstrap") && (strstr(normalized,"virtio") || strstr(normalized,"helios"));
+  if (!d->accelerated) v->has_basic_console=TRUE;
   g_free(normalized);
   g_ptr_array_add(v->consoles,d);
   g_dbus_proxy_new(v->bus,G_DBUS_PROXY_FLAGS_NONE,NULL,"org.qemu",d->console_path,IFACE "Mouse",NULL,mouse_ready,d);
@@ -765,16 +767,22 @@ static void register_consoles(Viewer *v) {
   g_variant_new("(ss)",IFACE "VM","ConsoleIDs"),G_VARIANT_TYPE("(v)"),G_DBUS_CALL_FLAGS_NONE,5000,NULL,console_ids_ready,v);
 }
 static gboolean console_eligible(Viewer *v,Viewer *d) {
- return d->cache_valid && (d->accelerated?v->helios_health:v->basic_health)!=2;
+ if (!d->cache_valid || (d->accelerated?v->helios_health:v->basic_health)==2) return FALSE;
+ /* QEMU can update a virtio placeholder before the Windows Helios driver is
+  * installed. During bootstrap, only confirmed guest health may promote it.
+  * A transient API outage can retain an already verified active desktop. */
+ if (d->accelerated && v->helios_health!=1 && (v->has_basic_console || v->pending_consoles))
+  return v->active==d && d->driver_confirmed;
+ return TRUE;
 }
 static void select_console(Viewer *v) {
  Viewer *next=v->active && console_eligible(v,v->active)?v->active:NULL;
  for (guint i=0;i<v->consoles->len;i++) {
   Viewer *d=g_ptr_array_index(v->consoles,i);
   if (!console_eligible(v,d)) continue;
-  /* A confirmed running driver may publish a complete Scanout with no later
-   * Update on a static desktop. Its initial frame must already beat VGA. */
-  if (!next || (d->accelerated && !next->accelerated && (d->seen_update || v->helios_health==1))) next=d;
+  /* Eligibility already verifies driver readiness when VGA is attached.
+   * A static complete Helios scanout needs no separate Update to win. */
+  if (!next || (d->accelerated && !next->accelerated)) next=d;
  }
  if (next==v->active) return;
  release_input(v);v->active=next;v->requested_width=v->requested_height=0;
@@ -790,6 +798,7 @@ static void adapter_health(Viewer *v,gint helios,gint basic) {
  for (guint i=0;i<v->consoles->len;i++) {
   Viewer *d=g_ptr_array_index(v->consoles,i);
   gint next=d->accelerated?helios:basic,previous=d->accelerated?v->helios_health:v->basic_health;
+  if (d->accelerated && next!=0) d->driver_confirmed=next==1;
   if (next==2) {d->cache_valid=FALSE;d->seen_update=FALSE;d->awaiting_scanout=TRUE;}
   else if (previous==2 && !d->cache_valid) {
    /* Re-enabling a driver need not generate another Scanout. Re-register only
@@ -947,7 +956,7 @@ int main(int argc,char **argv) {
  const char *version_error=gtk_check_version(4,8,0);
  if (version_error) {g_printerr("GTK 4.8 or newer is required: %s\n",version_error);return 1;}
  configure_gl();
- if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 8");return 0;}
+ if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 9");return 0;}
  if (argc==2 && !strcmp(argv[1],"--check-gl")) {
   if (!gtk_init_check()) {g_printerr("GTK cannot open the host X11/Wayland display.\n");return 1;}
   GtkWidget *window=gtk_window_new(),*area=display_area();

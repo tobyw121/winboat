@@ -524,6 +524,22 @@ ein frischer Helios-Puffer erhält wieder Vorrang vor Basic. Derselbe Mechanismu
 gilt für die Wiederherstellung des Basic-Adapters. Fenster und anderer Listener
 bleiben bestehen.
 
+Viewer 9 schützt die Windows-Installation vor einem vorzeitigen Wechsel: Ist
+eine Basic-/VGA-Konsole vorhanden, reichen Scanout und Updates der virtuellen
+Helios-GPU nicht zur Auswahl aus. Solche Bilder können bereits vor der
+Treiberinstallation als Platzhalter entstehen. Erst ein frischer `running`-
+Status der Guest API bestätigt Helios; deren Windows-Abfrage prüft Geräte-ID,
+PnP-Fehlercode und den Dienst `helios_kmd_render`. Bis dahin bleibt VGA aktiv.
+Die Wartezeit gilt auch während der asynchronen Konsolenerkennung.
+
+Ein bereits bestätigter, weiterhin gültiger aktiver Helios-Desktop darf bei
+kurzzeitig unbekanntem API-Status bleiben. Ein ausdrücklicher Treiberfehler oder
+ein ungültiges Bild hebt diese Ausnahme auf. Ohne VGA-Konsole funktioniert der
+eigenständige Viewer weiterhin auch für Firmware-/Software-Bilder. Der
+Integrationstest sendet vor der Bestätigung absichtlich Helios-Updates und
+prüft direkt am X11-Bild, dass die Installation auf VGA sichtbar bleibt; nach
+der Bestätigung muss im gleichen Fenster Helios Vorrang erhalten.
+
 Nach einem ungültigen Scanout/Update meldet sich nur die betroffene Konsole mit
 begrenzter Wiederholungsrate erneut bei QEMU an. QEMU liefert dadurch wieder
 einen vollständigen Scanout. Updates, die noch zur verworfenen Bildquelle
