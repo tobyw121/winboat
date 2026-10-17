@@ -26,6 +26,39 @@ function Select-AtlasFailureKinds([string[]]$Lines) {
         }
     } | Select-Object -Unique)
 }
+function Select-AtlasCrashEvents($Events) {
+    foreach ($event in $Events) {
+        # Event messages may contain credentials or user paths. Return only
+        # fixed provider IDs, timestamps, exception types and numeric codes.
+        $message = [string]$event.Message
+        if ($message -notmatch '(?i)(?:AME\.Client|OOBE)\.exe|ProgramData\\AME\\') { continue }
+        $provider = [string]$event.ProviderName
+        if ($provider -notin @('.NET Runtime','Application Error','Windows Error Reporting')) { continue }
+        $module = $null; $exceptionCode = $null
+        if ($null -ne $event.PSObject.Methods['ToXml']) {
+            $xml = [xml]$event.ToXml()
+            foreach ($entry in @($xml.SelectNodes('//*[local-name()="EventData"]/*[local-name()="Data"]'))) {
+                if ($entry.GetAttribute('Name') -eq 'ModuleName') {
+                    $name = ([string]$entry.InnerText -split '[\\/]')[-1]
+                    if ($name -match '^[A-Za-z0-9_.+-]{1,120}\.dll$') { $module = $name }
+                }
+                if ($entry.GetAttribute('Name') -eq 'ExceptionCode' -and [string]$entry.InnerText -match '^(?:0x)?[0-9a-fA-F]{8}$') {
+                    $exceptionCode = '0x' + ([string]$entry.InnerText -replace '^0x','')
+                }
+            }
+        }
+        [ordered]@{ id = [int]$event.Id; provider = $provider;
+            module = $module; exceptionCode = $exceptionCode;
+            timeUtc = $event.TimeCreated.ToUniversalTime().ToString('o');
+            failureKinds = @(Select-AtlasFailureKinds @($message)) }
+    }
+}
+function Get-AtlasWindowKind([string]$Title) {
+    if (-not $Title) { return 'none' }
+    if ($Title -eq 'An unexpected initialization error occured') { return 'initialization-error' }
+    if ($Title -eq 'An unexpected error occured') { return 'application-error' }
+    return 'other'
+}
 if ($LibraryOnly) { return }
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 $result = [ordered]@{ collectedAtUtc = [DateTime]::UtcNow.ToString('o'); errors = @() }
@@ -35,7 +68,10 @@ try {
         Select-Object Name, State, StartMode, ProcessId, ExitCode, ServiceSpecificExitCode)
 } catch { $result.errors += 'AME service status unavailable' }
 $result.processes = @(Get-Process -Name 'OOBE','AME.Client','msoobe','msoobeext','CloudExperienceHost','UserOOBEBroker','LogonUI' -ErrorAction SilentlyContinue |
-    Select-Object ProcessName, Id, SessionId, Responding)
+    Select-Object ProcessName, Id, SessionId, Responding,
+        @{Name='windowKind';Expression={
+            if ($null -ne $_.PSObject.Properties['MainWindowTitle']) { Get-AtlasWindowKind $_.MainWindowTitle } else { 'unknown' }
+        }})
 $result.files = @(foreach ($name in @('AME.Client.exe','OOBE.exe','oobe.conf','Playbook\playbook.conf')) {
     $file = Join-Path (Join-Path $root 'OOBE') $name
     [ordered]@{ name = $name; exists = (Test-Path -LiteralPath $file -PathType Leaf) }
@@ -58,10 +94,21 @@ try {
     $result.failureKinds = @(Select-AtlasFailureKinds $lines)
 } catch { $result.errors += 'AME startup log unavailable' }
 try {
+    # Do not filter by wall-clock time: Windows Setup may have corrected its clock.
+    $events = @(Get-WinEvent -FilterHashtable @{LogName='Application'; Id=@(1000,1001,1026)} -MaxEvents 100 -ErrorAction SilentlyContinue)
+    $result.crashEvents = @(Select-AtlasCrashEvents $events | Select-Object -First 20)
+} catch { $result.errors += 'Windows application crash events unavailable' }
+try {
+    $stored = Join-Path $env:ProgramData 'WinBoat\Atlas\Start-AtlasOOBE.ps1'
+    $result.observer.scriptCurrent = ((Get-FileHash -LiteralPath $stored -Algorithm SHA256).Hash -eq
+        (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'Start-AtlasOOBE.ps1') -Algorithm SHA256).Hash)
+} catch { $result.errors += 'Observer script version unavailable' }
+try {
     $key = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
     $shell = if ($null -ne $key.PSObject.Properties['Shell']) { [string]$key.Shell } else { '' }
     $result.logon = [ordered]@{ shell = (Get-AtlasShellKind $shell (Join-Path $root 'OOBE\AME.Client.exe')) }
     $result.logon.setupCredentialPresent = ($null -ne $key.PSObject.Properties['DefaultPassword'] -and -not [string]::IsNullOrEmpty([string]$key.DefaultPassword))
+    $result.logon.setupCredentialSource = 'winlogon-registry-only'
     foreach ($name in @('AutoAdminLogon','AutoLogonCount','ForceAutoLogon')) {
         if ($null -ne $key.PSObject.Properties[$name] -and [string]$key.$name -match '^\d{1,5}$') {
             $result.logon[$name] = [int]$key.$name

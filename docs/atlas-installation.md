@@ -296,3 +296,25 @@ Offline-Tools werden anhand des Fähigkeitslabels abgelehnt. Bereits erzeugte
 Installationsmedien und installierte Windows-Disks werden dadurch nicht rückwirkend
 gepatcht. Ein vollständiger Windows-/AME-OOBE-Durchlauf bleibt zusätzlich zu den
 WIM-, Hive- und ACL-Fixture-Tests erforderlich.
+
+### AME-Prozess läuft, OOBE-Dienst meldet 1067
+
+Ein laufender `AME.Client` beweist noch keine sichtbare Oberfläche oder einen
+abgeschlossenen Playbook-Lauf. Der Dienstcode allein reicht ebenfalls nicht zur
+Einordnung dieses Zustands. Die Diagnose ergänzt `crashEvents` aus den letzten
+100 passenden Windows-Anwendungsereignissen (höchstens 20 AME-Ereignisse),
+klassifiziert bekannte Fehlerfenster und vergleicht die gespeicherte
+Observer-Datei mit der installierten Skriptversion. Ereignisse werden ohne
+Zeitfilter gelesen, weil Windows Setup seine Uhr korrigieren kann. Rohmeldungen,
+Fenstertitel, Benutzerpfade und Kennwörter werden nicht ausgegeben.
+
+`setupCredentialPresent` prüft ausschließlich `Winlogon\\DefaultPassword`.
+Ein `false` schließt eine funktionierende Setup-Anmeldung nicht aus; andere
+Windows-Anmeldewege werden nicht ausgelesen. Ist `consoleAccount` bereits
+`setup-account`, begründet dieser Wert keine Neuinstallation. Ein Gastdienst-
+Update ersetzt außerdem nicht automatisch die bereits laufende private
+Observer-Kopie. Zur weiteren Ursachenbestimmung reicht zunächst:
+
+```bash
+python3 scripts/atlas/diagnose-vm.py --update-guest
+```

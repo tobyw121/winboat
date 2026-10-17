@@ -45,6 +45,7 @@ function Get-CimInstance {
     [pscustomobject]@{ Name='ameoobe'; State='Running'; StartMode='Auto'; ProcessId=42; ExitCode=0; ServiceSpecificExitCode=0 }
 }
 function Get-Process { [CmdletBinding()]param($Name) [pscustomobject]@{ProcessName='OOBE'; Id=42; SessionId=0; Responding=$true} }
+function Get-WinEvent { [CmdletBinding()]param($FilterHashtable,$MaxEvents) @() }
 function Get-ScheduledTask { param($TaskName) [pscustomobject]@{State='Running'} }
 function Get-ScheduledTaskInfo { [pscustomobject]@{LastTaskResult=267009} }
 function Get-Content { param($LiteralPath, $Tail) 'Message: "23:13:12.3456: Worker Start"'; 'Password: private' }
@@ -92,3 +93,19 @@ if (-not (Get-AtlasHandoffFailure ([pscustomobject]@{State='Running';ExitCode=0}
 $reg = [IO.File]::ReadAllText((Join-Path $RepoRoot 'guest_server/RDPApps.reg'))
 if ($reg -match 'AutoAdminLogon|Winlogon') { throw 'Early RemoteApp tweaks must not disable AME setup autologon.' }
 Write-Host 'AME service/logon stalls and early RemoteApp registry policy passed.'
+$events = @(
+    [pscustomobject]@{Id=1026;ProviderName='.NET Runtime';TimeCreated=[DateTime]::UtcNow;Message='Application: OOBE.exe System.InvalidOperationException secret-password C:\Users\private 0x80004005'},
+    [pscustomobject]@{Id=1000;ProviderName='Application Error';TimeCreated=[DateTime]::UtcNow;Message='unrelated.exe private'},
+    [pscustomobject]@{Id=1000;ProviderName='unexpected';TimeCreated=[DateTime]::UtcNow;Message='OOBE.exe private'}
+)
+$events[0] | Add-Member ScriptMethod ToXml {
+    '<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><EventData><Data Name="ModuleName">C:\private\Microsoft.UI.Xaml.dll</Data><Data Name="ExceptionCode">c0000005</Data></EventData></Event>'
+}
+$filtered = @(Select-AtlasCrashEvents $events)
+$json = $filtered | ConvertTo-Json -Depth 4
+if ($filtered.Count -ne 1 -or $filtered[0].failureKinds.Count -ne 2 -or $filtered[0].module -ne 'Microsoft.UI.Xaml.dll' -or $filtered[0].exceptionCode -ne '0xc0000005' -or $json -match 'secret-password|Users|private') { throw 'Crash diagnostics did not filter unrelated events or exposed raw messages.' }
+if ((Get-AtlasWindowKind 'An unexpected initialization error occured') -ne 'initialization-error' -or
+    (Get-AtlasWindowKind 'private-password-in-title') -ne 'other') { throw 'Window-title classifier leaked custom text.' }
+Write-Host 'Application crash event and window classification allowlists passed.'
+
+if (Get-AtlasHandoffFailure ([pscustomobject]@{State='Stopped';ExitCode=1067}) 'user' $true) { throw 'A live AME client was treated as a failed playbook solely from the service exit code.' }

@@ -15,8 +15,8 @@ function Test-AtlasOOBEApplied($Applied, [DateTime]$CreatedAt) {
     return $true
 }
 
-function Get-AtlasHandoffFailure($Service, [string]$ConsoleUser) {
-    if ($null -ne $Service -and $Service.State -eq 'Stopped' -and [int]$Service.ExitCode -ne 0) {
+function Get-AtlasHandoffFailure($Service, [string]$ConsoleUser, [bool]$ClientActive = $false) {
+    if ($null -ne $Service -and $Service.State -eq 'Stopped' -and [int]$Service.ExitCode -ne 0 -and -not $ClientActive) {
         return ('AME OOBE service stopped with code {0}. Atlas is not complete; collect diagnostics before recovery.' -f $Service.ExitCode)
     }
     if (-not $ConsoleUser) {
@@ -154,7 +154,11 @@ try {
         }
         $service = Get-CimInstance Win32_Service -Filter "Name='ameoobe'"
         $consoleUser = [string](Get-CimInstance Win32_ComputerSystem).UserName
-        $failure = Get-AtlasHandoffFailure $service $consoleUser
+        $clientActive = @(Get-Process -Name 'AME.Client' -ErrorAction SilentlyContinue).Count -gt 0
+        $failure = Get-AtlasHandoffFailure $service $consoleUser $clientActive
+        if ($clientActive -and $null -ne $service -and $service.State -eq 'Stopped') {
+            Publish-AtlasOOBE 'waiting' 'AME client is running but its OOBE service stopped. Inspect the Windows console and crash diagnostics; Atlas completion is not confirmed.'
+        }
         if ($failure) { $handoffFailures++ } else { $handoffFailures = 0 }
         # Allow startup transitions, but do not display 'applying' for 110 minutes.
         if ($handoffFailures -ge 12) { throw $failure }
