@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / 'resources/atlas-tools'))
 import inject
-from offline_registry import Hive
+from offline_registry import Hive, prepare_install
 from ame_assets import OPTIONS
 
 ANSWER = '''<unattend xmlns="urn:schemas-microsoft-com:unattend">
@@ -42,6 +42,9 @@ class MediaTests(unittest.TestCase):
             folder.mkdir(parents=True)
         for name in ['SYSTEM', 'SOFTWARE']:
             shutil.copyfile(REPO / 'tests/fixtures/hivex/minimal.hive', self.config / name)
+        system = Hive(self.config / 'SYSTEM')
+        system.set('ControlSet001', 'fixture', 1)
+        system.commit()
         hive = Hive(self.config / 'SOFTWARE')
         hive.set('Microsoft\\Windows Defender\\Features', 'TamperProtection', 5)
         hive.commit()
@@ -101,6 +104,19 @@ class MediaTests(unittest.TestCase):
         folder.mkdir(exist_ok=True)
         hive = inject.extract(wim, index, f'/Windows/System32/config/{hive_name}', folder)
         return Hive(hive).get(path, name)
+
+    def test_real_hive_selects_both_boot_control_sets(self):
+        path = self.config / 'SYSTEM'
+        system = Hive(path)
+        system.set('ControlSet002', 'fixture', 1)
+        system.set('Select', 'Default', 2)
+        system.set('Select', 'Current', 1)
+        system.commit()
+        prepare_install(self.config / 'SOFTWARE', path)
+        result = Hive(path)
+        for number in ['001', '002']:
+            self.assertEqual(result.get(f'ControlSet{number}\\Services\\ameoobe', 'Start'), (4, struct.pack('<I', 2)))
+        self.assertIsNone(result.node('ControlSet003'))
 
     def assert_answer(self, data, ame):
         xml = ET.fromstring(data)

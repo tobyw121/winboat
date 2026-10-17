@@ -4,7 +4,7 @@ export const AME_RELEASE = '0.8.4';
 export type AtlasMode = 'iso' | 'live';
 export const ATLAS_IMAGE = `winboat/atlas:${ATLAS_RELEASE}`;
 export const ATLAS_ISO_LABEL = 'org.winboat.atlas.iso';
-export const ATLAS_ISO_VERSION = 'ame-oobe-v1';
+export const ATLAS_ISO_VERSION = 'ame-oobe-v2';
 export const AME_WIZARD_ASSET = { name: 'AME-Beta-v0.8.4.exe',
     sha256: 'a637f32b64e1493b315db9139065105656c84518dca20ce3b18c89750ee40c82',
     url: 'https://github.com/Ameliorated-LLC/trusted-uninstaller-cli/releases/download/0.8.4/AME-Beta-v0.8.4.exe' } as const;

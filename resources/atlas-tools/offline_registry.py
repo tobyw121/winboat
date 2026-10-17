@@ -52,8 +52,31 @@ DEFENDER_PREPARATION = [
 ]
 
 
+def selected_control_sets(system):
+    """Resolve offline boot selection without inventing nonexistent control sets."""
+    found = set()
+    for name in ('Default', 'Current'):
+        entry = system.get('Select', name)
+        if entry is None:
+            continue
+        kind, data = entry
+        if kind != 4 or len(data) != 4:
+            raise ValueError(f'Invalid SYSTEM Select {name}')
+        number = struct.unpack('<I', data)[0]
+        path = f'ControlSet{number:03d}'
+        if not 1 <= number <= 999 or system.node(path) is None:
+            raise ValueError(f'SYSTEM Select {name} references an invalid control set')
+        found.add(path)
+    if not found:
+        if system.node('ControlSet001') is None:
+            raise ValueError('SYSTEM has no selected or default control set')
+        found.add('ControlSet001')
+    return sorted(found)
+
+
 def prepare_install(software, system):
     software, system = Hive(software), Hive(system)
+    control_sets = selected_control_sets(system)
     backup = []
     for path, name, value in DEFENDER_PREPARATION:
         original = software.get(path, name)
@@ -61,14 +84,15 @@ def prepare_install(software, system):
                        'originalType': original[0] if original else None,
                        'originalBytes': list(original[1]) if original else None})
         software.set(path, name, value)
-    service = 'ControlSet001\\Services\\ameoobe'
-    for name, value in {'DisplayName': 'AME OOBE', 'ObjectName': 'LocalSystem'}.items():
-        system.set(service, name, value, 1)
-    system.set(service, 'ImagePath', '"%ProgramData%\\AME\\OOBE\\OOBE.exe" --service', 2)
-    for name, value in {'ErrorControl': 0, 'Start': 2, 'Type': 16}.items():
-        system.set(service, name, value)
-    # Suppress automatic guest disk encryption, matching AME's generated unattend.
-    system.set('ControlSet001\\Control\\BitLocker', 'PreventDeviceEncryption', 1)
+    for control_set in control_sets:
+        service = f'{control_set}\\Services\\ameoobe'
+        for name, value in {'DisplayName': 'AME OOBE', 'ObjectName': 'LocalSystem'}.items():
+            system.set(service, name, value, 1)
+        system.set(service, 'ImagePath', '"%ProgramData%\\AME\\OOBE\\OOBE.exe" --service', 2)
+        for name, value in {'ErrorControl': 0, 'Start': 2, 'Type': 16}.items():
+            system.set(service, name, value)
+        # Suppress automatic guest disk encryption, matching AME's generated unattend.
+        system.set(f'{control_set}\\Control\\BitLocker', 'PreventDeviceEncryption', 1)
     software.commit()
     system.commit()
     return backup

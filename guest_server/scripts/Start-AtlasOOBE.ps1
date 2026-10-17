@@ -21,7 +21,8 @@ function Get-AtlasHandoffFailure($Service, [string]$ConsoleUser) {
     }
     if (-not $ConsoleUser) {
         $key = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
-        if ($key.DefaultUserName -ieq 'defaultuser0' -and [string]$key.AutoAdminLogon -eq '0') {
+        if ($null -ne $key.PSObject.Properties['DefaultUserName'] -and $null -ne $key.PSObject.Properties['AutoAdminLogon'] -and
+            $key.DefaultUserName -ieq 'defaultuser0' -and [string]$key.AutoAdminLogon -eq '0') {
             return 'AME setup has no console user and setup autologon is disabled. Atlas completion is not confirmed; guarded OOBE recovery is required.'
         }
     }
@@ -42,6 +43,36 @@ function Convert-AtlasRegistryBackup($Entry) {
     }
 }
 
+function Get-AtlasRuntimeSddl([string]$Sid, [bool]$Directory, [bool]$PublicRead, [bool]$Secret) {
+    if ($Sid -and $Sid -notmatch '^S-1-5-21-\d+-\d+-\d+-\d+$') { throw 'Unexpected Windows setup account SID.' }
+    $flags = if ($Directory) { 'OICI' } else { '' }
+    $sddl = "O:SYG:SYD:P(A;$flags;FA;;;SY)(A;$flags;FA;;;BA)"
+    if ($Sid) { $sddl += "(A;$flags;0x1200a9;;;$Sid)" }
+    elseif ($PublicRead -and -not $Secret) { $sddl += "(A;$flags;0x1200a9;;;BU)" }
+    return $sddl
+}
+
+function Set-AtlasTreeAccess([string]$Folder, [string]$Sid, [bool]$PublicRead) {
+    $items = @(Get-Item -LiteralPath $Folder -Force)
+    # Inspect before changing any ACL, and never follow junctions/symlinks.
+    for ($i = 0; $i -lt $items.Count; $i++) {
+        if ($items[$i].Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'AME runtime contains a reparse point.' }
+        if ($items[$i].PSIsContainer) { $items += @(Get-ChildItem -LiteralPath $items[$i].FullName -Force) }
+    }
+    # Protect the password first, before making binaries readable for startup.
+    foreach ($item in ($items | Sort-Object @{Expression={if ($_.Name -ieq 'oobe.conf') {0} else {1}}})) {
+        $sddl = Get-AtlasRuntimeSddl $Sid $item.PSIsContainer $PublicRead ($item.Name -ieq 'oobe.conf')
+        $acl = Get-Acl -LiteralPath $item.FullName
+        # Replace the complete DACL: /grant:r alone leaves other explicit ACEs.
+        $acl.SetSecurityDescriptorSddlForm($sddl)
+        Set-Acl -LiteralPath $item.FullName -AclObject $acl
+    }
+}
+
+function Set-AtlasRuntimeAccess([string]$Sid = '') {
+    Set-AtlasTreeAccess (Join-Path $env:ProgramData 'AME\OOBE') $Sid (-not $Sid)
+}
+
 function Grant-AtlasSetupAccountAccess {
     # The GUI runs in the temporary user's session and reads oobe.conf itself.
     # Keep the observer/admin scripts private; grant only this setup SID RX.
@@ -51,8 +82,7 @@ function Grant-AtlasSetupAccountAccess {
     if ($accounts.Count -ne 1 -or $accounts[0].Disabled) { return $false }
     $sid = [string]$accounts[0].SID
     if ($sid -notmatch '^S-1-5-21-\d+-\d+-\d+-\d+$') { throw 'Unexpected Windows setup account SID.' }
-    & icacls.exe $folder /grant:r (('*{0}:(OI)(CI)RX' -f $sid)) | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Cannot grant the temporary setup account access to AME.' }
+    Set-AtlasRuntimeAccess $sid
     return $true
 }
 
@@ -88,11 +118,8 @@ try {
     $mode = Get-Content -LiteralPath (Join-Path $root 'oobe-mode.json') -Raw | ConvertFrom-Json
     if ($mode.mode -ne 'ame-oobe' -or $mode.release -ne '0.5.0-hotfix') { throw 'Invalid AME OOBE installation marker.' }
     if ($oobeRequestedRegister) {
-        foreach ($folder in @($root, (Join-Path $env:ProgramData 'AME\OOBE'))) {
-            & icacls.exe $folder /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw 'Cannot protect AME setup files.' }
-        }
-        Grant-AtlasSetupAccountAccess | Out-Null
+        Set-AtlasTreeAccess $root '' $false
+        if (-not (Grant-AtlasSetupAccountAccess)) { Set-AtlasRuntimeAccess }
         foreach ($name in @('Start-AtlasOOBE.ps1', 'Start-AtlasProvisioning.ps1')) {
             Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $root -Force
         }
@@ -132,7 +159,7 @@ try {
         # Allow startup transitions, but do not display 'applying' for 110 minutes.
         if ($handoffFailures -ge 12) { throw $failure }
         if ([DateTime]::UtcNow -ge $deadline) { throw 'AME OOBE did not record successful completion. Inspect the Windows setup console.' }
-        Start-Sleep -Seconds 5
+        if ($setupAccessGranted -or $failure) { Start-Sleep -Seconds 5 } else { Start-Sleep -Milliseconds 200 }
     } while ($true)
     # Disable setup autologon only after the original AME result is verified.
     Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name AutoAdminLogon -Value '0'

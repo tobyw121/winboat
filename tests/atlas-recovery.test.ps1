@@ -35,10 +35,10 @@ try {
     $script:account = [pscustomobject]@{SID='S-1-5-21-1-2-3-1000'; Disabled=$false}
     $script:aclCalls = @()
     function Get-CimInstance { param($ClassName, $Filter) $script:account }
-    function icacls.exe { $script:aclCalls += ,$args; $global:LASTEXITCODE=0 }
+    function Set-AtlasRuntimeAccess { param($Sid) $script:aclCalls += ,@((Join-Path $env:ProgramData 'AME/OOBE'), $Sid) }
     if (-not (Grant-AtlasSetupAccountAccess)) { throw 'Setup account access was not granted.' }
     if ($script:aclCalls[0][0] -ne (Join-Path $testData 'AME/OOBE')) { throw 'Access change escaped the AME runtime directory.' }
-    if (($script:aclCalls[0] -join ' ') -notmatch '\*S-1-5-21-1-2-3-1000:\(OI\)\(CI\)RX$') { throw 'Setup account must receive only RX on the AME folder.' }
+    if ($script:aclCalls[0][1] -ne 'S-1-5-21-1-2-3-1000') { throw 'Setup account must receive only RX on the AME folder.' }
     $script:account.Disabled = $true
     if ((Grant-AtlasSetupAccountAccess) -or $script:aclCalls.Count -ne 1) { throw 'Disabled setup account received access.' }
     $script:account.Disabled=$false; $script:account.SID='S-1-1-0'

@@ -2,6 +2,7 @@
 import datetime
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -65,6 +66,20 @@ def child(folder, name):
     return matches[0] if matches else None
 
 
+def dockur_handoff_command(command, accounts):
+    # Match complete known dockur commands. Never delete custom command chains
+    # merely because they mention install.bat or a local account.
+    text = ' '.join(command.split()).casefold()
+    if text in {
+        r'cmd /c c:\oem\install.bat',
+        r'cmd /c if exist "c:\oem\install.bat" start "install" "cmd /c c:\oem\install.bat"',
+    }:
+        return True
+    match = re.fullmatch(r'powershell(?:\.exe)? -executionpolicy unrestricted -nologo -noprofile -noninteractive '
+                         r'set-localuser -name "([^"\r\n]+)" -passwordneverexpires 1', text)
+    return bool(match and match[1] in {name.casefold() for name in accounts})
+
+
 def amend_answer(source, index, ame=True):
     """Allow AME to create the user; preserve unrelated dockur customization."""
     xml = ET.parse(source)
@@ -86,6 +101,7 @@ def amend_answer(source, index, ame=True):
                              {'{http://schemas.microsoft.com/WMIConfig/2002/State}action': 'add'})
     ET.SubElement(metadata, f'{{{NS}}}Key').text = '/IMAGE/INDEX'
     ET.SubElement(metadata, f'{{{NS}}}Value').text = str(index)
+    accounts = [node.text or '' for node in xml.getroot().findall(f'.//{{{NS}}}LocalAccount/{{{NS}}}Name')]
     for component in xml.getroot().findall(f'.//{{{NS}}}component'):
         if not ame or component.get('name') != 'Microsoft-Windows-Shell-Setup':
             continue
@@ -100,8 +116,10 @@ def amend_answer(source, index, ame=True):
         commands = component.find(f'{{{NS}}}FirstLogonCommands')
         if commands is not None:
             for entry in list(commands):
-                if 'c:\\oem\\install.bat' in entry.findtext(f'{{{NS}}}CommandLine', '').lower():
+                if dockur_handoff_command(entry.findtext(f'{{{NS}}}CommandLine', ''), accounts):
                     commands.remove(entry)
+            if not len(commands):
+                component.remove(commands)
     xml.write(source, encoding='utf-8', xml_declaration=True)
 
 

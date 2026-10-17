@@ -16,7 +16,7 @@
         "test:packaging": "node --test tests/packaging.test.cjs",
         "test:atlas": "tsx --test tests/atlas.test.ts",
         "test:atlas:iso": "bash tests/atlas-iso.test.sh",
-        "test:atlas:windows": "pwsh -NoProfile -File tests/atlas-windows.test.ps1 && pwsh -NoProfile -File tests/atlas-recovery.test.ps1 && pwsh -NoProfile -File tests/atlas-observer.test.ps1",
+        "test:atlas:windows": "pwsh -NoProfile -File tests/atlas-windows.test.ps1 && pwsh -NoProfile -File tests/atlas-recovery.test.ps1 && pwsh -NoProfile -File tests/atlas-observer.test.ps1 && pwsh -NoProfile -File tests/atlas-acl.test.ps1",
         "build:helios:host": "node scripts/helios/build-host.ts",
         "helios:stage": "node scripts/helios/stage.ts",
         "helios:adopt-installer": "node scripts/helios/adopt-installer.ts",

@@ -271,3 +271,28 @@ verwenden; die bestehende VM-Disk vorher sichern. Ein bloßes Update der Anwendu
 
 Die Regressionstests prüfen Windows-Abfragen mit Fixtures. Ein vollständiger
 Windows-/AME-Installationslauf muss zusätzlich auf dem VM-Host verifiziert werden.
+
+### Offline-Übergabe und Dateirechte (Host-Protokoll `ame-oobe-v2`)
+
+Die Offline-Anpassung verwendet die existierenden ControlSets aus
+`SYSTEM\Select\Default` und `Current`. Ohne diese Auswahl muss `ControlSet001`
+bereits existieren. Ungültige oder fehlende ControlSets werden abgelehnt.
+
+Im AME-Modus entfallen gezielt Dockurs bekannte OEM-Installer-Aufrufe und der
+`Set-LocalUser ... -PasswordNeverExpires`-Aufruf für den aus der Antwortdatei
+entfernten Benutzer. Eigene Befehle und zusammengesetzte Befehlszeilen bleiben
+erhalten. Live-Modus, UAC- und OOBE-Seiteneinstellungen werden dabei nicht geändert.
+
+Vor der Kontoübergabe dürfen lokale Benutzer nur die AME-Programmdateien lesen;
+`oobe.conf` bleibt ausschließlich SYSTEM/Administratoren zugänglich. Sobald das
+aktive Setup-Konto existiert, ersetzt der Observer sämtliche Runtime-DACLs durch
+SYSTEM/Administratoren mit Vollzugriff und die konkrete Setup-SID mit RX. Es
+bleiben keine geerbten oder alten expliziten Benutzerfreigaben übrig. Reparse-
+Points werden vor ACL-Änderungen abgelehnt. Das WinBoat-Observer-Verzeichnis bleibt
+privat. Der Observer prüft die Kontoverfügbarkeit während der Übergabe häufiger.
+
+Das Host-Image muss mit `./scripts/build-helios.sh` neu gebaut werden; ältere
+Offline-Tools werden anhand des Fähigkeitslabels abgelehnt. Bereits erzeugte
+Installationsmedien und installierte Windows-Disks werden dadurch nicht rückwirkend
+gepatcht. Ein vollständiger Windows-/AME-OOBE-Durchlauf bleibt zusätzlich zu den
+WIM-, Hive- und ACL-Fixture-Tests erforderlich.

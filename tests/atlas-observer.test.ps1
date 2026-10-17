@@ -33,6 +33,13 @@ try {
         if ($global:atlasObserverChecks -lt 2 -or $Name -ne 'AutoAdminLogon' -or $Value -ne '0') { throw 'Autologon was disabled before the configured user existed.' }
         $global:atlasObserverChanges++
     }
+    function Get-Acl {
+        param($LiteralPath)
+        $acl=[pscustomobject]@{}
+        $acl | Add-Member ScriptMethod SetSecurityDescriptorSddlForm {param($Sddl) if ($Sddl -notmatch '^O:SYG:SYD:P') { throw 'Unprotected ACL.' }}
+        $acl
+    }
+    function Set-Acl {param($LiteralPath,$AclObject)}
     function Start-Sleep {param($Seconds) $global:atlasObserverWaits++}
     function Start-Service {param($Name) if ($global:atlasObserverChanges -ne 1) { throw 'Service sequencing failed.' }}
     function Unregister-ScheduledTask {param($TaskName,[switch]$Confirm)}
