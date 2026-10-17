@@ -167,9 +167,12 @@ function Invoke-HeliosEnsure([string]$Install) {
 
     if (Test-Path -LiteralPath $statusPath) {
         $state = Get-Content -LiteralPath $statusPath -Raw | ConvertFrom-Json
-        if ($state.status -eq 'finished' -and (Test-HeliosBootTestSigning)) {
+        if ($state.status -eq 'finished') {
             Assert-HeliosInstalled
-            return
+            if (Test-HeliosBootTestSigning) {return}
+            # A previously completed installation is a new maintenance attempt,
+            # not a continuation of its already exhausted two-reboot budget.
+            Remove-Item -LiteralPath $guardPath -Force -ErrorAction SilentlyContinue
         }
     }
     Invoke-HeliosProvisioning (Join-Path $install 'helios') $false

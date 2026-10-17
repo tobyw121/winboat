@@ -91,6 +91,14 @@ try {
     @{source=@{helios=$expectedRevision}} | ConvertTo-Json | Set-Content (Join-Path $installed 'manifest.json')
     Invoke-HeliosProvisioning '' $true
     if($global:heliosRemoved -ne 1 -or $global:heliosRestarts -ne 2 -or $global:heliosStarts.Count -ne ($starts+1) -or $global:heliosEnabled -ne 1){throw 'An active installer was duplicated or completion did not require the final boot.'}
+    $savedGuard=Get-Content -LiteralPath $guardPath -Raw
+    $savedStatus=Get-Content -LiteralPath $statusPath -Raw
+    $global:heliosTestSigning=$false
+    Invoke-HeliosEnsure $selectedInstall
+    if(Test-Path -LiteralPath $guardPath){throw 'Completed installation reused its exhausted reboot budget after test-signing was turned off'}
+    $savedGuard | Set-Content -LiteralPath $guardPath
+    $savedStatus | Set-Content -LiteralPath $statusPath
+    $global:heliosTestSigning=$true
     $global:heliosOfficial=[pscustomobject]@{State='Running'}
     Next-Boot
     Write-HeliosProgress 'driver-restart-required' 'repeated restart fixture'
