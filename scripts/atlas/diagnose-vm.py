@@ -71,8 +71,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--container', default='WinBoat')
     parser.add_argument('--update-guest', action='store_true')
-    parser.add_argument('--recover-oobe', action='store_true',
+    actions = parser.add_mutually_exclusive_group()
+    actions.add_argument('--recover-oobe', action='store_true',
                         help='Repair verified setup-account access and REBOOT Windows into OOBE using Sysprep; no password reset')
+    actions.add_argument('--launch-ame-ui', action='store_true',
+                        help='Start the pinned AME client as the existing signed-in defaultuser0 console user; no Windows reboot')
     args = parser.parse_args()
     base, oem = endpoint_and_oem(args.container)
     # This opener only talks to the local published guest port, never a proxy.
@@ -134,10 +137,12 @@ def main():
         json.dump(diagnostics, stream, indent=2)
     print(json.dumps(diagnostics, indent=2))
     print(f'Recording: {output}')
-    if args.recover_oobe:
-        print('Requesting guarded OOBE recovery. Windows will REBOOT; passwords are not reset.', flush=True)
-        request = urllib.request.Request(base + '/provisioning/atlas/recovery', data=b'',
-            headers={'X-WinBoat-Recovery': 'restart-oobe'}, method='POST')
+    if args.recover_oobe or args.launch_ame_ui:
+        route, operation = ('recovery', 'restart-oobe') if args.recover_oobe else ('launch-ui', 'launch-ame-ui')
+        message = 'Windows will REBOOT' if args.recover_oobe else 'Only the AME service and its UI will start; Windows stays running'
+        print(f'Requesting guarded AME action. {message}; passwords are not reset.', flush=True)
+        request = urllib.request.Request(base + '/provisioning/atlas/' + route, data=b'',
+            headers={'X-WinBoat-Recovery': operation}, method='POST')
         try:
             with opener.open(request, timeout=100) as response:
                 result = json.load(response)
@@ -145,9 +150,10 @@ def main():
             if error.code == 404:
                 raise RuntimeError('Install the recovery service with --update-guest first.') from error
             result = json.load(error)
+            print(json.dumps(result, indent=2), flush=True)
             raise RuntimeError(result.get('message', result.get('error', 'Recovery was refused.'))) from error
         print(json.dumps(result, indent=2))
-        print('Watch the Windows console. To check Sysprep progress, run this helper again without --recover-oobe.')
+        print('Watch the Windows console. Run this helper again without an action flag to inspect diagnostics.')
 
 
 if __name__ == '__main__':

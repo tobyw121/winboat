@@ -41,6 +41,7 @@ Write-Host 'Read-only diagnostic script parsing and startup-log allowlist passed
 function Get-CimInstance {
     param($ClassName, $Filter)
     if ($ClassName -eq 'Win32_UserAccount') { return [pscustomobject]@{SID='S-1-5-21-1-2-3-1000'; Disabled=$false} }
+    if ($ClassName -eq 'Win32_ComputerSystem') { return [pscustomobject]@{UserName='PRIVATE-PC\defaultuser0'} }
     [pscustomobject]@{ Name='ameoobe'; State='Running'; StartMode='Auto'; ProcessId=42; ExitCode=0; ServiceSpecificExitCode=0 }
 }
 function Get-Process { [CmdletBinding()]param($Name) [pscustomobject]@{ProcessName='OOBE'; Id=42; SessionId=0; Responding=$true} }
@@ -49,7 +50,7 @@ function Get-ScheduledTaskInfo { [pscustomobject]@{LastTaskResult=267009} }
 function Get-Content { param($LiteralPath, $Tail) 'Message: "23:13:12.3456: Worker Start"'; 'Password: private' }
 function Get-ItemProperty {
     param($Path)
-    if ($Path -like '*Winlogon') { return [pscustomobject]@{Shell=('"{0}" --oobe' -f (Join-Path $env:ProgramData 'AME/OOBE/AME.Client.exe')); DefaultUserName='defaultuser0'} }
+    if ($Path -like '*Winlogon') { return [pscustomobject]@{Shell=('"{0}" --oobe' -f (Join-Path $env:ProgramData 'AME/OOBE/AME.Client.exe')); DefaultUserName='defaultuser0'; AutoAdminLogon='1'; AutoLogonCount=0; ForceAutoLogon='private'} }
     [pscustomobject]@{OOBEInProgress=1; SystemSetupInProgress=0; SetupType=0}
 }
 function Get-Acl {
@@ -73,7 +74,9 @@ try {
     $result = $json | ConvertFrom-Json
     if ($result.service[0].ProcessId -ne 42 -or $result.windowsSetup.OOBEInProgress -ne 1 -or $result.startup.Count -ne 1 -or $json -match 'private') { throw 'Full diagnostic collection failed or leaked log contents.' }
     if ($result.errors.Count -or $result.logon.shell -ne 'ame-oobe' -or -not $result.shim.originalAME -or
-        -not $result.setupAccount.exists -or $result.amePermissions[0].rules[2].principal -ne 'setup-account' -or $json -match 'S-1-5-21') { throw 'Shell/permissions diagnostics failed or exposed machine identifiers.' }
+        -not $result.setupAccount.exists -or $result.logon.consoleAccount -ne 'setup-account' -or
+        $result.amePermissions[0].rules[2].principal -ne 'setup-account' -or $result.logon.AutoAdminLogon -ne 1 -or
+        $result.logon.AutoLogonCount -ne 0 -or $json -match 'S-1-5-21|PRIVATE-PC|private') { throw 'Shell/permissions diagnostics failed or exposed machine identifiers.' }
 } finally { $env:ProgramData = $oldProgramData; $env:SystemRoot = $oldSystemRoot }
 $failureKinds = @(Select-AtlasFailureKinds @('System.UnauthorizedAccessException: private', 'HResult: 0x80070005', 'Password: private', 'System.UnauthorizedAccessException'))
 if ($failureKinds.Count -ne 2 -or $failureKinds[0] -ne 'System.UnauthorizedAccessException' -or $failureKinds[1] -ne '0x80070005') { throw 'Failure-type allowlist failed.' }

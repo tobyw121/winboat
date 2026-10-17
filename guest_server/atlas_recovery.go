@@ -11,7 +11,7 @@ import (
 )
 
 // One fixed operation, guarded again inside Windows. No command/path arguments.
-func atlasRecoveryHandler(recoverOOBE func(context.Context) ([]byte, error)) http.HandlerFunc {
+func atlasRecoveryHandler(operation string, recoverOOBE func(context.Context) ([]byte, error)) http.HandlerFunc {
 	var active sync.Mutex
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -20,7 +20,7 @@ func atlasRecoveryHandler(recoverOOBE func(context.Context) ([]byte, error)) htt
 			w.WriteHeader(code)
 			json.NewEncoder(w).Encode(map[string]string{"error": message})
 		}
-		if r.Header.Get("X-WinBoat-Recovery") != "restart-oobe" {
+		if r.Header.Get("X-WinBoat-Recovery") != operation {
 			fail(http.StatusBadRequest, "Explicit OOBE recovery header required")
 			return
 		}
@@ -40,7 +40,7 @@ func atlasRecoveryHandler(recoverOOBE func(context.Context) ([]byte, error)) htt
 			return
 		}
 		switch result.Status {
-		case "queued":
+		case "queued", "launched":
 			w.WriteHeader(http.StatusAccepted)
 		case "blocked":
 			w.WriteHeader(http.StatusConflict)

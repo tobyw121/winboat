@@ -61,10 +61,19 @@ try {
     $key = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
     $shell = if ($null -ne $key.PSObject.Properties['Shell']) { [string]$key.Shell } else { '' }
     $result.logon = [ordered]@{ shell = (Get-AtlasShellKind $shell (Join-Path $root 'OOBE\AME.Client.exe')) }
+    foreach ($name in @('AutoAdminLogon','AutoLogonCount','ForceAutoLogon')) {
+        if ($null -ne $key.PSObject.Properties[$name] -and [string]$key.$name -match '^\d{1,5}$') {
+            $result.logon[$name] = [int]$key.$name
+        }
+    }
     if ($null -ne $key.PSObject.Properties['DefaultUserName']) {
         $result.logon.defaultIsSetupAccount = ([string]$key.DefaultUserName -ieq 'defaultuser0')
     }
 } catch { $result.errors += 'Windows shell handoff state unavailable' }
+try {
+    $consoleUser = [string](Get-CimInstance Win32_ComputerSystem).UserName
+    $result.logon.consoleAccount = if (-not $consoleUser) { 'none' } elseif ($consoleUser -match '(?i)(^|\\)defaultuser0$') { 'setup-account' } else { 'other' }
+} catch { $result.errors += 'Windows console logon state unavailable' }
 try {
     $account = @(Get-CimInstance Win32_UserAccount -Filter "LocalAccount=True AND Name='defaultuser0'")
     $result.setupAccount = [ordered]@{ exists = ($account.Count -eq 1) }

@@ -25,7 +25,7 @@ func TestAtlasRecoveryGuards(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			calls := 0
-			handler := atlasRecoveryHandler(func(ctx context.Context) ([]byte, error) {
+			handler := atlasRecoveryHandler("restart-oobe", func(ctx context.Context) ([]byte, error) {
 				calls++
 				if _, ok := ctx.Deadline(); !ok {
 					t.Fatal("unbounded recovery request")
@@ -54,7 +54,7 @@ func TestAtlasRecoveryGuards(t *testing.T) {
 
 func TestAtlasRecoveryRejectsConcurrentRequest(t *testing.T) {
 	started, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
-	handler := atlasRecoveryHandler(func(context.Context) ([]byte, error) {
+	handler := atlasRecoveryHandler("restart-oobe", func(context.Context) ([]byte, error) {
 		close(started)
 		<-release
 		return []byte(`{"status":"queued"}`), nil
@@ -73,5 +73,25 @@ func TestAtlasRecoveryRejectsConcurrentRequest(t *testing.T) {
 	<-done
 	if second.Code != 409 {
 		t.Fatal("second recovery request was not rejected")
+	}
+}
+
+func TestAtlasUIUsesSeparateOperation(t *testing.T) {
+	calls := 0
+	handler := atlasRecoveryHandler("launch-ame-ui", func(context.Context) ([]byte, error) {
+		calls++
+		return []byte(`{"status":"launched","sessionId":1}`), nil
+	})
+	for _, operation := range []string{"restart-oobe", "launch-ame-ui"} {
+		r := httptest.NewRequest("POST", "/provisioning/atlas/launch-ui", nil)
+		r.Header.Set("X-WinBoat-Recovery", operation)
+		w := httptest.NewRecorder()
+		handler(w, r)
+		if operation == "restart-oobe" && (w.Code != 400 || calls != 0) {
+			t.Fatal("wrong action accepted")
+		}
+		if operation == "launch-ame-ui" && (w.Code != 202 || calls != 1) {
+			t.Fatal("UI launch refused")
+		}
 	}
 }

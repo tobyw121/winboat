@@ -213,3 +213,34 @@ enthält auch einen Sysprep-Fehlerstatus, Exitcode und gefilterte Fehlercodes, f
 Windows den Vorgang ablehnt. Geprüft sind Berechtigungslogik, Abbruchbedingungen,
 HTTP-Aufruf, Fehlerbehandlung und Windows-Gastdienst-Build; ein echter Sysprep-/
 AME-Wiederanlauf lässt sich in der Cloud ohne Windows-VM nicht testen.
+
+### „Just a moment…“: AME gezielt in der vorhandenen Sitzung starten
+
+Sind die Einrichtungskonto-Berechtigungen vorhanden, aber `AME.Client` fehlt
+weiterhin, lässt sich der originale Client gezielt anstoßen:
+
+```bash
+git pull --ff-only origin work
+python3 scripts/atlas/diagnose-vm.py --update-guest --launch-ame-ui
+```
+
+Dieser Schalter startet Windows nicht neu und erzeugt keine neue Anmeldung.
+Der Helfer prüft das unveränderte Client-Original per SHA-256 und verifiziert
+mit Windows' WTS-Sitzungstoken, dass an der Konsole tatsächlich `defaultuser0`
+angemeldet ist. Eine andere oder fehlende Benutzersitzung wird abgewiesen.
+Anschließend startet er nur den AME-Dienst neu, um dessen GUI-Wartezeit zu
+erneuern, und führt `AME.Client.exe --oobe` mit dem Token und der Umgebung des
+Einrichtungskontos auf `winsta0\default` aus. Der Client läuft nicht als SYSTEM.
+Der WinBoat-Gastdienst muss dafür wie vorgesehen als SYSTEM laufen.
+
+`launched` bedeutet, dass der gestartete Prozess die ersten zwei Sekunden
+überlebt hat; es bestätigt weder ein sichtbares Fenster noch Atlas-Abschluss.
+Ein früher Prozess-Exit oder ein Windows-API-Fehler wird mit numerischem Code
+gemeldet. Fehler 1008 bedeutet, dass kein Token für eine angemeldete Sitzung
+verfügbar ist. Der Helfer meldet außerdem nur die Kategorie des Konsolenbenutzers
+und numerische AutoLogon-Zustände, keine Benutzernamen oder Kennwörter.
+
+Geprüft sind C#-Kompilierung, native Strukturlayouts, Aufrufreihenfolge und
+Abweisung ohne Sitzung sowie HTTP-/Pakettransport und der Windows-Gastdienst-
+Build. Die WTS-/Prozess-APIs und der originale WinUI-Client können in der
+Linux-Cloud nicht ausgeführt werden; ihr Zusammenspiel bleibt auf der VM zu prüfen.

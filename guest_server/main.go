@@ -85,6 +85,16 @@ func recoverAtlasOOBE(ctx context.Context) ([]byte, error) {
 		"-ExecutionPolicy", "Bypass", "-File", script).Output()
 }
 
+func launchAtlasUI(ctx context.Context) ([]byte, error) {
+	executable, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	script := filepath.Join(filepath.Dir(executable), "scripts", "Start-AtlasOOBEClient.ps1")
+	return exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive",
+		"-ExecutionPolicy", "Bypass", "-File", script).Output()
+}
+
 func getVersion(w http.ResponseWriter, r *http.Request) {
 	response := map[string]string{
 		"version":     Version,
@@ -257,7 +267,8 @@ func main() {
 	r.HandleFunc("/provisioning/atlas", getAtlasStatus).Methods("GET")
 	r.HandleFunc("/provisioning/atlas/diagnostics", atlasDiagnosticsHandler(collectAtlasDiagnostics)).Methods("GET")
 	r.HandleFunc("/provisioning/atlas/recovery", getAtlasRecoveryStatus).Methods("GET")
-	r.HandleFunc("/provisioning/atlas/recovery", atlasRecoveryHandler(recoverAtlasOOBE)).Methods("POST")
+	r.HandleFunc("/provisioning/atlas/recovery", atlasRecoveryHandler("restart-oobe", recoverAtlasOOBE)).Methods("POST")
+	r.HandleFunc("/provisioning/atlas/launch-ui", atlasRecoveryHandler("launch-ame-ui", launchAtlasUI)).Methods("POST")
 	r.HandleFunc("/version", getVersion).Methods("GET")
 	r.HandleFunc("/metrics", getMetrics).Methods("GET")
 	r.HandleFunc("/rdp/status", getRdpConnectedStatus).Methods("GET")

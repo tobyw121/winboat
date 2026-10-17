@@ -51,6 +51,8 @@ class UpdatePayloadTests(unittest.TestCase):
             self.assertIn('atlas/atlas.json', names)
             self.assertEqual(archive.read('scripts/Get-AtlasDiagnostics.ps1'),
                              (ROOT / 'guest_server/scripts/Get-AtlasDiagnostics.ps1').read_bytes())
+            self.assertEqual(archive.read('scripts/AtlasSessionLauncher.cs'),
+                             (ROOT / 'guest_server/scripts/AtlasSessionLauncher.cs').read_bytes())
             for name in ['atlas/oobe-credentials.json', 'atlas/AtlasPlaybook.apbx',
                          'atlas/AME-Beta-v0.8.4.exe', '.winboat-hardware/private.json']:
                 self.assertNotIn(name, names)
@@ -83,6 +85,7 @@ class UpdatePayloadTests(unittest.TestCase):
 
     def test_read_only_collection_from_guest_api(self):
         requests = []
+        fail_launch = False
         class GuestAPI(BaseHTTPRequestHandler):
             def do_GET(self):
                 requests.append(self.path)
@@ -94,7 +97,13 @@ class UpdatePayloadTests(unittest.TestCase):
                 self.wfile.write(json.dumps(data[self.path]).encode())
             def do_POST(self):
                 requests.append(self.path + ':POST')
-                self.send_response(202 if self.headers.get('X-WinBoat-Recovery') == 'restart-oobe' else 400)
+                if fail_launch:
+                    self.send_response(409)
+                    self.end_headers()
+                    self.wfile.write(b'{"status":"blocked","message":"No console token","errorCode":1008}')
+                    return
+                operation = 'launch-ame-ui' if self.path.endswith('launch-ui') else 'restart-oobe'
+                self.send_response(202 if self.headers.get('X-WinBoat-Recovery') == operation else 400)
                 self.end_headers()
                 self.wfile.write(b'{"status":"queued"}')
             def log_message(self, *args):
@@ -104,9 +113,9 @@ class UpdatePayloadTests(unittest.TestCase):
         thread.start()
         try:
             base = f'http://127.0.0.1:{server.server_port}'
-            for recover in [False, True]:
+            for flag in [None, '--recover-oobe', '--launch-ame-ui']:
                 requests.clear()
-                argv = ['diagnose-vm.py'] + (['--recover-oobe'] if recover else [])
+                argv = ['diagnose-vm.py'] + ([flag] if flag else [])
                 with patch.object(helper, 'endpoint_and_oem', return_value=(base, self.oem)), \
                      patch.object(helper.Path, 'home', return_value=self.root), \
                      patch('sys.argv', argv), contextlib.redirect_stdout(io.StringIO()):
@@ -117,7 +126,16 @@ class UpdatePayloadTests(unittest.TestCase):
                 self.assertEqual(result['atlasStatus']['status'], 'waiting')
                 self.assertEqual(output.stat().st_mode & 0o777, 0o600)
                 expected = ['/version', '/provisioning/atlas/diagnostics', '/provisioning/atlas', '/provisioning/atlas/recovery']
-                self.assertEqual(requests, expected + (['/provisioning/atlas/recovery:POST'] if recover else []))
+                route = 'launch-ui' if flag == '--launch-ame-ui' else 'recovery'
+                self.assertEqual(requests, expected + (['/provisioning/atlas/' + route + ':POST'] if flag else []))
+            fail_launch = True
+            capture = io.StringIO()
+            with patch.object(helper, 'endpoint_and_oem', return_value=(base, self.oem)), \
+                 patch.object(helper.Path, 'home', return_value=self.root), \
+                 patch('sys.argv', ['diagnose-vm.py', '--launch-ame-ui']), contextlib.redirect_stdout(capture):
+                with self.assertRaisesRegex(RuntimeError, 'No console token'):
+                    helper.main()
+            self.assertIn('"errorCode": 1008', capture.getvalue())
         finally:
             server.shutdown()
             server.server_close()
