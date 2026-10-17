@@ -116,6 +116,7 @@ test('same-version legacy guest APIs are updated to deploy automatic display rec
     assert.equal(guestNeedsUpdate({version:'0.8.7'},'0.8.7'),true);
     assert.equal(guestNeedsUpdate({version:'0.8.7',graphics_protocol:'old'},'0.8.7'),true);
     assert.equal(guestNeedsUpdate({version:'0.8.7',graphics_protocol:'helios-watchdog-v2'},'0.8.7'),true);
+    assert.equal(guestNeedsUpdate({version:'0.8.7',graphics_protocol:'helios-watchdog-v3'},'0.8.7'),true);
     assert.equal(guestNeedsUpdate({version:'0.8.7',graphics_protocol:GUEST_GRAPHICS_PROTOCOL},'0.8.7'),false);
     assert.equal(guestNeedsUpdate({version:'0.8.6',graphics_protocol:GUEST_GRAPHICS_PROTOCOL},'0.8.7'),true);
 });

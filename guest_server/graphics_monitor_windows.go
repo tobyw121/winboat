@@ -4,6 +4,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -11,12 +13,15 @@ import (
 	"time"
 )
 
+var displayTopology topologyController // collectDisplayAdapters is serialized by the monitor
+
 func collectDisplayAdapters(ctx context.Context, viewerUnavailable bool) ([]byte, error) {
 	executable, err := os.Executable()
 	if err != nil {
 		return nil, err
 	}
 	script := filepath.Join(filepath.Dir(executable), "scripts", "Get-DisplayAdapters.ps1")
+	enabled := mirrorEnabled(filepath.Dir(executable), os.Getenv("ProgramData"))
 	desktopCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	desktop, probeErr := collectConsoleDesktop(desktopCtx)
 	cancel()
@@ -24,7 +29,28 @@ func collectDisplayAdapters(ctx context.Context, viewerUnavailable bool) ([]byte
 	if viewerUnavailable || desktopRequiresFallback(desktop, probeErr) {
 		args = append(args, "-ViewerUnavailable")
 	}
+	if enabled {
+		args = append(args, "-MirrorDesired")
+	}
 	data, err := exec.CommandContext(ctx, "powershell.exe", args...).Output()
+	if err != nil {
+		return nil, err
+	}
+	var pnp displayAdapters
+	if err = json.Unmarshal(data, &pnp); err != nil {
+		return nil, err
+	}
+	desktop, policy := displayTopology.reconcile(time.Now(), enabled, pnp, desktop, probeErr, viewerUnavailable, func(action string) (desktopSnapshot, error) {
+		applyCtx, cancel := context.WithTimeout(ctx, 7*time.Second)
+		defer cancel()
+		next, err := collectConsoleDesktopAction(applyCtx, action)
+		if err == nil && next.ChangeError != "" {
+			err = fmt.Errorf("%s", next.ChangeError)
+		}
+		return next, err
+	})
+	pnp.Policy = &policy
+	data, err = json.Marshal(pnp)
 	if err != nil {
 		return nil, err
 	}

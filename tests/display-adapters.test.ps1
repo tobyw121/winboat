@@ -11,7 +11,9 @@ function pnputil.exe {
     if($args[1] -ne 'PCI\VEN_1234&DEV_1111\VGA'){throw 'Watchdog changed an unrelated adapter'}
     $global:enables+=($args -join ' ')
     if($global:failEnable){$global:LASTEXITCODE=1;return}
-    $global:devices[1].ConfigManagerErrorCode=0
+    $instance=$args[1]
+    $target=@($global:devices | Where-Object {$_.PNPDeviceID -eq $instance})[0]
+    $target.ConfigManagerErrorCode=0
     $global:LASTEXITCODE=0
 }
 $state=Invoke-WinBoatDisplayCheck $true
@@ -45,4 +47,12 @@ if($state.heliosPresent -or $global:enables.Count -ne $before){throw 'Non-Helios
 $global:devices=@((Device 'PCI\VEN_1AF4&DEV_1050\HELIOS' 'BasicDisplay'))
 $state=Invoke-WinBoatDisplayCheck $true
 if($state.helios.state -eq 'running'){throw 'Basic Display on virtio hardware was mistaken for installed Helios'}
+# Explicit mirror policy keeps VGA enabled even while Helios is healthy.
+$global:devices=@((Device 'PCI\VEN_1AF4&DEV_1050\HELIOS' 'helios_kmd_render'),(Device 'PCI\VEN_1234&DEV_1111\VGA' 'BasicDisplay' 22))
+$global:attempt=0; $global:failEnable=$false; $global:enables=@()
+$state=Invoke-WinBoatDisplayCheck $true $false $true
+if($state.basic.state -ne 'running' -or $global:enables.Count -ne 1){throw 'Mirror policy did not prepare VGA alongside healthy Helios'}
+$global:devices=@((Device 'PCI\VEN_1234&DEV_1111\VGA' 'BasicDisplay' 22)); $global:attempt=0
+$state=Invoke-WinBoatDisplayCheck $true $false $true
+if($state.basic.state -ne 'running' -or $global:enables.Count -ne 2){throw 'Selected mirror policy could not recover VGA after Helios vanished'}
 Write-Host 'Adapter identity, disabled VGA preservation, failed Helios fallback, Basic restart, cooldown, failure reporting and unrelated GPU isolation passed.'

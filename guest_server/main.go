@@ -293,9 +293,12 @@ func getIcon(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	if len(os.Args) == 2 && os.Args[1] == "--display-session-probe" {
-		runDisplaySessionProbe()
-		return
+	if len(os.Args) == 2 {
+		actions := map[string]string{"--display-session-probe": "probe", "--display-session-clone": "clone", "--display-session-basic": "basic"}
+		if action, ok := actions[os.Args[1]]; ok {
+			runDisplaySessionProbe(action)
+			return
+		}
 	}
 	r := mux.NewRouter()
 	graphics := newGraphicsMonitor()

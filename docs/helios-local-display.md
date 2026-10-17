@@ -613,6 +613,53 @@ Die Zustandsprüfung und Diagnosen reparieren keinen noch unbekannten Fehler
 im WDDM-/Venus-Present-Pfad. Dafür müssen diese Laufzeitdaten aus dem betroffenen
 Windows-Gast und ein danach getesteter Windows-Treiber-Build vorliegen.
 
+### Gespiegelter Desktop und vollständiger VGA-Rückfall
+
+Guest-Protokoll `helios-watchdog-v4` verwaltet für ausgewählte Helios-VMs die
+Windows-Anzeigetopologie. Erst wenn die ausgewählte Installation einen
+`install-state.json` und den Abschlussstatus `finished` besitzt, beginnt die
+Steuerung. Während Windows-Installation und AME/OOBE bleibt VGA zuständig.
+
+Im Normalbetrieb bleiben beide Adapter aktiviert. Windows wird über
+[`SetDisplayConfig`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setdisplayconfig)
+auf Duplizieren gestellt. Local Desktop verwendet im Modus `Auto` weiterhin
+Helios bevorzugt; eine manuelle Viewer-Auswahl verändert die Windows-Topologie
+nicht. Zwei erweiterte Arbeitsflächen gelten nicht als erfolgreiche Spiegelung.
+Die Steuerung prüft die aktiven CCD-Zielpfade und deren tatsächliche
+Desktop-Quellrechtecke, einschließlich der gepackten virtuellen Modusindizes.
+GDI-Adapterflags allein sind dafür nicht ausreichend, da ein geklonter Ausgang
+keinen eigenen erweiterten Desktop benötigt.
+
+Bei einem Helios-Treiberfehler oder einem vom Viewer gemeldeten Bildfehler
+wird zunächst der bekannte Basic-Adapter aktiviert beziehungsweise repariert.
+Anschließend richtet die Steuerung einen einzelnen VGA-Anzeigepfad als
+Windows-Desktop ein und prüft ihn erneut. Damit stehen auch Fenster und
+Anmeldung auf diesem Ausgang zur Verfügung; der Helios-PnP-Treiber wird dafür
+nicht deaktiviert oder deinstalliert. Ein fehlgeschlagener Windows-Aufruf
+wird nicht als erfolgreiche Wiederherstellung gemeldet.
+
+Nach einer Wartezeit wird die Spiegelung erneut versucht, auch wenn ein alter
+Viewer-Fehlerhinweis weiterhin erneuert wird. Sonst könnte ein abgeschalteter
+Helios-Ausgang nie das Bild liefern, das diesen Hinweis aufhebt. Nach einem
+Versuch gilt eine kurze Bewährungszeit. Fehlgeschlagene Versuche werden mit
+30 Sekunden beginnend bis höchstens fünf Minuten auseinandergezogen. Eine
+fehlgeschlagene VGA-Aktivierung wird ebenfalls begrenzt wiederholt.
+
+Die festen Worker laufen in der Konsolensitzung auf `WinSta0\Default`. Vor
+der Benutzeranmeldung kann ausschließlich der bereits als SYSTEM laufende
+Dienst seinen eigenen Token für diese Konsolensitzung duplizieren, um auch
+den Anmeldebildschirm wiederherzustellen. Es werden keine Kennwörter erfasst,
+keine fremden RDP-Sitzungen ausgewählt und keine beliebigen Befehle ausgeführt.
+
+Globale Topologieänderungen sind auf genau die beiden bekannten virtuellen
+Adapter beschränkt. Bei weiteren oder nicht identifizierbaren verfügbaren
+Anzeigen erfolgen keine automatischen Änderungen. Lehnt Windows die
+adapterübergreifende Spiegelung ab, bleibt ein geprüfter VGA-Desktop bestehen;
+es werden keine nicht implementierten Treiberfähigkeiten erzwungen. Die
+Hardware-Unterstützung für diese Spiegelung muss im betroffenen Windows-Gast
+bestätigt werden. Unter `/graphics/adapters` und `/graphics/diagnostics`
+stehen `desktop.topology`, `policy.state`, Fehlercode und nächste Wartezeit.
+
 Der ursprüngliche Fehlergrund (einschließlich EGL-Fehlercode, Format und
 Modifier bei einem Importfehler) erscheint in WinBoat während der
 Wiederherstellung und in der Terminal-Ausgabe. Sobald wieder ein gültiges Bild

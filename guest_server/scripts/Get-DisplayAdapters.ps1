@@ -1,5 +1,5 @@
 # A fixed watchdog operation: only re-enable WinBoat's QEMU bootstrap VGA.
-param([switch]$Recover, [switch]$LibraryOnly, [switch]$ViewerUnavailable)
+param([switch]$Recover, [switch]$LibraryOnly, [switch]$ViewerUnavailable, [switch]$MirrorDesired)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 function Get-WinBoatDisplayState {
@@ -28,11 +28,12 @@ function Set-WinBoatDisplayRecoveryTime([long]$Ticks) {
     New-Item -Path 'HKLM:\SOFTWARE\WinBoat\DisplayRecovery' -Force | Out-Null
     New-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\WinBoat\DisplayRecovery' -Name LastAttemptTicks -PropertyType QWord -Value $Ticks -Force | Out-Null
 }
-function Invoke-WinBoatDisplayCheck([bool]$Repair,[bool]$ViewerUnavailable=$false) {
+function Invoke-WinBoatDisplayCheck([bool]$Repair,[bool]$ViewerUnavailable=$false,[bool]$MirrorDesired=$false) {
     $state=Get-WinBoatDisplayState
-    # Preserve an intentional VGA disable while Helios and its viewer are healthy. Never
-    # disable adapters, re-install drivers or reboot from the watchdog.
-    if ($Repair -and $state.heliosPresent -and ($ViewerUnavailable -or $state.helios.state -notin @('running','unknown')) -and $state.basic.state -in @('disabled','failed')) {
+    # Mirroring explicitly needs both devices enabled, including when Helios
+    # vanished completely. Unmanaged/default callers preserve intentional VGA
+    # disables. Never disable devices, re-install drivers or reboot here.
+    if ($Repair -and ($state.heliosPresent -or $MirrorDesired) -and ($MirrorDesired -or $ViewerUnavailable -or $state.helios.state -notin @('running','unknown')) -and $state.basic.state -in @('disabled','failed')) {
         $now=[DateTime]::UtcNow.Ticks
         $elapsed=$now - (Get-WinBoatDisplayRecoveryTime)
         if ($elapsed -ge 0 -and $elapsed -lt [TimeSpan]::FromSeconds(30).Ticks) {$state.recovery='cooldown';return $state}
@@ -47,4 +48,4 @@ function Invoke-WinBoatDisplayCheck([bool]$Repair,[bool]$ViewerUnavailable=$fals
     return $state
 }
 if ($LibraryOnly) {return}
-Invoke-WinBoatDisplayCheck ([bool]$Recover) ([bool]$ViewerUnavailable) | ConvertTo-Json -Depth 5 -Compress
+Invoke-WinBoatDisplayCheck ([bool]$Recover) ([bool]$ViewerUnavailable) ([bool]$MirrorDesired) | ConvertTo-Json -Depth 5 -Compress

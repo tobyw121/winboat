@@ -14,9 +14,13 @@ type desktopOutput struct {
 	Primary bool   `json:"primary"`
 }
 type desktopSnapshot struct {
-	SessionID uint32        `json:"sessionId"`
-	Helios    desktopOutput `json:"helios"`
-	Basic     desktopOutput `json:"basic"`
+	SessionID      uint32        `json:"sessionId"`
+	Helios         desktopOutput `json:"helios"`
+	Basic          desktopOutput `json:"basic"`
+	Topology       string        `json:"topology,omitempty"`
+	Managed        bool          `json:"managed"`
+	CloneAvailable bool          `json:"cloneAvailable"`
+	ChangeError    string        `json:"changeError,omitempty"`
 }
 
 func desktopRequiresFallback(desktop desktopSnapshot, probeErr error) bool {
@@ -38,8 +42,12 @@ func mergeDesktopStatus(data []byte, desktop desktopSnapshot, probeErr error) ([
 		}
 	} else {
 		status.Desktop = &desktop
-		status.Helios.DesktopState = desktop.Helios.State
-		status.Basic.DesktopState = desktop.Basic.State
+		if desktop.Helios.State == "active" || desktop.Helios.State == "inactive" {
+			status.Helios.DesktopState = desktop.Helios.State
+		}
+		if desktop.Basic.State == "active" || desktop.Basic.State == "inactive" {
+			status.Basic.DesktopState = desktop.Basic.State
+		}
 	}
 	return json.Marshal(status)
 }

@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const graphicsProtocol = "helios-watchdog-v3"
+const graphicsProtocol = "helios-watchdog-v4"
 
 type displayAdapter struct {
 	State        string `json:"state"`
@@ -26,6 +26,7 @@ type displayAdapters struct {
 	Error        string           `json:"error,omitempty"`
 	Desktop      *desktopSnapshot `json:"desktop,omitempty"`
 	DesktopError string           `json:"desktopError,omitempty"`
+	Policy       *topologyStatus  `json:"policy,omitempty"`
 }
 type graphicsMonitor struct {
 	mu                     sync.RWMutex
@@ -60,7 +61,7 @@ func (m *graphicsMonitor) update(data []byte, err error) {
 }
 func (m *graphicsMonitor) run(ctx context.Context, collect func(context.Context, bool) ([]byte, error)) {
 	for {
-		check, cancel := context.WithTimeout(ctx, 12*time.Second)
+		check, cancel := context.WithTimeout(ctx, 25*time.Second)
 		m.mu.RLock()
 		viewerUnavailable := time.Now().Before(m.viewerUnavailableUntil)
 		m.mu.RUnlock()
