@@ -1,5 +1,5 @@
 # Durable Atlas -> Helios handoff. Never use a transient PID as completion.
-param([switch]$Register, [switch]$LibraryOnly)
+param([switch]$Register, [switch]$LibraryOnly, [switch]$OnlyWhenReady, [switch]$RetryFailed)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Get-WinBoatFileSha256.ps1')
@@ -32,6 +32,7 @@ try {
     $boot=(Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime()
     $active=@(Get-Process -Name 'AME.Client' -ErrorAction SilentlyContinue | Where-Object {$_.SessionId -gt 0}).Count -gt 0
     $phase=Get-AtlasHeliosPhase $applied ([DateTime]::Parse($mode.createdAtUtc).ToUniversalTime()) $boot ($accounts.Count -eq 1 -and -not $accounts[0].Disabled) $active
+    if ($OnlyWhenReady -and $phase -ne 'ready') {return}
     if ($phase -eq 'blocked') {throw 'Atlas success/profile or configured Windows account is not confirmed. Helios was not started.'}
     if ($handoffRegister) {
         # Make the status API usable while waiting for the post-Atlas boot.
@@ -43,7 +44,9 @@ try {
         Set-AtlasTreeAccess $identityRoot '' $false
         Copy-Item -LiteralPath (Join-Path $bundle 'helios-build.json') -Destination $identityRoot -Force
         $script=Join-Path $install 'scripts\Start-AtlasHelios.ps1'
-        $action=New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"' -f $script)
+        $workerArguments='-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"' -f $script
+        if ($RetryFailed) {$workerArguments+=' -RetryFailed'}
+        $action=New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument $workerArguments
         $settings=New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 1) -StartWhenAvailable
         Register-ScheduledTask -TaskName $taskName -Action $action -Settings $settings -Trigger @((New-ScheduledTaskTrigger -AtStartup),(New-ScheduledTaskTrigger -AtLogOn)) -User SYSTEM -RunLevel Highest -Force | Out-Null
         $queued=Publish-Handoff 'queued' 'Helios handoff saved. Installation continues after the Atlas restart.'
@@ -82,9 +85,9 @@ try {
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
         exit 0
     }
-    if ($null -ne $state -and $state.status -eq 'failed') {throw 'Helios already reported a failure. Inspect its installer log before retrying.'}
+    if ($null -ne $state -and $state.status -eq 'failed' -and -not $RetryFailed) {throw 'Helios already reported a failure. Inspect its installer log before retrying.'}
     $resume=Get-ScheduledTask -TaskName 'WinBoatHeliosReboots' -ErrorAction SilentlyContinue
-    if ($null -ne $resume) {
+    if ($null -ne $resume -and (-not $RetryFailed -or $resume.State.ToString() -eq 'Running')) {
         if ($resume.State.ToString() -ne 'Running') {Start-ScheduledTask -TaskName 'WinBoatHeliosReboots'}
         Publish-Handoff 'waiting' 'The existing Helios resume task owns installation and its bounded restarts.' | Out-Null
         exit 0
@@ -93,7 +96,7 @@ try {
     $arguments='-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"' -f $script
     # Older workers retained only the receipt, not the installer. Stage a full
     # durable worker before resuming those partially installed machines.
-    if ($installed -and (Test-Path -LiteralPath (Join-Path $env:ProgramData 'WinBoat\Helios\HeliosSetup.exe'))) {$arguments+=' -Resume'}
+    if (-not $RetryFailed -and $installed -and (Test-Path -LiteralPath (Join-Path $env:ProgramData 'WinBoat\Helios\HeliosSetup.exe'))) {$arguments+=' -Resume'}
     else {$arguments+=(' -BundlePath "{0}"' -f (Join-Path $install 'helios'))}
     Publish-Handoff 'started' 'Starting the selected Helios installer/resume worker after Atlas.' | Out-Null
     $process=Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList $arguments -Wait -PassThru

@@ -127,9 +127,10 @@ func runAtlasUI(ctx context.Context, restart bool) ([]byte, error) {
 
 func getVersion(w http.ResponseWriter, r *http.Request) {
 	response := map[string]string{
-		"version":     Version,
-		"commit_hash": CommitHash,
-		"build_time":  BuildTimestamp,
+		"version":           Version,
+		"graphics_protocol": graphicsProtocol,
+		"commit_hash":       CommitHash,
+		"build_time":        BuildTimestamp,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -293,6 +294,10 @@ func getIcon(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	r := mux.NewRouter()
+	graphics := newGraphicsMonitor()
+	go graphics.run(context.Background(), collectDisplayAdapters)
+	go ensureSelectedHelios()
+	r.HandleFunc("/graphics/adapters", graphics.status).Methods("GET")
 	r.HandleFunc("/apps", getApps).Methods("GET")
 	r.HandleFunc("/health", getHealth).Methods("GET")
 	r.HandleFunc("/graphics/helios", getHeliosStatus).Methods("GET")

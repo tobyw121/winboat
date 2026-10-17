@@ -45,6 +45,7 @@ try {
         param($TaskName,$Action,$Settings,$Trigger,$User,$RunLevel,[switch]$Force)
         if($TaskName -ne 'WinBoatHeliosAfterAtlas' -or $Trigger.Count -ne 2 -or $User -ne 'SYSTEM'){throw 'Handoff is not durable across reboot/logon.'}
         $global:handoffRegistrations++
+        $global:handoffAction=$Action.Argument
     }
     function Start-ScheduledTask {param($TaskName) $global:handoffStarts++}
     function Get-ScheduledTask {[CmdletBinding()]param($TaskName) return $global:handoffResume}
@@ -55,6 +56,8 @@ try {
         $global:handoffLaunches++
         return [pscustomobject]@{ExitCode=0}
     }
+    & $script -Register -OnlyWhenReady -RetryFailed
+    if($global:handoffRegistrations -or $global:handoffLaunches -or $global:handoffRestarts){throw 'API recovery interrupted pre-reboot Atlas'}
     $registered=& $script -Register | ConvertFrom-Json
     if($registered.status -ne 'queued' -or $global:handoffRegistrations -ne 1 -or $global:handoffLaunches -or
         -not (Test-Path (Join-Path $env:ProgramData 'WinBoat/Helios/helios-build.json'))){throw 'Registration launched a driver before Atlas rebooted or did not stage the API receipt.'}
@@ -99,6 +102,13 @@ try {
     & $script
     $state=Get-Content (Join-Path $root 'helios-handoff.json') -Raw | ConvertFrom-Json
     if($state.status -ne 'failed' -or $state.message -notmatch 'reboot loop prevented' -or $global:handoffRestarts -ne 1){throw 'An unconfirmed post-Atlas reboot loop was accepted.'}
+    $global:handoffBoot=$now
+    @{status='failed';message='legacy installer failed'} | ConvertTo-Json | Set-Content (Join-Path $helios 'provisioning-status.json')
+    $registered=& $script -Register -OnlyWhenReady -RetryFailed | ConvertFrom-Json
+    if($registered.status -ne 'queued' -or $global:handoffAction -notlike '* -RetryFailed'){throw 'Verified post-Atlas API recovery was not persisted'}
+    $global:handoffResume=[pscustomobject]@{State='Ready'}
+    & $script -RetryFailed
+    if($global:handoffLaunches -ne 3){throw 'A failed idle legacy worker did not receive the new provisioning script'}
     Write-Host 'Durable post-Atlas handoff, one guarded reboot after AME exits, reboot ordering, old PID/cache recovery, resume ownership and installed-driver preservation passed with Windows API fixtures.'
 } finally {
     $env:ProgramData=$previousData; $env:ProgramFiles=$previousFiles; $env:SystemRoot=$previousSystem

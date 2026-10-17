@@ -1,5 +1,5 @@
 # OEM-only orchestrator. The pinned official installer owns driver installation.
-param([string]$BundlePath, [switch]$Resume, [switch]$LibraryOnly)
+param([string]$BundlePath, [switch]$Resume, [switch]$LibraryOnly, [switch]$Ensure)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Get-WinBoatFileSha256.ps1')
@@ -25,6 +25,36 @@ function Assert-HeliosAdministrator {
     if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
         throw 'Helios provisioning requires administrator rights.'
     }
+}
+function Test-HeliosBootTestSigning {
+    # BCD describes the next boot. Query the running kernel before installing.
+    if (-not ('WinBoat.CodeIntegrity' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+namespace WinBoat {
+    public static class CodeIntegrity {
+        [StructLayout(LayoutKind.Sequential)]
+        private struct Information { public UInt32 Length; public UInt32 Options; }
+        [DllImport("ntdll.dll")]
+        private static extern UInt32 NtQuerySystemInformation(UInt32 kind, ref Information info, UInt32 length, IntPtr returned);
+        public static bool TestSigning() {
+            var info = new Information(); info.Length = (UInt32)Marshal.SizeOf(info);
+            var result = NtQuerySystemInformation(103, ref info, info.Length, IntPtr.Zero);
+            if (result != 0) throw new InvalidOperationException("Cannot query active Windows code integrity: " + result.ToString("X8"));
+            return (info.Options & 2U) != 0;
+        }
+    }
+}
+'@
+    }
+    return [WinBoat.CodeIntegrity]::TestSigning()
+}
+function Restart-HeliosProvisioning($Guard,[DateTime]$Boot,[string]$State) {
+    if ($Guard.count -ge 2 -or $Guard.state -eq $State) {throw 'Helios reboot loop prevented. Inspect the setup log in Windows.'}
+    @{count=$Guard.count+1;boot=$Boot.ToString('o');state=$State} | ConvertTo-Json | Set-Content -LiteralPath $guardPath -Encoding UTF8
+    & shutdown.exe /r /t 15 /d p:2:4 /c 'WinBoat: completing the selected Helios driver installation'
+    if ($LASTEXITCODE -ne 0) {throw 'Windows refused the Helios provisioning restart.'}
 }
 function Assert-HeliosInstalled {
     if (-not (Test-Path -LiteralPath (Join-Path $env:ProgramData 'Helios\install-state.json') -PathType Leaf)) {
@@ -75,6 +105,14 @@ function Invoke-HeliosProvisioning([string]$Source,[bool]$Continue) {
     $guard = if (Test-Path -LiteralPath $guardPath) {Get-Content -LiteralPath $guardPath -Raw | ConvertFrom-Json} else {[pscustomobject]@{count=0;boot='';state=''}}
     # A second logon trigger must not rerun the installer before a queued reboot.
     if ($guard.boot -eq $boot.ToString('o')) {return}
+    if (-not (Test-HeliosBootTestSigning)) {
+        if ($guard.count -ge 2 -or $guard.state -eq 'test-signing-restart-required') {throw 'Helios reboot loop prevented: Windows test-signing did not become active.'}
+        & bcdedit.exe /set '{current}' testsigning on | Out-Null
+        if ($LASTEXITCODE -ne 0) {throw 'Windows refused test-signing. Disable Secure Boot in the VM firmware before installing the test-signed Helios driver.'}
+        Write-HeliosProgress 'test-signing-restart-required' 'Windows test-signing configured. Restarting before automatic Helios installation.'
+        Restart-HeliosProvisioning $guard $boot 'test-signing-restart-required'
+        return
+    }
     $official = Get-ScheduledTask -TaskName 'HeliosGraphicsProvisioning' -ErrorAction SilentlyContinue
     if ($null -ne $official) {
         if ($official.State.ToString() -ne 'Running') {
@@ -92,17 +130,14 @@ function Invoke-HeliosProvisioning([string]$Source,[bool]$Continue) {
         if (Test-Path -LiteralPath $statusPath) {
             $state = Get-Content -LiteralPath $statusPath -Raw | ConvertFrom-Json
             $fresh = ([DateTime]::Parse($state.updatedAtUtc).ToUniversalTime() -ge $boot)
-            if ($state.status -eq 'failed') {throw $state.message}
+            if ($fresh -and $state.status -eq 'failed') {throw $state.message}
             if ($fresh -and $state.status -eq 'finished') {
                 Assert-HeliosInstalled
                 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
                 return
             }
             if ($fresh -and $state.status -in @('test-signing-restart-required','driver-restart-required')) {
-                if ($guard.count -ge 2 -or $guard.state -eq $state.status) {throw 'Helios reboot loop prevented. Inspect the setup log in Windows.'}
-                @{count=$guard.count+1;boot=$boot.ToString('o');state=$state.status} | ConvertTo-Json | Set-Content -LiteralPath $guardPath -Encoding UTF8
-                & shutdown.exe /r /t 15 /d p:2:4 /c 'WinBoat: completing the selected Helios driver installation'
-                if ($LASTEXITCODE -ne 0) {throw 'Windows refused the Helios provisioning restart.'}
+                Restart-HeliosProvisioning $guard $boot $state.status
                 return
             }
         }
@@ -110,9 +145,39 @@ function Invoke-HeliosProvisioning([string]$Source,[bool]$Continue) {
     } while ([DateTime]::UtcNow -lt $deadline)
     throw 'Timed out waiting for the Helios installer resume task.'
 }
+function Invoke-HeliosEnsure([string]$Install) {
+    # Service startup recovers a missed OEM registration. Atlas owns its handoff
+    # until OOBE is complete; never restart Windows in the middle of AME.
+    if (-not (Test-Path -LiteralPath (Join-Path $install 'helios-enabled'))) {return}
+    $existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath (Join-Path $env:ProgramData 'WinBoat\Atlas\oobe-mode.json')) {
+        # Only an already registered handoff worker proves Atlas authorized the
+        # driver stage. An incomplete AME session must not be interrupted.
+        if ($null -eq $existing) {
+            # Recover a missed/failed handoff only after Atlas itself confirms
+            # its playbook, account and post-Atlas boot. The called script is a
+            # no-op while AME is still installing and revalidates before work.
+            & (Join-Path $install 'scripts\Start-AtlasHelios.ps1') -Register -OnlyWhenReady -RetryFailed
+            return
+        }
+    }
+    if ($null -ne $existing -and $existing.State.ToString() -eq 'Running') {return}
+    # Re-stage an idle legacy worker from the updated API scripts before starting
+    # it, so an old protected copy does not keep the previous boot logic.
+
+    if (Test-Path -LiteralPath $statusPath) {
+        $state = Get-Content -LiteralPath $statusPath -Raw | ConvertFrom-Json
+        if ($state.status -eq 'finished' -and (Test-HeliosBootTestSigning)) {
+            Assert-HeliosInstalled
+            return
+        }
+    }
+    Invoke-HeliosProvisioning (Join-Path $install 'helios') $false
+}
 if ($LibraryOnly) {return}
 $lock = $null; $owned = $false
 try {
+    if ($Ensure) {Invoke-HeliosEnsure (Split-Path -Parent $PSScriptRoot);return}
     # Registration must not hold the worker lock while starting that worker.
     if ($Resume) {
         $lock = New-Object Threading.Mutex($false,'Global\WinBoatHeliosProvisioning')

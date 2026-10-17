@@ -6,7 +6,7 @@ import type { ChildProcess } from 'node:child_process';
 import { HeliosViewer } from '../src/shared/helios-viewer';
 
 class FakeViewer extends EventEmitter {
-    stdout = new PassThrough(); stderr = new PassThrough(); kills = 0;
+    stdin = new PassThrough(); stdout = new PassThrough(); stderr = new PassThrough(); kills = 0;
     kill() { this.kills++; queueMicrotask(() => this.emit('close', 0)); return true; }
     ready() { this.stdout.write('{"event":"ready","transport":"dbus"}\n'); }
 }
@@ -92,4 +92,29 @@ test('an intentional window close remains closed until a new VM lifecycle', asyn
     assert.equal(f.children.length, 1);
     f.viewer.setAutomatic(false, () => {});f.viewer.setAutomatic(true, () => {});
     assert.equal(f.children.length, 2);f.children[1].ready();await Promise.resolve();f.viewer.close();
+});
+
+test('guest adapter health is delivered on stdin and stale data restores automatic selection', async () => {
+    const f=fixture();
+    f.viewer.updateAdapters({helios:{state:'running'},basic:{state:'disabled'},sampleAgeMs:0});
+    const opening=f.open();
+    assert.equal(f.children[0].stdin.read()?.toString(),'adapters 1 2\n');
+    f.children[0].ready();await opening;
+    f.viewer.updateAdapters({helios:{state:'failed'},basic:{state:'running'},sampleAgeMs:0});
+    assert.equal(f.children[0].stdin.read()?.toString(),'adapters 2 1\n');
+    f.viewer.updateAdapters({helios:{state:'failed'},basic:{state:'disabled'},sampleAgeMs:30000});
+    assert.equal(f.children[0].stdin.read()?.toString(),'adapters 0 0\n');
+    f.viewer.updateAdapters(null);
+    assert.equal(f.children[0].stdin.read()?.toString(),'adapters 0 0\n');
+    f.viewer.close();
+    const next=f.open();assert.equal(f.children[1].stdin.read()?.toString(),'adapters 0 0\n');
+    f.children[1].ready();await next;f.viewer.close();
+});
+
+test('same-version legacy guest APIs are updated to deploy automatic display recovery', async () => {
+    const {guestNeedsUpdate,GUEST_GRAPHICS_PROTOCOL}=await import('../src/shared/guest-protocol');
+    assert.equal(guestNeedsUpdate({version:'0.8.7'},'0.8.7'),true);
+    assert.equal(guestNeedsUpdate({version:'0.8.7',graphics_protocol:'old'},'0.8.7'),true);
+    assert.equal(guestNeedsUpdate({version:'0.8.7',graphics_protocol:GUEST_GRAPHICS_PROTOCOL},'0.8.7'),false);
+    assert.equal(guestNeedsUpdate({version:'0.8.6',graphics_protocol:GUEST_GRAPHICS_PROTOCOL},'0.8.7'),true);
 });

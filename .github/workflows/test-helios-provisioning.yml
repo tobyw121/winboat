@@ -5,16 +5,24 @@ on:
     branches: [work]
     paths:
       - '.github/workflows/test-helios-provisioning.yml'
+      - 'guest_server/scripts/Get-DisplayAdapters.ps1'
+      - 'guest_server/graphics_monitor*'
+      - 'guest_server/main.go'
       - 'guest_server/scripts/Start-HeliosProvisioning.ps1'
       - 'guest_server/scripts/Get-WinBoatFileSha256.ps1'
       - 'guest_server/scripts/Start-AtlasHelios.ps1'
+      - 'tests/display-adapters.test.ps1'
       - 'tests/helios-provisioning.test.ps1'
       - 'tests/atlas-helios-handoff.test.ps1'
   pull_request:
     paths:
+      - 'guest_server/scripts/Get-DisplayAdapters.ps1'
+      - 'guest_server/graphics_monitor*'
+      - 'guest_server/main.go'
       - 'guest_server/scripts/Start-HeliosProvisioning.ps1'
       - 'guest_server/scripts/Get-WinBoatFileSha256.ps1'
       - 'guest_server/scripts/Start-AtlasHelios.ps1'
+      - 'tests/display-adapters.test.ps1'
       - 'tests/helios-provisioning.test.ps1'
       - 'tests/atlas-helios-handoff.test.ps1'
 permissions:
@@ -30,10 +38,24 @@ jobs:
       - name: Test provisioning and handoff (PowerShell 7)
         shell: pwsh
         run: |
+          ./tests/display-adapters.test.ps1
           ./tests/helios-provisioning.test.ps1
           ./tests/atlas-helios-handoff.test.ps1
       - name: Test provisioning and handoff (Windows PowerShell 5.1)
         shell: powershell
         run: |
+          ./tests/display-adapters.test.ps1
           ./tests/helios-provisioning.test.ps1
           ./tests/atlas-helios-handoff.test.ps1
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: guest_server/go.sum
+      - name: Test and compile Windows Guest API
+        working-directory: guest_server
+        shell: pwsh
+        run: |
+          go test ./...
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          go build -o "$env:RUNNER_TEMP/winboat_guest_server.exe" .
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}

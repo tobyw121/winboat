@@ -14,9 +14,15 @@ try {
     @{revision='fecffde64fd32399a877b452332681ef0db7993e';sha256=(Get-WinBoatFileSha256 (Join-Path $source 'HeliosSetup.exe'))} |
         ConvertTo-Json | Set-Content (Join-Path $source 'helios-build.json')
     $global:heliosBoot=[DateTime]::UtcNow.AddMinutes(-30)
-    $global:heliosOfficial=$null; $global:heliosPhase='test-signing-restart-required'
+    $global:heliosOfficial=$null; $global:heliosPhase='driver-restart-required'
+    $global:heliosTestSigning=$false; $global:heliosBcdCalls=0; $global:heliosBcdExit=0
     $global:heliosLaunches=0; $global:heliosRestarts=0; $global:heliosStarts=@(); $global:heliosRemoved=0; $global:heliosEnabled=0
     function Assert-HeliosAdministrator {}
+    function Test-HeliosBootTestSigning {return $global:heliosTestSigning}
+    function bcdedit.exe {
+        if (($args -join ' ') -ne '/set {current} testsigning on') {throw 'Wrong boot entry or test-signing operation.'}
+        $global:heliosBcdCalls++; $global:LASTEXITCODE=$global:heliosBcdExit
+    }
     function Get-CimInstance {param($ClassName) [pscustomobject]@{LastBootUpTime=$global:heliosBoot}}
     function Get-Acl {
         param($LiteralPath)
@@ -59,26 +65,33 @@ try {
         $state | ConvertTo-Json | Set-Content -LiteralPath $statusPath
         $global:heliosBoot=$global:heliosBoot.AddMinutes(5)
     }
-    Invoke-HeliosProvisioning $source $false
+    $selectedInstall=Join-Path $temporary 'selected'
+    New-Item -ItemType Directory -Force (Join-Path $selectedInstall 'helios') | Out-Null
+    Copy-Item -LiteralPath (Join-Path $source 'HeliosSetup.exe'),(Join-Path $source 'helios-build.json') -Destination (Join-Path $selectedInstall 'helios')
+    Invoke-HeliosEnsure $selectedInstall
+    if($global:heliosStarts.Count){throw 'An unselected VM installed Helios'}
+    '1' | Set-Content (Join-Path $selectedInstall 'helios-enabled')
+    Invoke-HeliosEnsure $selectedInstall
     if($global:heliosLaunches -or $global:heliosRestarts -or $global:heliosStarts.Count -ne 1 -or
         -not (Test-Path (Join-Path $root 'HeliosSetup.exe')) -or -not (Test-Path (Join-Path $root 'Start-HeliosProvisioning.ps1')) -or
         -not (Test-Path (Join-Path $root 'Get-WinBoatFileSha256.ps1'))){throw 'OEM caller ran the installer inline or did not persist its verified payload.'}
     Invoke-HeliosProvisioning '' $true
-    if($global:heliosLaunches -ne 1 -or $global:heliosRestarts -ne 1 -or $global:heliosRemoved){throw 'Test-signing must request a reboot, not completion.'}
+    if($global:heliosLaunches -ne 0 -or $global:heliosRestarts -ne 1 -or $global:heliosRemoved -or $global:heliosBcdCalls -ne 1){throw 'Test-signing must request a reboot, not completion.'}
     Invoke-HeliosProvisioning '' $true
-    if($global:heliosLaunches -ne 1 -or $global:heliosRestarts -ne 1){throw 'Same-boot logon duplicated installation/reboot.'}
+    if($global:heliosLaunches -ne 0 -or $global:heliosRestarts -ne 1){throw 'Same-boot logon duplicated installation/reboot.'}
     Next-Boot
-    $global:heliosOfficial=[pscustomobject]@{State='Disabled'}; $global:heliosPhase='driver-restart-required'
+    $global:heliosTestSigning=$true; $global:heliosOfficial=$null; $global:heliosPhase='driver-restart-required'
     Invoke-HeliosProvisioning '' $true
-    if($global:heliosLaunches -ne 1 -or $global:heliosRestarts -ne 2 -or $global:heliosEnabled -ne 1){throw 'Missed/disabled official task was not resumed, or a second installer raced it.'}
+    if($global:heliosLaunches -ne 1 -or $global:heliosRestarts -ne 2 -or $global:heliosBcdCalls -ne 1){throw 'Missed/disabled official task was not resumed, or a second installer raced it.'}
     Next-Boot
-    $global:heliosOfficial=[pscustomobject]@{State='Running'}; $global:heliosPhase='finished'
+    $global:heliosOfficial=[pscustomobject]@{State='Disabled'}; $global:heliosPhase='finished'
     $starts=$global:heliosStarts.Count
     $installed=Join-Path $temporary 'Helios'
     '{}' | Set-Content (Join-Path $installed 'install-state.json')
     @{source=@{helios=$expectedRevision}} | ConvertTo-Json | Set-Content (Join-Path $installed 'manifest.json')
     Invoke-HeliosProvisioning '' $true
-    if($global:heliosRemoved -ne 1 -or $global:heliosRestarts -ne 2 -or $global:heliosStarts.Count -ne $starts){throw 'An active installer was duplicated or completion did not require the final boot.'}
+    if($global:heliosRemoved -ne 1 -or $global:heliosRestarts -ne 2 -or $global:heliosStarts.Count -ne ($starts+1) -or $global:heliosEnabled -ne 1){throw 'An active installer was duplicated or completion did not require the final boot.'}
+    $global:heliosOfficial=[pscustomobject]@{State='Running'}
     Next-Boot
     Write-HeliosProgress 'driver-restart-required' 'repeated restart fixture'
     $blocked=$false
@@ -90,11 +103,15 @@ try {
     $blocked=$false
     try {Invoke-HeliosProvisioning '' $true} catch {if($_.Exception.Message -notmatch 'without an installed'){throw};$blocked=$true}
     if(-not $blocked -or $global:heliosRemoved -ne 1){throw 'False completion accepted.'}
+    $global:heliosTestSigning=$false; $global:heliosBcdExit=1
+    $blocked=$false
+    try {Invoke-HeliosProvisioning '' $true} catch {if($_.Exception.Message -notmatch 'refused test-signing'){throw};$blocked=$true}
+    if(-not $blocked -or $global:heliosRestarts -ne 2){throw 'A failed BCD change restarted Windows or launched the installer.'}
     'tampered' | Set-Content (Join-Path $root 'HeliosSetup.exe')
     $blocked=$false
     try {Invoke-HeliosProvisioning '' $true} catch {if($_.Exception.Message -notmatch 'SHA-256 mismatch'){throw};$blocked=$true}
     if(-not $blocked -or $global:heliosLaunches -ne 1){throw 'Unverified recovery installer executed.'}
-    Write-Host 'Durable first launch, persisted verified installer, missed/disabled-task recovery, two-boot completion, no duplicate worker, reboot bounds and false-completion rejection passed with Windows API fixtures.'
+    Write-Host 'Active-kernel test-signing preflight, BCD rejection, durable first launch, persisted verified installer, disabled-task recovery, two-boot completion, no duplicate worker, reboot bounds and false-completion rejection passed with Windows API fixtures.'
 } finally {
     $env:ProgramData=$previousData; $env:SystemRoot=$previousSystem
     Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue

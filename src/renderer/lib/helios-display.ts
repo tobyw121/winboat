@@ -1,3 +1,5 @@
+import { GUEST_API_PORT } from './constants';
+import { skipWhileRunning } from '../utils/interval';
 import { hostEnvironment } from './host-environment';
 import { nativeDesktopEnvironment } from '../../shared/native-desktop-environment';
 import { HELIOS_IMAGE } from '../../shared/helios';
@@ -17,8 +19,10 @@ let startingBus: Promise<void> | undefined;
 export const localDisplayState = ref<ViewerState>('closed');
 export const localDisplayMessage = ref('');
 let openingConsole: Promise<void> | undefined;
-const viewer = new HeliosViewer(() => child.spawn(binary(), ['--address', heliosDisplayAddress(localDisplayDirectory())],
-    { env: desktopEnvironment(), stdio: ['ignore', 'pipe', 'pipe'] }), (state, message) => {
+let adapterTimer: ReturnType<typeof setInterval> | undefined;
+let adapterGeneration=0;
+const viewer = new HeliosViewer(() => child.spawn(binary(), ['--address', heliosDisplayAddress(localDisplayDirectory()), '--control-stdin'],
+    { env: desktopEnvironment(), stdio: ['pipe', 'pipe', 'pipe'] }), (state, message) => {
     localDisplayState.value = state; localDisplayMessage.value = message;
 });
 
@@ -37,7 +41,7 @@ export async function requireLocalDisplay(): Promise<void> {
     if (!hostEnvironment().DISPLAY && !hostEnvironment().WAYLAND_DISPLAY) throw new Error('Local Desktop needs a running X11 or Wayland desktop session.');
     try {
         const { stdout } = await execFile(binary(), ['--version'], { timeout: 3000, env: desktopEnvironment() });
-        if (stdout.trim() !== 'winboat-helios-viewer 3') throw new Error('Viewer protocol mismatch.');
+        if (stdout.trim() !== 'winboat-helios-viewer 4') throw new Error('Viewer protocol mismatch.');
     }
     catch { throw new Error('The local Helios viewer needs its bundled executable, GTK 4.8+, libepoxy and a desktop session. Install the GTK4 runtime or use Browser Display.'); }
     try { await execFile(binary(), ['--check-gl'], {timeout: 8000, env: desktopEnvironment()}); }
@@ -108,10 +112,24 @@ function displayFailure(message: string): void {
     localDisplayMessage.value = `${message} Retry Local Desktop, or disable Local desktop in Configuration and save to restart this VM with Browser Display. Windows data is preserved.`;
 }
 
-export function followLocalDisplay(enabled: boolean): void {
+export function followLocalDisplay(enabled: boolean, apiPort = GUEST_API_PORT): void {
+    if (adapterTimer) {clearInterval(adapterTimer);adapterTimer=undefined;}
+    const generation=++adapterGeneration;
+    viewer.updateAdapters(null);
+    if (enabled) {
+        const nodeFetch: typeof import('node-fetch').default = require('node-fetch');
+        const poll = skipWhileRunning(async () => {
+            try {
+                const response=await nodeFetch(`http://127.0.0.1:${apiPort}/graphics/adapters`,{timeout:3000});
+                const state=response.ok ? await response.json() : null;
+                if (generation===adapterGeneration) viewer.updateAdapters(state);
+            } catch {if (generation===adapterGeneration) viewer.updateAdapters(null);}
+        });
+        void poll();adapterTimer=setInterval(poll,2000);
+    }
     viewer.setAutomatic(enabled, displayFailure);
 }
-export function closeLocalDisplay(): void { viewer.close(); }
+export function closeLocalDisplay(): void { followLocalDisplay(false); }
 export function openLocalDesktop(): Promise<void> {
     if (!openingConsole) openingConsole = (async () => {
         try { await launchLocalDisplay(displayFailure); }

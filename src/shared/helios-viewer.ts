@@ -3,6 +3,21 @@ import type { ChildProcess } from 'node:child_process';
 export type ViewerState = 'closed' | 'opening' | 'ready' | 'failed';
 export class HeliosViewer {
     private session?: { child: ChildProcess; opening: Promise<void>; cancel: () => void };
+    private adapterCommand = 'adapters 0 0\n';
+    /** Cached guest health is a hint; stale/invalid data restores QEMU selection. */
+    updateAdapters(value: unknown): void {
+        const candidate = value as {helios?:{state?:string};basic?:{state?:string};sampleAgeMs?:number} | null;
+        const state = (value?:string) => value === 'running' ? 1 : ['disabled','failed','missing'].includes(value || '') ? 2 : 0;
+        // A monotonic sample age avoids dependence on the Windows wall clock.
+        const age = candidate?.sampleAgeMs;
+        const fresh = typeof age === 'number' && Number.isFinite(age) && age>=0 && age<15000;
+        this.adapterCommand = `adapters ${fresh?state(candidate?.helios?.state):0} ${fresh?state(candidate?.basic?.state):0}\n`;
+        this.sendAdapters();
+    }
+    private sendAdapters(): void {
+        const input = this.session?.child.stdin;
+        if (input?.writable && !input.destroyed) input.write(this.adapterCommand);
+    }
     private automatic = false;
     private retry?: ReturnType<typeof setTimeout>;
     private retryAttempt = 0;
@@ -53,6 +68,8 @@ export class HeliosViewer {
             child.kill();
         }, this.timeout);
         this.session = { child, opening, cancel: () => { finish(undefined, true); child.kill(); } };
+        child.stdin?.on('error', () => {}); // A window close can race an in-flight health update.
+        this.sendAdapters();
         child.stdout?.on('data', (data: Buffer) => {
             if (closed) return;
             output = (output + data.toString()).slice(-16384);
@@ -67,6 +84,7 @@ export class HeliosViewer {
         return opening;
     }
     close(): void {
+        this.adapterCommand = 'adapters 0 0\n';
         this.automatic = false;
         if (this.retry) { clearTimeout(this.retry); this.retry = undefined; }
         if (this.session) this.session.cancel(); else this.status('closed', '');

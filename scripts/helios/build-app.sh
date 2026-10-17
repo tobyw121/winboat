@@ -16,6 +16,7 @@ npm run test:virgl
 npm run test:packaging
 npm run test:atlas
 npm run test:atlas:iso
+go test guest_server/graphics_monitor.go guest_server/graphics_monitor_test.go
 go test guest_server/helios_status.go guest_server/helios_status_test.go guest_server/atlas_status.go guest_server/atlas_status_test.go guest_server/atlas_diagnostics.go guest_server/atlas_diagnostics_test.go guest_server/atlas_recovery.go guest_server/atlas_recovery_test.go
 npx vue-tsc --noEmit -p src/renderer --skipLibCheck
 npm run build-guest-server

@@ -1,3 +1,4 @@
+import { guestNeedsUpdate } from '../../shared/guest-protocol';
 import { validateConfiguredShares } from './shared-folders';
 import { volumeTarget, volumeSource } from '../../shared/compose-volumes';
 import { requireHelios } from './helios';
@@ -237,7 +238,7 @@ export class Winboat {
                 logger.info(`Winboat Container state changed to ${_containerStatus}`);
 
                 if (_containerStatus === ContainerStatus.Running) {
-                    followLocalDisplay(this.parseCompose().services.windows.environment.HELIOS_DISPLAY === 'dbus');
+                    followLocalDisplay(this.parseCompose().services.windows.environment.HELIOS_DISPLAY === 'dbus', this.getHostPort(GUEST_API_PORT));
                     await this.createAPIInvervals();
                 } else {
                     if (_containerStatus !== ContainerStatus.Paused && _containerStatus !== ContainerStatus.Restarting) followLocalDisplay(false);
@@ -515,7 +516,7 @@ export class Winboat {
 
             const { stdout } = await execAsync("docker container start WinBoat");
             logger.info(`Container response: ${stdout}`);
-            followLocalDisplay(compose.services.windows.environment.HELIOS_DISPLAY === 'dbus');
+            followLocalDisplay(compose.services.windows.environment.HELIOS_DISPLAY === 'dbus', this.getHostPort(GUEST_API_PORT));
         } catch(e) {
             logger.error("There was an error performing the container action.");
             logger.error(e);
@@ -747,13 +748,13 @@ export class Winboat {
 
         const appVersion = import.meta.env.VITE_APP_VERSION;
 
-        if (version.version !== appVersion) {
+        if (guestNeedsUpdate(version, appVersion)) {
             logger.info(`New local version of WinBoat Guest Server found: ${appVersion}`);
             logger.info(`Current version of WinBoat Guest Server: ${version.version}`);
         }
 
-        // 2. Return early if the version is the same
-        if (version.version === appVersion) {
+        // Same AppImage version can still contain an upgraded guest protocol.
+        if (!guestNeedsUpdate(version, appVersion)) {
             return;
         }
 

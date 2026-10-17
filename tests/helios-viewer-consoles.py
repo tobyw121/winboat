@@ -85,7 +85,7 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
                 return GLib.Variant('au', [0, 1, 2])
             identifier = int(path.rsplit('_', 1)[1])
             values = {'Type': ('s', 'Text' if identifier == 2 else 'Graphic'),
-                      'Head': ('u', 0), 'Label': ('s', 'VGA' if identifier == 0 else 'virtio-gpu-gl-pci'),
+                      'Head': ('u', 0), 'Label': ('s', 'helios-bootstrap' if identifier == 0 else 'heliosgpu'),
                       'Width': ('u', 32), 'Height': ('u', 24), 'IsAbsolute': ('b', True)}
             kind, value = values[name]
             return GLib.Variant(kind, value)
@@ -188,7 +188,24 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
                 elif stage == 8:
                     call(1, 'Scanout', '(uuuuay)', (32, 24, 128, 0x20020888, pixels))
                     call(1, 'Update', '(iiiiuuay)', (0, 0, 32, 24, 128, 0x20020888, pixels))
+                elif stage == 9:
+                    # PnP may report a disabled VGA without QEMU sending Disable.
+                    viewer.stdin.write('adapters 1 2\n');viewer.stdin.flush()
+                elif stage == 10:
+                    # Silent driver failure: no invalid frame/peer closure.
+                    viewer.stdin.write('adapters 2 2\n');viewer.stdin.flush()
                 elif stage == 11:
+                    # Guest watchdog has re-enabled the Basic Display Adapter.
+                    viewer.stdin.write('adapters 2 1\n');viewer.stdin.flush()
+                    call(0, 'Scanout', '(uuuuay)', (32, 24, 128, 0x20020888, red))
+                elif stage == 12:
+                    # A complete static Scanout is sufficient after recovery;
+                    # Helios need not send a separate Update method.
+                    call(1, 'Scanout', '(uuuuay)', (32, 24, 128, 0x20020888, pixels))
+                    viewer.stdin.write('adapters 1 1\n');viewer.stdin.flush()
+                elif stage == 13:
+                    call(0, 'Update', '(iiiiuuay)', (0, 0, 32, 24, 128, 0x20020888, red))
+                elif stage == 15:
                     visible_frame()
                     visible = True
                 stage += 1
@@ -199,8 +216,8 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
                 return False
 
         environment = dict(os.environ, TMPDIR=temporary)
-        viewer = subprocess.Popen([sys.argv[1], '--smoke-test', address], env=environment,
-                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        viewer = subprocess.Popen([sys.argv[1], '--smoke-test', address, '--control-stdin'], env=environment,
+                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         GLib.timeout_add(400, tick)
         loop.run()
         if failures:
@@ -209,7 +226,7 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
         assert viewer.returncode == 0, errors
         assert '{"event":"ready","transport":"dbus"}' in output, output
         selections = [json.loads(line)['id'] for line in errors.splitlines() if line.startswith('{"event":"console"')]
-        assert selections == [0, 1, 0, 1, 0, 1, 0, 1], (selections, errors)
+        assert selections == [0, 1, 0, 1, 0, 1, 0, 1, 0, 1], (selections, errors)
         assert 1 in resizes, 'Guest resize did not follow the selected Helios console'
         assert visible, 'The actual displayed frame was not checked'
         magic, dimensions, maximum, pixels = (root / 'helios-viewer-smoke.ppm').read_bytes().split(b'\n', 3)
@@ -221,7 +238,7 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
             y = int(height / 2 + (-6 if index < 2 else 6) * scale)
             offset = (y * width + x) * 3
             assert tuple(pixels[offset:offset + 3]) == color, (index, pixels[offset:offset + 3])
-        print('Actual viewer: serialized QEMU listener authentication, VGA -> Helios, invalid Helios frame fallback, lost-adapter reconnect, stale VGA isolation, disable/re-enable handoff, console-1 resize, visible X11 frame and four readback corners passed.')
+        print('Actual viewer: serialized QEMU listener authentication, VGA -> Helios, invalid Helios frame fallback, lost-adapter reconnect, stale VGA isolation, disable/re-enable handoff, console-1 resize, guest-reported silent failure/VGA recovery, static Helios scanout preference, visible X11 frame and four readback corners passed.')
         # Losing one adapter is recoverable; losing the VM must report failure
         # instead of leaving a permanently blank window marked as connected.
         peers.clear()

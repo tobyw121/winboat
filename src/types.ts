@@ -101,6 +101,7 @@ export type Metrics = {
 }
 
 export type GuestServerVersion = {
+    graphics_protocol?: string;
     version: string;
     commit_hash: string;
     build_time: string;

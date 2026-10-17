@@ -69,6 +69,9 @@ struct Viewer {
  char *console_path;
  guint console_id, pending_consoles, reconnect_timer;
  gboolean accelerated, seen_update, cursor_visible;
+ gint helios_health, basic_health; /* 0 unknown, 1 running, 2 unavailable */
+ gint64 health_at;
+ guint health_watch, health_timer;
 };
 static Viewer *displayed(Viewer *v) {return v->active?v->active:v;}
 static void update_cursor(Viewer *v) {
@@ -556,7 +559,10 @@ static void console_ready(GObject *object,GAsyncResult *result,gpointer data) {
  /* The default desktop is head 0; do not replace it with an extended monitor. */
  if (!v->exit_code && graphic && (!head || (g_variant_is_of_type(head,G_VARIANT_TYPE_UINT32) && g_variant_get_uint32(head)==0))) {
   const char *name=label && g_variant_is_of_type(label,G_VARIANT_TYPE_STRING)?g_variant_get_string(label,NULL):"";
-  d->accelerated=strstr(name,"virtio") || strstr(name,"Helios");
+  char *normalized=g_ascii_strdown(name,-1);
+  /* QEMU labels this VM's device by its explicit id, "heliosgpu". */
+  d->accelerated=!strstr(normalized,"bootstrap") && (strstr(normalized,"virtio") || strstr(normalized,"helios"));
+  g_free(normalized);
   g_ptr_array_add(v->consoles,d);
   g_dbus_proxy_new(v->bus,G_DBUS_PROXY_FLAGS_NONE,NULL,"org.qemu",d->console_path,IFACE "Mouse",NULL,mouse_ready,d);
  } else {
@@ -593,12 +599,17 @@ static void register_consoles(Viewer *v) {
  g_dbus_connection_call(v->bus,"org.qemu",VM,"org.freedesktop.DBus.Properties","Get",
   g_variant_new("(ss)",IFACE "VM","ConsoleIDs"),G_VARIANT_TYPE("(v)"),G_DBUS_CALL_FLAGS_NONE,5000,NULL,console_ids_ready,v);
 }
+static gboolean console_eligible(Viewer *v,Viewer *d) {
+ return d->cache_valid && (d->accelerated?v->helios_health:v->basic_health)!=2;
+}
 static void select_console(Viewer *v) {
- Viewer *next=v->active && v->active->cache_valid?v->active:NULL;
+ Viewer *next=v->active && console_eligible(v,v->active)?v->active:NULL;
  for (guint i=0;i<v->consoles->len;i++) {
   Viewer *d=g_ptr_array_index(v->consoles,i);
-  if (!d->cache_valid) continue;
-  if (!next || (d->accelerated && !next->accelerated && d->seen_update)) next=d;
+  if (!console_eligible(v,d)) continue;
+  /* A confirmed running driver may publish a complete Scanout with no later
+   * Update on a static desktop. Its initial frame must already beat VGA. */
+  if (!next || (d->accelerated && !next->accelerated && (d->seen_update || v->helios_health==1))) next=d;
  }
  if (next==v->active) return;
  release_input(v);v->active=next;v->requested_width=v->requested_height=0;
@@ -609,6 +620,36 @@ static void select_console(Viewer *v) {
   request_resize(v);
  }
  gtk_gl_area_queue_render(GTK_GL_AREA(v->area));
+}
+static void adapter_health(Viewer *v,gint helios,gint basic) {
+ for (guint i=0;i<v->consoles->len;i++) {
+  Viewer *d=g_ptr_array_index(v->consoles,i);
+  if ((d->accelerated?helios:basic)==2) {d->cache_valid=FALSE;d->seen_update=FALSE;}
+ }
+ v->helios_health=helios;v->basic_health=basic;v->health_at=g_get_monotonic_time();
+ select_console(v);
+}
+static gboolean adapter_control(GIOChannel *channel,GIOCondition condition,gpointer data) {
+ Viewer *v=data;
+ if (condition&(G_IO_HUP|G_IO_ERR|G_IO_NVAL)) {v->health_watch=0;adapter_health(v,0,0);return G_SOURCE_REMOVE;}
+ char *line=NULL;gsize length=0;GError *error=NULL;
+ GIOStatus status=g_io_channel_read_line(channel,&line,&length,NULL,&error);
+ if (status==G_IO_STATUS_NORMAL && length<=64) {
+  int helios,basic;char extra;
+  if (sscanf(line,"adapters %d %d %c",&helios,&basic,&extra)==2 && helios>=0 && helios<=2 && basic>=0 && basic<=2)
+   adapter_health(v,helios,basic);
+ }
+ g_free(line);g_clear_error(&error);
+ if (status==G_IO_STATUS_EOF || status==G_IO_STATUS_ERROR) {v->health_watch=0;adapter_health(v,0,0);return G_SOURCE_REMOVE;}
+ return G_SOURCE_CONTINUE;
+}
+static gboolean expire_adapter_health(gpointer data) {
+ Viewer *v=data;
+ /* API loss/reboots are unknown, never evidence that an adapter failed. */
+ if (v->health_at && g_get_monotonic_time()-v->health_at>15*G_USEC_PER_SEC) {
+  adapter_health(v,0,0);v->health_at=0;
+ }
+ return G_SOURCE_CONTINUE;
 }
 static void realize(GtkGLArea *area,Viewer *v) {
  gtk_gl_area_make_current(area);
@@ -733,7 +774,7 @@ int main(int argc,char **argv) {
  const char *version_error=gtk_check_version(4,8,0);
  if (version_error) {g_printerr("GTK 4.8 or newer is required: %s\n",version_error);return 1;}
  desktop_gl();
- if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 3");return 0;}
+ if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 4");return 0;}
  if (argc==2 && !strcmp(argv[1],"--check-gl")) {
   if (!gtk_init_check()) {g_printerr("GTK cannot open the host X11/Wayland display.\n");return 1;}
   GtkWidget *window=gtk_window_new(),*area=display_area();
@@ -761,8 +802,9 @@ int main(int argc,char **argv) {
   puts("Viewer bounds, key mapping and D-Bus interfaces passed.");return 0;
  }
  gboolean ping=argc==3 && !strcmp(argv[1],"--ping");
- gboolean smoke=argc==3 && !strcmp(argv[1],"--smoke-test");
- if (argc!=3 || (!ping && !smoke && strcmp(argv[1],"--address"))) {g_printerr("Usage: winboat-helios-viewer --address unix:path=...\n");return 2;}
+ gboolean control=argc==4 && !strcmp(argv[3],"--control-stdin");
+ gboolean smoke=(argc==3 || control) && !strcmp(argv[1],"--smoke-test");
+ if ((argc!=3 && !control) || (!ping && !smoke && strcmp(argv[1],"--address"))) {g_printerr("Usage: winboat-helios-viewer --address unix:path=...\n");return 2;}
  if (!g_str_has_prefix(argv[2],"unix:path=")) {g_printerr("Only local Unix display sockets are supported.\n");return 2;}
  Viewer v={.image=EGL_NO_IMAGE_KHR,.display=EGL_NO_DISPLAY,.cursor_visible=TRUE};GError *err=NULL;v.loop=g_main_loop_new(NULL,FALSE);
  v.bus=g_dbus_connection_new_for_address_sync(argv[2],G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT|G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION,NULL,NULL,&err);
@@ -814,10 +856,18 @@ int main(int argc,char **argv) {
  GtkGesture *buttons=gtk_gesture_click_new();gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(buttons),0);
  g_signal_connect(buttons,"pressed",G_CALLBACK(click),&v);g_signal_connect(buttons,"released",G_CALLBACK(click),&v);gtk_widget_add_controller(v.area,GTK_EVENT_CONTROLLER(buttons));
  GtkEventController *wheel=gtk_event_controller_scroll_new(GTK_EVENT_CONTROLLER_SCROLL_BOTH_AXES|GTK_EVENT_CONTROLLER_SCROLL_DISCRETE);g_signal_connect(wheel,"scroll",G_CALLBACK(scroll),&v);gtk_widget_add_controller(v.area,wheel);
+ if (control) {
+  GIOChannel *channel=g_io_channel_unix_new(STDIN_FILENO);
+  g_io_channel_set_flags(channel,g_io_channel_get_flags(channel)|G_IO_FLAG_NONBLOCK,NULL);
+  v.health_watch=g_io_add_watch(channel,G_IO_IN|G_IO_HUP|G_IO_ERR|G_IO_NVAL,adapter_control,&v);
+  g_io_channel_unref(channel);v.health_timer=g_timeout_add_seconds(2,expire_adapter_health,&v);
+ }
  gtk_window_present(GTK_WINDOW(v.window));gtk_widget_grab_focus(v.area);g_timeout_add_seconds(5,(GSourceFunc)stats,&v);
  if (smoke) g_timeout_add_seconds(12,(GSourceFunc)smoke_done,&v);
  if (!v.exit_code) g_main_loop_run(v.loop);
  if (v.resize_timer) g_source_remove(v.resize_timer);
+ if (v.health_watch) g_source_remove(v.health_watch);
+ if (v.health_timer) g_source_remove(v.health_timer);
  g_clear_pointer(&v.screenshot_path,g_free);
  release_input(&v);g_dbus_connection_flush_sync(v.bus,NULL,NULL);
  for (guint i=0;i<v.consoles->len;i++) {

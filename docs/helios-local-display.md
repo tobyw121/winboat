@@ -424,3 +424,41 @@ Für `dbus-v6` Host-Image und Anwendung über `./scripts/build-helios.sh`
 aktualisieren und die bestehende VM neu starten, damit VGA wieder angehängt ist.
 Eine ausdrücklich gesetzte `HELIOS_BOOTSTRAP_DISPLAY=0` bleibt ein Opt-out;
 damit ist kein separater VGA-Rückfall möglich.
+
+### Automatische Treiberwahl und Wiederherstellung
+
+Der Guest Server überwacht die tatsächlichen Windows-PnP-Zustände von
+`helios_kmd_render` auf der virtio-GPU und `BasicDisplay` auf WinBoats separater
+QEMU-VGA. `GET /graphics/adapters` liefert beide Zustände und das Alter der
+Messung. Der Viewer bevorzugt eine laufende Helios-Konsole auch bei einem
+statischen Desktop ohne nachfolgendes Update. Die QEMU-Gerätenamen
+`heliosgpu` und `helios-bootstrap` werden dabei unterschieden.
+
+Bei einem Helios-Ausfall fällt dasselbe Viewer-Fenster auf die verfügbare VGA
+zurück. Ist auch VGA deaktiviert, aktiviert die Guest API diesen Adapter;
+bei einem PnP-Fehler startet sie ausschließlich diesen Adapter neu. Sie lässt
+VGA in Ruhe, solange Helios läuft, deaktiviert keine Adapter und führt für
+solche Wiederherstellungen keinen Windows-Neustart aus. Erneute
+Wiederherstellungsversuche sind auf einen Versuch pro 30 Sekunden begrenzt.
+Nach einem neuen gültigen Helios-Bild und bestätigtem Treiberzustand wechselt
+der Viewer zurück. Veraltete oder fehlende API-Daten gelten als unbekannt,
+nicht als Treiberausfall. Die Altersprüfung verwendet keine synchronisierten
+Gast-/Host-Uhren.
+
+Vor der automatischen Helios-Installation prüft WinBoat den Testmodus im
+laufenden Windows-Kernel. Falls nötig, aktiviert es `testsigning` für den
+aktuellen Boot-Eintrag und startet Windows vor der Treiberinstallation neu.
+Ein weiterer Neustart lädt den installierten Treiber. Beide Neustarts sind
+begrenzt; eine Secure-Boot-Sperre wird als Fehler gemeldet. Atlas/AME muss
+seine Installation und den eigenen Neustart vorher abgeschlossen haben.
+Der Guest Server stellt fehlende oder veraltete Installationsaufgaben beim
+Start wieder her, sofern Helios für diese VM ausgewählt wurde.
+
+Die App aktualisiert ältere Guest APIs anhand der Kennung
+`graphics_protocol=helios-watchdog-v1`, auch wenn beide noch Version `0.8.7`
+melden. Für diese Änderung sind die neue AppImage und ihr Guest-API-Update
+nötig. Die bestehende VM muss den separaten VGA-Adapter behalten (Host-Protokoll
+`dbus-v6`). Ein vollständig abgestürztes Windows kann seine Guest API nicht
+mehr ausführen; die Überwachung ersetzt daher keinen VM-Neustart nach einem
+Bluescreen. PnP-Status und Viewer-Framefehler erkennen außerdem keinen beliebigen
+GPU-Hänger, bei dem Windows den Treiber weiterhin als fehlerfrei meldet.
