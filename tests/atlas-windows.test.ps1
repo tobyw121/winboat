@@ -116,3 +116,23 @@ if (Get-AtlasHandoffFailure ([pscustomobject]@{State='Stopped';ExitCode=1067}) '
 if ((Get-AtlasHandoffPhase @('Message: "06:41:05.2244: Worker Start"','Message: "23:45:08.7598: WNF Waited"')) -ne 'handshake-ended-without-window') {throw 'Ended UI handshake was not classified.'}
 if ((Get-AtlasHandoffPhase @('06:41:05.2244: Worker Start','23:45:08.7598: WNF Waited','23:45:09.1111: Window Launched')) -ne 'window-launched') {throw 'A successful UI launch was mistaken for a stalled client.'}
 if ((Get-AtlasHandoffPhase @('23:45:08.7598: L','23:46:01.1111: Worker Start')) -ne 'waiting-for-ui') {throw 'An earlier timeout was reused for a new service start.'}
+$guiLines=@('Message: "04:26:24.9941: Worker Start"','Message: "04:26:27.1111Window Loaded"',
+    'Message: "04:26:27.2222Window Thread Started"','Message: "04:26:27.3333Window InterLink Initialized"',
+    'Message: "04:26:27.4444Window Registered"','Message: "04:26:27.5555Window Signaled"',
+    'Message: "04:26:27.6666Waiting Anim"','Password: private','Message: "Window Registered private"')
+$selected=@(Select-AtlasStartupLines $guiLines)
+if ($selected.Count -ne 7 -or ($selected -join ' ') -match 'private') {throw 'GUI progress was filtered out or raw data was exposed.'}
+if ((Get-AtlasGUIStartupPhase $guiLines) -ne 'waiting-for-first-logon-animation' -or
+    (Get-AtlasGUIStartupPhase ($guiLines + '04:30:00.0000: Worker Start')) -ne 'not-reported' -or
+    (Get-AtlasGUIStartupPhase @('Message: "Service event could not be opened."')) -ne 'service-event-unavailable') {throw 'GUI stage classification reused stale progress or missed a service-event failure.'}
+Write-Host 'Original AME GUI milestone formats, latest-start boundaries and credential filtering passed.'
+$oldProgramData=$env:ProgramData; $oldSystemRoot=$env:SystemRoot
+try {
+    $env:ProgramData=[IO.Path]::GetTempPath(); $env:SystemRoot=$env:ProgramData
+    function Test-Path { param($LiteralPath,$PathType) return ($LiteralPath -match 'Logs(?:[/\\]Log\.yml)?$') }
+    $withLogAccess=& $diagnosticsScript | ConvertFrom-Json
+    $labels=@($withLogAccess.amePermissions | ForEach-Object {$_.file})
+    if ($labels.Count -ne 5 -or 'Logs-directory' -notin $labels -or 'Log.yml' -notin $labels -or
+        ($withLogAccess | ConvertTo-Json -Depth 10) -match 'private|S-1-5-21') {throw 'Log ACL inspection failed or leaked identities/log contents.'}
+} finally {$env:ProgramData=$oldProgramData; $env:SystemRoot=$oldSystemRoot}
+Write-Host 'Optional log directory/file ACL inspection passed with OS-query fixtures.'

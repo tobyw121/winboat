@@ -8,8 +8,26 @@ function Select-AtlasStartupLines([string[]]$Lines) {
         # Return only AME's fixed startup messages, numeric WNF states and timestamps.
         if ($line -match '(?<phase>(?:\d{2}:\d{2}:\d{2}\.\d{4}: )?(?:Worker Start|WNF Wait(?:ed)?|Window Launched|WNF Published \d+|Monitor [123]: \d+|LogonComplete [123]: \d+))["'']?\s*$') {
             $Matches.phase
+        } elseif ($line -match '(?<phase>(?:\d{2}:\d{2}:\d{2}\.\d{4}:?\s*)?(?:Window Loaded|Window Thread Started|Window InterLink Initialized|Window Registered|Window Signaled|Waiting Anim|Window Relaunching|Window Relaunched|Service event wait timed out\.|Service event could not be opened\.))["'']?\s*$') {
+            # Original 0.8.4 GUI messages omit the colon/space after the time.
+            # These are fixed literals; never return the surrounding YAML/log text.
+            $Matches.phase
         }
     }
+}
+function Get-AtlasGUIStartupPhase([string[]]$Lines) {
+    $phase='not-reported'
+    $stages=[ordered]@{'Worker Start'='not-reported';'Window Loaded'='window-loaded';
+        'Window Thread Started'='window-worker-started';'Window InterLink Initialized'='ipc-initialized';
+        'Window Registered'='ipc-registered';'Window Signaled'='service-signaled';
+        'Waiting Anim'='waiting-for-first-logon-animation';'Window Relaunching'='relaunching-after-drivers';
+        'Window Relaunched'='relaunched-after-drivers';'Service event wait timed out.'='service-event-timeout';
+        'Service event could not be opened.'='service-event-unavailable'}
+    foreach ($line in (Select-AtlasStartupLines $Lines)) {
+        $message=$line -replace '^\d{2}:\d{2}:\d{2}\.\d{4}:?\s*',''
+        if ($stages.Contains($message)) { $phase=$stages[$message] }
+    }
+    return $phase
 }
 function Get-AtlasHandoffPhase([string[]]$Lines) {
     $phase='unknown'
@@ -114,6 +132,7 @@ try {
     $lines = @(Get-Content -LiteralPath (Join-Path $root 'Logs\Log.yml') -Tail 400)
     $result.startup = @(Select-AtlasStartupLines $lines)
     $result.handoffPhase = Get-AtlasHandoffPhase $lines
+    $result.guiStartupPhase = Get-AtlasGUIStartupPhase $lines
     $result.failureKinds = @(Select-AtlasFailureKinds $lines)
 } catch { $result.errors += 'AME startup log unavailable' }
 try {
@@ -149,8 +168,11 @@ try {
     $account = @(Get-CimInstance Win32_UserAccount -Filter "LocalAccount=True AND Name='defaultuser0'")
     $result.setupAccount = [ordered]@{ exists = ($account.Count -eq 1) }
     if ($account.Count -eq 1) { $result.setupAccount.disabled = [bool]$account[0].Disabled }
-    $result.amePermissions = @(foreach ($name in @('', 'AME.Client.exe', 'oobe.conf')) {
-        $path = Join-Path (Join-Path $root 'OOBE') $name
+    $entries=@(@{label='OOBE-directory';relative='OOBE'},@{label='AME.Client.exe';relative='OOBE\AME.Client.exe'},
+        @{label='oobe.conf';relative='OOBE\oobe.conf'},@{label='Logs-directory';relative='Logs'},@{label='Log.yml';relative='Logs\Log.yml'})
+    $result.amePermissions = @(foreach ($entry in $entries) {
+        $path = Join-Path $root $entry.relative
+        if ($entry.label -in @('Logs-directory','Log.yml') -and -not (Test-Path -LiteralPath $path)) { continue }
         $acl = Get-Acl -LiteralPath $path
         $rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | ForEach-Object {
             # Return built-in access categories rather than names or machine SIDs.
@@ -166,7 +188,7 @@ try {
             [ordered]@{ principal = $principal; rights = [int]$_.FileSystemRights;
                 type = $_.AccessControlType.ToString(); inherited = $_.IsInherited }
         })
-        [ordered]@{ file = $(if ($name) { $name } else { 'OOBE-directory' }); protected = $acl.AreAccessRulesProtected; rules = $rules }
+        [ordered]@{ file = $entry.label; protected = $acl.AreAccessRulesProtected; rules = $rules }
     })
 } catch { $result.errors += 'AME setup-account permissions unavailable' }
 try {

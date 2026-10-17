@@ -319,6 +319,16 @@ Observer-Kopie. Zur weiteren Ursachenbestimmung reicht zunächst:
 python3 scripts/atlas/diagnose-vm.py --update-guest
 ```
 
+Der Collector erfasst auch die festen GUI-Meldungen des originalen AME 0.8.4:
+`Window Loaded`, `Window Thread Started`, `Window InterLink Initialized`,
+`Window Registered`, `Window Signaled` und `Waiting Anim`. Diese Meldungen
+verwenden teilweise keinen Trenner zwischen Uhrzeit und Text.
+`guiStartupPhase` zeigt den letzten gemeldeten GUI-Schritt seit dem letzten
+Dienststart. `not-reported` beweist keinen fehlgeschlagenen Fensteraufbau: Der
+Client könnte sein Log nicht schreiben können. Deshalb enthält `amePermissions`
+zusätzlich die kategorisierten DACLs von `Logs-directory` und `Log.yml`, sofern
+vorhanden. Der Collector verändert keine Rechte und startet keine Prozesse neu.
+
 ### Gast-Update eindeutig bestätigen
 
 `Guest service update accepted` bestätigt nur die Upload-Annahme. Der bisherige
