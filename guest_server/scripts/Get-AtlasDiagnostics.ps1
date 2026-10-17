@@ -61,7 +61,8 @@ function Get-AtlasWindowKind([string]$Title) {
 }
 if ($LibraryOnly) { return }
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
-$result = [ordered]@{ collectedAtUtc = [DateTime]::UtcNow.ToString('o'); errors = @() }
+$result = [ordered]@{ diagnosticsVersion = 2; collectedAtUtc = [DateTime]::UtcNow.ToString('o'); errors = @() }
+$result.collectorHash = (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $root = Join-Path $env:ProgramData 'AME'
 try {
     $result.service = @(Get-CimInstance Win32_Service -Filter "Name='ameoobe'" |
@@ -83,11 +84,19 @@ try {
         microsoftBackupExists = (Test-Path -LiteralPath (Join-Path $env:SystemRoot 'System32\oobe\msoobeext.exe') -PathType Leaf)
     }
 } catch { $result.errors += 'AME OOBE shim state unavailable' }
+$result.observer = [ordered]@{state='unknown';lastResult=$null}
 try {
     $task = Get-ScheduledTask -TaskName 'WinBoatAtlasOOBE'
     $info = $task | Get-ScheduledTaskInfo
     $result.observer = [ordered]@{ state = $task.State.ToString(); lastResult = $info.LastTaskResult }
-} catch { $result.errors += 'WinBoat Atlas observer status unavailable' }
+} catch {
+    if ($_.FullyQualifiedErrorId -match 'NoMatchingMSFT_ScheduledTaskObjectsFound') {
+        $result.observer.state = 'not-registered'
+    } else {
+        $result.observer.state = 'unavailable'
+        $result.errors += 'WinBoat Atlas observer status unavailable'
+    }
+}
 try {
     $lines = @(Get-Content -LiteralPath (Join-Path $root 'Logs\Log.yml') -Tail 400)
     $result.startup = @(Select-AtlasStartupLines $lines)

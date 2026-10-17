@@ -78,6 +78,10 @@ try {
         -not $result.setupAccount.exists -or -not $result.logon.setupCredentialPresent -or $result.logon.consoleAccount -ne 'setup-account' -or
         $result.amePermissions[0].rules[2].principal -ne 'setup-account' -or $result.logon.AutoAdminLogon -ne 1 -or
         $result.logon.AutoLogonCount -ne 0 -or $json -match 'S-1-5-21|PRIVATE-PC|private') { throw 'Shell/permissions diagnostics failed or exposed machine identifiers.' }
+    if ($result.diagnosticsVersion -ne 2 -or $result.collectorHash.Length -ne 64) { throw 'Collector identity missing.' }
+    function Get-ScheduledTask { param($TaskName) Write-Error -ErrorId 'NoMatchingMSFT_ScheduledTaskObjectsFound_TaskName' -Message 'private task detail' -ErrorAction Stop }
+    $missingTask = & $diagnosticsScript | ConvertFrom-Json
+    if ($missingTask.observer.state -ne 'not-registered' -or $missingTask.errors.Count) { throw 'Expected observer removal was mistaken for a collector failure.' }
 } finally { $env:ProgramData = $oldProgramData; $env:SystemRoot = $oldSystemRoot }
 $failureKinds = @(Select-AtlasFailureKinds @('System.UnauthorizedAccessException: private', 'HResult: 0x80070005', 'Password: private', 'System.UnauthorizedAccessException'))
 if ($failureKinds.Count -ne 2 -or $failureKinds[0] -ne 'System.UnauthorizedAccessException' -or $failureKinds[1] -ne '0x80070005') { throw 'Failure-type allowlist failed.' }

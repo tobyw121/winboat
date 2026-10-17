@@ -20,6 +20,38 @@ helper = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(helper)
 
 
+class UpdateCompletionTests(unittest.TestCase):
+    def test_old_service_and_same_commit_old_script_do_not_finish_update(self):
+        attempts = 0
+        def get(route):
+            nonlocal attempts
+            if route == '/version':
+                attempts += 1
+                return {'commit_hash': 'old' if attempts == 1 else 'new'}
+            return {'diagnosticsVersion': 2, 'collectorHash': 'old' if attempts == 2 else 'expected'}
+        with patch.object(helper.time, 'sleep'), patch.object(helper.time, 'monotonic', return_value=0):
+            version, data = helper.wait_for_guest_update(get, 'new', 'expected')
+        self.assertEqual(attempts, 3)
+        self.assertEqual(version['commit_hash'], 'new')
+        self.assertEqual(data['collectorHash'], 'expected')
+
+    def test_service_restart_is_retried(self):
+        versions = iter([OSError('restarting'), {'commit_hash':'new'}, {'commit_hash':'new'}])
+        def get(route):
+            if route == '/version':
+                value = next(versions)
+                if isinstance(value, Exception): raise value
+                return value
+            return {'diagnosticsVersion': 2, 'collectorHash': 'expected'}
+        with patch.object(helper.time, 'sleep'), patch.object(helper.time, 'monotonic', return_value=0):
+            self.assertEqual(helper.wait_for_guest_update(get, 'new', 'expected')[0]['commit_hash'], 'new')
+
+    def test_accepted_upload_that_never_activates_times_out(self):
+        with patch.object(helper.time, 'sleep'), patch.object(helper.time, 'monotonic', side_effect=[0, 121]):
+            with self.assertRaisesRegex(RuntimeError, 'completion is unconfirmed'):
+                helper.wait_for_guest_update(lambda route: {'commit_hash':'old'}, 'new', 'expected')
+
+
 class UpdatePayloadTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()

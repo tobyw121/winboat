@@ -3,6 +3,7 @@
 import argparse
 import datetime as dt
 import json
+import hashlib
 import os
 from pathlib import Path
 import subprocess
@@ -67,6 +68,24 @@ def create_update(oem, executable, archive):
     archive.chmod(0o600)
 
 
+def wait_for_guest_update(get, commit, collector_hash, timeout=120):
+    """An accepted upload is not completion: the old service remains up briefly."""
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            version = get('/version')
+            if version.get('commit_hash') == commit:
+                diagnostics = get('/provisioning/atlas/diagnostics')
+                if diagnostics.get('diagnosticsVersion') == 2 and diagnostics.get('collectorHash') == collector_hash:
+                    return version, diagnostics
+        except (OSError, ValueError):
+            pass  # Expected while the updater stops and replaces the guest service.
+        if time.monotonic() >= deadline:
+            raise RuntimeError('Guest upload was accepted, but the expected service/collector did not become active within '
+                               f'{timeout} seconds. Update completion is unconfirmed; the VM was not stopped.')
+        time.sleep(1)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--container', default='WinBoat')
@@ -84,6 +103,7 @@ def main():
         with opener.open(base + path, timeout=25) as response:
             return json.load(response)
     print('Windows guest:', json.dumps(get('/version')), flush=True)
+    diagnostics = None
     if args.update_guest:
         print('Building the guest-service collector. Windows/AME will keep running.', flush=True)
         with tempfile.TemporaryDirectory(prefix='winboat-atlas-diagnostics-') as temporary:
@@ -99,6 +119,8 @@ def main():
             subprocess.run([*command, '.'], cwd=ROOT, check=True)
             archive = temporary / 'update.zip'
             create_update(oem, temporary / 'out/winboat_guest_server.exe', archive)
+            with zipfile.ZipFile(archive) as payload:
+                collector_hash = hashlib.sha256(payload.read('scripts/Get-AtlasDiagnostics.ps1')).hexdigest()
             boundary = 'winboat-' + uuid.uuid4().hex
             body = (f'--{boundary}\r\nContent-Disposition: form-data; name="updateFile"; filename="update.zip"\r\n'
                     'Content-Type: application/zip\r\n\r\n').encode() + archive.read_bytes() + f'\r\n--{boundary}--\r\n'.encode()
@@ -108,17 +130,11 @@ def main():
                 if json.load(response).get('status') != 'updating':
                     raise RuntimeError('The guest rejected its service update.')
             print('Guest service update accepted; waiting for diagnostics (VM stays running)...', flush=True)
-            deadline = time.monotonic() + 120
-            while True:
-                try:
-                    get('/provisioning/atlas/diagnostics')
-                    break
-                except (OSError, ValueError):
-                    if time.monotonic() >= deadline:
-                        raise RuntimeError('Guest update did not return diagnostics within 120 seconds.')
-                    time.sleep(1)
+            version, diagnostics = wait_for_guest_update(get, commit, collector_hash)
+            print('Verified updated guest and matching collector:', version['commit_hash'], flush=True)
     try:
-        diagnostics = get('/provisioning/atlas/diagnostics')
+        if diagnostics is None:
+            diagnostics = get('/provisioning/atlas/diagnostics')
     except urllib.error.HTTPError as error:
         if error.code == 404:
             raise RuntimeError('Run again with --update-guest to install the fixed diagnostic collector.') from error

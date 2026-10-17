@@ -318,3 +318,15 @@ Observer-Kopie. Zur weiteren Ursachenbestimmung reicht zunächst:
 ```bash
 python3 scripts/atlas/diagnose-vm.py --update-guest
 ```
+
+### Gast-Update eindeutig bestätigen
+
+`Guest service update accepted` bestätigt nur die Upload-Annahme. Der bisherige
+Gastdienst antwortet während der ersten Update-Sekunden möglicherweise noch.
+Das Diagnose-Hilfsskript wartet deshalb auf die erwartete Commit-ID **und**
+`diagnosticsVersion: 2` samt SHA-256 des tatsächlich hochgeladenen Collectors.
+Erst dann erscheint `Verified updated guest and matching collector`. Ohne diese
+Bestätigung wird nach dem Zeitlimit ein unbestätigtes Update gemeldet, statt alte
+Diagnosen als neue auszugeben. Die Windows-VM wird dabei nicht neu gestartet.
+Ein bereits entfernter Observer-Task wird als `not-registered` ausgewiesen; echte
+Abfragefehler werden weiterhin separat gemeldet.
