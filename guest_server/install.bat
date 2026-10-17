@@ -4,7 +4,7 @@ set EXE_PATH=%INSTALL_DIR%\winboat_guest_server.exe
 set NSSM_PATH=%INSTALL_DIR%\nssm.exe
 set OEM_DIR=C:\OEM
 
-:: Registry tweaks
+:: RemoteApp tweaks must not change Winlogon: AME still needs setup autologon.
 reg import "%OEM_DIR%\RDPApps.reg"
 
 :: Create install directory if it doesn't exist
@@ -35,6 +35,9 @@ if exist "%ProgramData%\WinBoat\Atlas\oobe-mode.json" (
     if errorlevel 1 exit /b 1
     exit /b 0
 )
+:: For ordinary installs keep the previous no-autologon policy. ISO/OOBE above
+:: defers it until the observer confirms the playbook and configured user.
+reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v AutoAdminLogon /t REG_SZ /d 0 /f
 :: Register before Helios so Atlas survives its reboots and waits for completion.
 if exist "%OEM_DIR%\atlas-enabled" (
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%INSTALL_DIR%\scripts\Start-AtlasProvisioning.ps1" -Register -BundlePath "%INSTALL_DIR%\atlas"

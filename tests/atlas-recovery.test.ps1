@@ -8,12 +8,12 @@ if ($parseErrors.Count) { throw ($parseErrors | Out-String) }
 $valid = [pscustomobject]@{mode='ame-oobe'; release='0.5.0-hotfix'; applied=$false; configuredUserExists=$false;
     diagnostics=[pscustomobject]@{errors=@(); shim=@{originalAME=$true; microsoftBackupExists=$true};
         files=@(@{exists=$true}, @{exists=$true}, @{exists=$true}, @{exists=$true});
-        logon=@{shell='ame-oobe'; defaultIsSetupAccount=$true}; setupAccount=@{exists=$true; disabled=$false};
+        logon=@{shell='ame-oobe'; defaultIsSetupAccount=$true; setupCredentialPresent=$true}; setupAccount=@{exists=$true; disabled=$false};
         windowsSetup=@{OOBEInProgress=0; SystemSetupInProgress=0; SetupType=0};
         service=@(@{State='Stopped'}); processes=@(@{ProcessName='LogonUI'})}}
 if ($null -ne (Test-AtlasRecoveryState $valid)) { throw 'Verified stopped setup was rejected.' }
 foreach ($mutate in @(
-    {param($s) $s.applied=$true}, {param($s) $s.configuredUserExists=$true},
+    {param($s) $s.diagnostics.logon.setupCredentialPresent=$false}, {param($s) $s.applied=$true}, {param($s) $s.configuredUserExists=$true},
     {param($s) $s.diagnostics.shim.originalAME=$false}, {param($s) $s.diagnostics.windowsSetup.OOBEInProgress=1},
     {param($s) $s.diagnostics.files[0].exists=$false},
     {param($s) $s.diagnostics.service[0].State='Running'},
@@ -68,3 +68,16 @@ try {
     Remove-Item -LiteralPath $testData -Recurse -Force
 }
 Write-Host 'Recovery preflight guards, scoped setup SID access and mocked Sysprep failure reporting passed.'
+# Setup autologon can be restored only with Windows' existing setup credential.
+$script:winlogon = [pscustomobject]@{DefaultUserName='defaultuser0'; DefaultPassword='fixture-only'; AutoAdminLogon='0'}
+$script:changes = @()
+function Get-ItemProperty { param($Path) $script:winlogon }
+function Set-ItemProperty { param($Path, $Name, $Value) $script:changes += ,@($Path,$Name,$Value) }
+Restore-AtlasSetupAutologon
+if ($script:changes.Count -ne 1 -or $script:changes[0][1] -ne 'AutoAdminLogon' -or $script:changes[0][2] -ne '1') { throw 'Wrong setup logon repair.' }
+foreach ($key in @([pscustomobject]@{DefaultUserName='someone'; DefaultPassword='fixture-only'}, [pscustomobject]@{DefaultUserName='defaultuser0'}, [pscustomobject]@{DefaultUserName='defaultuser0'; DefaultPassword=''})) {
+    $script:winlogon=$key; $blocked=$false
+    try { Restore-AtlasSetupAutologon } catch { $blocked=$true }
+    if (-not $blocked -or $script:changes.Count -ne 1) { throw 'Recovery changed another user or guessed a setup credential.' }
+}
+Write-Host 'Setup autologon repair preserves passwords and rejects missing credentials.'

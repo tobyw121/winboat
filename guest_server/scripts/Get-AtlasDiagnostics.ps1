@@ -61,6 +61,7 @@ try {
     $key = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
     $shell = if ($null -ne $key.PSObject.Properties['Shell']) { [string]$key.Shell } else { '' }
     $result.logon = [ordered]@{ shell = (Get-AtlasShellKind $shell (Join-Path $root 'OOBE\AME.Client.exe')) }
+    $result.logon.setupCredentialPresent = ($null -ne $key.PSObject.Properties['DefaultPassword'] -and -not [string]::IsNullOrEmpty([string]$key.DefaultPassword))
     foreach ($name in @('AutoAdminLogon','AutoLogonCount','ForceAutoLogon')) {
         if ($null -ne $key.PSObject.Properties[$name] -and [string]$key.$name -match '^\d{1,5}$') {
             $result.logon[$name] = [int]$key.$name

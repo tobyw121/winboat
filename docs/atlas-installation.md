@@ -244,3 +244,30 @@ Geprüft sind C#-Kompilierung, native Strukturlayouts, Aufrufreihenfolge und
 Abweisung ohne Sitzung sowie HTTP-/Pakettransport und der Windows-Gastdienst-
 Build. Die WTS-/Prozess-APIs und der originale WinUI-Client können in der
 Linux-Cloud nicht ausgeführt werden; ihr Zusammenspiel bleibt auf der VM zu prüfen.
+
+### Korrektur der Setup-Anmeldung
+
+WinBoats allgemeine RemoteApp-Registry-Datei darf `AutoAdminLogon` nicht während
+AMEs Setup abschalten. Im ISO-Modus wird diese Richtlinie erst nach einem frischen,
+fehlerfreien Atlas-Ergebnis und der Erstellung des konfigurierten Windows-Benutzers
+angewendet. Ein beendeter AME-Dienst oder eine fehlende Setup-Anmeldung wird nach
+einer Starttoleranz als Fehler gemeldet, statt weiter „Applying Atlas“ anzuzeigen.
+
+Für eine bereits blockierte VM zuerst den Gast aktualisieren und diagnostizieren:
+
+```bash
+git pull --ff-only origin work
+python3 scripts/atlas/diagnose-vm.py --update-guest
+```
+
+`logon.setupCredentialPresent` zeigt nur, ob Windows sein Setup-Kennwort noch
+hinterlegt hat; dessen Inhalt wird nicht ausgegeben. Falls es vorhanden ist,
+kann `--recover-oobe` nach den bisherigen Prüfungen die Setup-Anmeldung wieder
+aktivieren und Windows per Sysprep neu starten. Es verändert kein Kennwort.
+Fehlt das Setup-Kennwort, wird die Wiederherstellung abgelehnt. Dann eine neue
+Installation mit dem korrigierten WinBoat-Build und frischem Windows-Medium
+verwenden; die bestehende VM-Disk vorher sichern. Ein bloßes Update der Anwendung
+ändert keine bereits installierten Windows-Anmeldedaten.
+
+Die Regressionstests prüfen Windows-Abfragen mit Fixtures. Ein vollständiger
+Windows-/AME-Installationslauf muss zusätzlich auf dem VM-Host verifiziert werden.

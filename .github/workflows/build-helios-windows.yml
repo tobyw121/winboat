@@ -65,11 +65,17 @@ jobs:
       - name: Check Atlas provisioning result validation (PowerShell 7)
         shell: pwsh
         working-directory: .
-        run: ./tests/atlas-windows.test.ps1
+        run: |
+          ./tests/atlas-windows.test.ps1
+          ./tests/atlas-recovery.test.ps1
+          ./tests/atlas-observer.test.ps1
       - name: Check Atlas provisioning result validation (Windows PowerShell)
         shell: powershell
         working-directory: .
-        run: ./tests/atlas-windows.test.ps1
+        run: |
+          ./tests/atlas-windows.test.ps1
+          ./tests/atlas-recovery.test.ps1
+          ./tests/atlas-observer.test.ps1
       - name: Check registry snapshot preservation (PowerShell 7)
         shell: pwsh
         run: ./packaging/windows/Test-HeliosRegistrySnapshots.ps1

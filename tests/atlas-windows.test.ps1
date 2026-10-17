@@ -50,7 +50,7 @@ function Get-ScheduledTaskInfo { [pscustomobject]@{LastTaskResult=267009} }
 function Get-Content { param($LiteralPath, $Tail) 'Message: "23:13:12.3456: Worker Start"'; 'Password: private' }
 function Get-ItemProperty {
     param($Path)
-    if ($Path -like '*Winlogon') { return [pscustomobject]@{Shell=('"{0}" --oobe' -f (Join-Path $env:ProgramData 'AME/OOBE/AME.Client.exe')); DefaultUserName='defaultuser0'; AutoAdminLogon='1'; AutoLogonCount=0; ForceAutoLogon='private'} }
+    if ($Path -like '*Winlogon') { return [pscustomobject]@{Shell=('"{0}" --oobe' -f (Join-Path $env:ProgramData 'AME/OOBE/AME.Client.exe')); DefaultUserName='defaultuser0'; DefaultPassword='private'; AutoAdminLogon='1'; AutoLogonCount=0; ForceAutoLogon='private'} }
     [pscustomobject]@{OOBEInProgress=1; SystemSetupInProgress=0; SetupType=0}
 }
 function Get-Acl {
@@ -74,7 +74,7 @@ try {
     $result = $json | ConvertFrom-Json
     if ($result.service[0].ProcessId -ne 42 -or $result.windowsSetup.OOBEInProgress -ne 1 -or $result.startup.Count -ne 1 -or $json -match 'private') { throw 'Full diagnostic collection failed or leaked log contents.' }
     if ($result.errors.Count -or $result.logon.shell -ne 'ame-oobe' -or -not $result.shim.originalAME -or
-        -not $result.setupAccount.exists -or $result.logon.consoleAccount -ne 'setup-account' -or
+        -not $result.setupAccount.exists -or -not $result.logon.setupCredentialPresent -or $result.logon.consoleAccount -ne 'setup-account' -or
         $result.amePermissions[0].rules[2].principal -ne 'setup-account' -or $result.logon.AutoAdminLogon -ne 1 -or
         $result.logon.AutoLogonCount -ne 0 -or $json -match 'S-1-5-21|PRIVATE-PC|private') { throw 'Shell/permissions diagnostics failed or exposed machine identifiers.' }
 } finally { $env:ProgramData = $oldProgramData; $env:SystemRoot = $oldSystemRoot }
@@ -84,3 +84,11 @@ if ((Get-AtlasShellKind 'explorer.exe' 'client.exe') -ne 'windows-explorer' -or
     (Get-AtlasShellKind 'unexpected private command' 'client.exe') -ne 'other') { throw 'Shell classification leaked an unknown command.' }
 if ((Get-AtlasShellKind '"C:\ProgramData\\AME\\OOBE\\AME.Client.exe" --oobe' 'C:\ProgramData\AME\OOBE\AME.Client.exe') -ne 'ame-oobe') { throw 'Pinned shim shell path was not recognized.' }
 Write-Host 'Full diagnostic collection passed with Windows-query fixtures (not a Windows VM test).'
+if (-not (Get-AtlasHandoffFailure ([pscustomobject]@{State='Stopped';ExitCode=1067}) '')) { throw 'Stopped AME service was mistaken for progress.' }
+if (Get-AtlasHandoffFailure ([pscustomobject]@{State='Running';ExitCode=0}) 'user') { throw 'Active user was mistaken for a blocked handoff.' }
+function Get-ItemProperty { param($Path) [pscustomobject]@{DefaultUserName='defaultuser0';AutoAdminLogon='0'} }
+if (-not (Get-AtlasHandoffFailure ([pscustomobject]@{State='Running';ExitCode=0}) '')) { throw 'Disabled setup autologon was mistaken for progress.' }
+# Read through .NET: earlier diagnostic fixtures override Get-Content.
+$reg = [IO.File]::ReadAllText((Join-Path $RepoRoot 'guest_server/RDPApps.reg'))
+if ($reg -match 'AutoAdminLogon|Winlogon') { throw 'Early RemoteApp tweaks must not disable AME setup autologon.' }
+Write-Host 'AME service/logon stalls and early RemoteApp registry policy passed.'

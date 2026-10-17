@@ -10,10 +10,22 @@ function Test-AtlasRecoveryState($State) {
     if ($d.files.Count -ne 4 -or @($d.files | Where-Object { -not $_.exists }).Count) { return 'Required AME payload files are missing.' }
     if ($d.logon.shell -ne 'ame-oobe' -or -not $d.logon.defaultIsSetupAccount -or
         -not $d.setupAccount.exists -or $d.setupAccount.disabled) { return 'Not the expected temporary setup-account handoff.' }
+    if (-not $d.logon.setupCredentialPresent) { return 'Windows setup logon credential is missing. Automatic recovery cannot recreate it; use a fresh installation with the corrected setup logic.' }
     if ($d.windowsSetup.OOBEInProgress -ne 0 -or $d.windowsSetup.SystemSetupInProgress -ne 0 -or $d.windowsSetup.SetupType -ne 0) { return 'Windows setup is still active; automatic recovery refused.' }
     if ($d.service.Count -ne 1 -or $d.service[0].State -ne 'Stopped' -or
         @($d.processes | Where-Object { $_.ProcessName -ne 'LogonUI' }).Count) { return 'AME or Windows setup processes are still active; wait for their exit.' }
     return $null
+}
+function Restore-AtlasSetupAutologon {
+    $path = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
+    $key = Get-ItemProperty $path
+    if ($key.DefaultUserName -ine 'defaultuser0') { throw 'Setup autologon belongs to another user.' }
+    # Reuse the setup secret only if Windows still has it. Never guess/reset it
+    # or substitute the configured final user's password for defaultuser0.
+    if ($null -eq $key.PSObject.Properties['DefaultPassword'] -or [string]::IsNullOrEmpty([string]$key.DefaultPassword)) {
+        throw 'Windows setup autologon credential is missing. Use a fresh installation with the corrected setup logic.'
+    }
+    Set-ItemProperty $path -Name AutoAdminLogon -Value '1'
 }
 if ($LibraryOnly) { return }
 $root = Join-Path $env:ProgramData 'WinBoat\Atlas'
@@ -67,6 +79,7 @@ try {
     $reason = Test-AtlasRecoveryState ([pscustomobject]@{mode=$mode.mode; release=$mode.release;
         diagnostics=$diagnostics; applied=($null -ne $applied); configuredUserExists=($users.Count -ne 0)})
     if ($reason) { @{status='blocked'; message=$reason} | ConvertTo-Json -Compress; exit 0 }
+    Restore-AtlasSetupAutologon
     $ameRoot = Join-Path $env:ProgramData 'AME\OOBE'
     $backup = Join-Path $root 'pre-recovery-ame-acl.json'
     if (-not (Test-Path -LiteralPath $backup)) {

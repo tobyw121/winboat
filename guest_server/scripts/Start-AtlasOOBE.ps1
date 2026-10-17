@@ -15,6 +15,19 @@ function Test-AtlasOOBEApplied($Applied, [DateTime]$CreatedAt) {
     return $true
 }
 
+function Get-AtlasHandoffFailure($Service, [string]$ConsoleUser) {
+    if ($null -ne $Service -and $Service.State -eq 'Stopped' -and [int]$Service.ExitCode -ne 0) {
+        return ('AME OOBE service stopped with code {0}. Atlas is not complete; collect diagnostics before recovery.' -f $Service.ExitCode)
+    }
+    if (-not $ConsoleUser) {
+        $key = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
+        if ($key.DefaultUserName -ieq 'defaultuser0' -and [string]$key.AutoAdminLogon -eq '0') {
+            return 'AME setup has no console user and setup autologon is disabled. Atlas completion is not confirmed; guarded OOBE recovery is required.'
+        }
+    }
+    return $null
+}
+
 function Convert-AtlasRegistryBackup($Entry) {
     $bytes = [byte[]]$Entry.originalBytes
     switch ([int]$Entry.originalType) {
@@ -91,20 +104,38 @@ try {
         Start-ScheduledTask -TaskName $taskName
         exit 0
     }
+    $conf = Get-Content -LiteralPath (Join-Path $env:ProgramData 'WinBoat\AtlasMedia\atlas.json') -Raw | ConvertFrom-Json
+    if ($conf.username -notmatch '^[a-zA-Z0-9]{2,}$') { throw 'Invalid configured Atlas username.' }
     $created = [DateTime]::Parse($mode.createdAtUtc).ToUniversalTime()
     $deadline = [DateTime]::UtcNow.AddMinutes(110)
     $setupAccessGranted = $false
+    $handoffFailures = 0
     do {
         # On a fresh boot the temporary account may be created after this task.
         if (-not $setupAccessGranted) { $setupAccessGranted = Grant-AtlasSetupAccountAccess }
         $applied = Get-ItemProperty 'HKLM:\SOFTWARE\AME\Playbooks\Applied\{00000000-0000-4000-6174-6C6173203A33}' -ErrorAction SilentlyContinue
-        if (Test-AtlasOOBEApplied $applied $created) { break }
+        if (Test-AtlasOOBEApplied $applied $created) {
+            $user = @(Get-CimInstance Win32_UserAccount -Filter ("LocalAccount=True AND Name='{0}'" -f $conf.username))
+            if ($user.Count -eq 1 -and -not $user[0].Disabled) { break }
+            # AME can publish its playbook result before finishing user creation.
+            if ([DateTime]::UtcNow -ge $deadline) { throw 'Atlas completed, but AME did not create the configured Windows user.' }
+            Start-Sleep -Seconds 5
+            continue
+        }
         if ($null -ne $applied -and $null -ne $applied.PSObject.Properties['ErrorLevel'] -and [int]$applied.ErrorLevel -ne 0) {
             throw 'AME OOBE recorded playbook errors. Inspect the AME logs in Windows.'
         }
+        $service = Get-CimInstance Win32_Service -Filter "Name='ameoobe'"
+        $consoleUser = [string](Get-CimInstance Win32_ComputerSystem).UserName
+        $failure = Get-AtlasHandoffFailure $service $consoleUser
+        if ($failure) { $handoffFailures++ } else { $handoffFailures = 0 }
+        # Allow startup transitions, but do not display 'applying' for 110 minutes.
+        if ($handoffFailures -ge 12) { throw $failure }
         if ([DateTime]::UtcNow -ge $deadline) { throw 'AME OOBE did not record successful completion. Inspect the Windows setup console.' }
         Start-Sleep -Seconds 5
     } while ($true)
+    # Disable setup autologon only after the original AME result is verified.
+    Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name AutoAdminLogon -Value '0'
     Restore-AtlasPreparation (Join-Path $root 'security-backup.json')
     Start-Service -Name WinBoatGuestServer
     # The playbook result is authoritative; copying files never marks Atlas as finished.
