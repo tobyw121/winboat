@@ -11,13 +11,17 @@ import (
 	"time"
 )
 
-func collectDisplayAdapters(ctx context.Context) ([]byte, error) {
+func collectDisplayAdapters(ctx context.Context, viewerUnavailable bool) ([]byte, error) {
 	executable, err := os.Executable()
 	if err != nil {
 		return nil, err
 	}
 	script := filepath.Join(filepath.Dir(executable), "scripts", "Get-DisplayAdapters.ps1")
-	return exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, "-Recover").Output()
+	args := []string{"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, "-Recover"}
+	if viewerUnavailable {
+		args = append(args, "-ViewerUnavailable")
+	}
+	return exec.CommandContext(ctx, "powershell.exe", args...).Output()
 }
 func ensureSelectedHelios() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)

@@ -118,3 +118,19 @@ test('same-version legacy guest APIs are updated to deploy automatic display rec
     assert.equal(guestNeedsUpdate({version:'0.8.7',graphics_protocol:GUEST_GRAPHICS_PROTOCOL},'0.8.7'),false);
     assert.equal(guestNeedsUpdate({version:'0.8.6',graphics_protocol:GUEST_GRAPHICS_PROTOCOL},'0.8.7'),true);
 });
+
+test('adapter recovery reports its cause while preserving the same viewer window', async () => {
+    const child=new FakeViewer(), updates:{state:string;message:string}[]=[], hints:boolean[]=[];
+    const viewer=new HeliosViewer(()=>child as unknown as ChildProcess,(state,message)=>updates.push({state,message}),1000,1000,unavailable=>hints.push(unavailable));
+    const opening=viewer.open(()=>assert.fail('Adapter recovery must not fail the session'));
+    child.ready();await opening;
+    child.stdout.write(JSON.stringify({event:'display-recovery',console:1,accelerated:true,reason:'EGL DMA-BUF import failed'})+'\n');
+    assert.match(updates.at(-1)!.message,/EGL DMA-BUF import failed/);
+    assert.equal(updates.at(-1)!.state,'ready');assert.equal(child.kills,0);
+    child.stdout.write('{"event":"display-recovered","console":1,"accelerated":true}\n');
+    assert.match(updates.at(-1)!.message,/connected/);
+    assert.deepEqual(hints,[true,false]);
+    child.stdout.write(JSON.stringify({event:'display-recovery',console:0,accelerated:false,reason:'VGA frame failed'})+'\n');
+    assert.deepEqual(hints,[true,false]);
+    viewer.close();
+});

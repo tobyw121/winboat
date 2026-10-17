@@ -41,8 +41,39 @@ func TestGraphicsMonitorStopsWithoutOverlapping(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	calls := 0
 	m := newGraphicsMonitor()
-	m.run(ctx, func(context.Context) ([]byte, error) { calls++; cancel(); return nil, errors.New("offline") })
+	m.run(ctx, func(context.Context, bool) ([]byte, error) { calls++; cancel(); return nil, errors.New("offline") })
 	if calls != 1 {
 		t.Fatal(calls)
+	}
+}
+
+func TestViewerRecoveryHint(t *testing.T) {
+	m := newGraphicsMonitor()
+	request := func(header string) int {
+		r := httptest.NewRequest("POST", "/graphics/adapters/recovery", nil)
+		r.Header.Set("X-WinBoat-Recovery", header)
+		w := httptest.NewRecorder()
+		m.viewerRecovery(w, r)
+		return w.Code
+	}
+	if request("") != 400 || !m.viewerUnavailableUntil.IsZero() {
+		t.Fatal("Unmarked request changed recovery")
+	}
+	if request("arbitrary-command") != 400 {
+		t.Fatal("Unknown command accepted")
+	}
+	if request("display-fallback") != 202 || !time.Now().Before(m.viewerUnavailableUntil) {
+		t.Fatal("Viewer failure was not queued")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	m.run(ctx, func(_ context.Context, unavailable bool) ([]byte, error) {
+		defer cancel()
+		if !unavailable {
+			t.Error("Healthy PnP state suppressed the viewer failure hint")
+		}
+		return []byte(`{"helios":{"state":"running"},"basic":{"state":"disabled"}}`), nil
+	})
+	if request("display-ready") != 202 || !m.viewerUnavailableUntil.IsZero() {
+		t.Fatal("Recovered Helios did not clear its hint")
 	}
 }

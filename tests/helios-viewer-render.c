@@ -37,6 +37,7 @@ int main(void) {
  gtk_gl_area_make_current(GTK_GL_AREA(area));
  g_assert_null(gtk_gl_area_get_error(GTK_GL_AREA(area)));
  g_assert_cmpint(gdk_gl_context_get_api(gtk_gl_area_get_context(GTK_GL_AREA(area))),==,GDK_GL_API_GL);
+ g_assert_true(eglGetCurrentDisplay()!=EGL_NO_DISPLAY);
  Viewer v={0};g_assert_true(initialize_gl(&v));
  GLuint target,fbo;glGenTextures(1,&target);glBindTexture(GL_TEXTURE_2D,target);
  glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,4,4,0,GL_RGBA,GL_UNSIGNED_BYTE,NULL);

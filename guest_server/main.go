@@ -298,6 +298,7 @@ func main() {
 	go graphics.run(context.Background(), collectDisplayAdapters)
 	go ensureSelectedHelios()
 	r.HandleFunc("/graphics/adapters", graphics.status).Methods("GET")
+	r.HandleFunc("/graphics/adapters/recovery", graphics.viewerRecovery).Methods("POST")
 	r.HandleFunc("/apps", getApps).Methods("GET")
 	r.HandleFunc("/health", getHealth).Methods("GET")
 	r.HandleFunc("/graphics/helios", getHeliosStatus).Methods("GET")

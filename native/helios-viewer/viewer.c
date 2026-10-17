@@ -68,7 +68,9 @@ struct Viewer {
  GPtrArray *consoles;
  char *console_path;
  guint console_id, pending_consoles, reconnect_timer;
- gboolean accelerated, seen_update, cursor_visible;
+ gboolean accelerated, seen_update, cursor_visible, awaiting_scanout;
+ guint recovery_attempt;
+ char frame_problem[256];
  gint helios_health, basic_health; /* 0 unknown, 1 running, 2 unavailable */
  gint64 health_at;
  guint health_watch, health_timer;
@@ -81,6 +83,7 @@ static void update_cursor(Viewer *v) {
  else gtk_widget_set_cursor_from_name(v->area,d->cursor_visible?"default":"none");
 }
 static void select_console(Viewer *v);
+static void refresh_scanout(Viewer *v);
 static gboolean request_resize(gpointer data);
 
 static gboolean external_only(GDBusAuthObserver *observer,const char *mechanism,gpointer data) {
@@ -213,14 +216,7 @@ static GtkWidget *display_area(void) {
  gtk_gl_area_set_required_version(GTK_GL_AREA(area),3,3);
  return area;
 }
-static void desktop_gl(void) {
- /* GtkGLArea's API selection does not constrain GTK's shared display context.
-  * Select desktop GL before GTK creates that context, including during the
-  * installation preflight. These settings are private to this helper process. */
- const char *name=NULL,*flag=NULL;
- if (!gtk_check_version(4,16,0)) {name="GDK_DISABLE";flag="gles-api";}
- else if (!gtk_check_version(4,14,0)) {name="GDK_DEBUG";flag="gl-disable-gles";}
- if (!name) return; /* Older GTK defaults to desktop GL. */
+static void add_gtk_flag(const char *name,const char *flag) {
  const char *previous=g_getenv(name);
  char **flags=g_strsplit_set(previous?previous:"",",:; \t",-1);
  gboolean present=FALSE;
@@ -229,6 +225,16 @@ static void desktop_gl(void) {
  if (!present) {
   char *value=previous && *previous?g_strconcat(previous,",",flag,NULL):g_strdup(flag);
   g_setenv(name,value,TRUE);g_free(value);
+ }
+}
+static void desktop_gl(void) {
+ /* DMA-BUF import requires an EGL context. A valid GLX desktop GL context
+  * passed our old preflight but can never satisfy eglGetCurrentDisplay(). */
+ if (!gtk_check_version(4,16,0)) {
+  add_gtk_flag("GDK_DISABLE","gles-api");add_gtk_flag("GDK_DISABLE","glx");
+ } else {
+  add_gtk_flag("GDK_DEBUG","gl-egl");
+  if (!gtk_check_version(4,14,0)) add_gtk_flag("GDK_DEBUG","gl-disable-gles");
  }
 }
 static void draw(Viewer *v, GLuint texture, const float *rect, gboolean flip) {
@@ -290,15 +296,18 @@ static gboolean import_dma(Viewer *v,GDBusMethodInvocation *inv,GVariant *handle
  guint fourcc,guint bw,guint bh,guint64 modifier,gboolean top) {
  const guint rgb[]={0x34325258,0x34325241,0x34324258,0x34324241};
  gboolean known=FALSE;for (guint i=0;i<G_N_ELEMENTS(rgb);i++) known|=fourcc==rgb[i];
+ g_snprintf(v->frame_problem,sizeof(v->frame_problem),"DMA-BUF geometry/format invalid: fourcc=0x%08x, backing=%ux%u, crop=%u,%u %ux%u, planes=%u",fourcc,bw,bh,x,y,w,h,planes);
  if (!known || !dimensions(bw,bh) || !dimensions(w,h) || (guint64)x+w>bw || (guint64)y+h>bh || !planes || planes>4
   || g_variant_n_children(handles)!=planes || g_variant_n_children(offsets)!=planes || g_variant_n_children(strides)!=planes) return FALSE;
+ g_strlcpy(v->frame_problem,"DMA-BUF import requires an EGL context with EGL_EXT_image_dma_buf_import and GL_OES_EGL_image",sizeof(v->frame_problem));
  v->display=eglGetCurrentDisplay();
  if (v->display==EGL_NO_DISPLAY || !epoxy_has_egl_extension(v->display,"EGL_EXT_image_dma_buf_import")
      || !epoxy_has_gl_extension("GL_OES_EGL_image")) return FALSE;
  gboolean mods=epoxy_has_egl_extension(v->display,"EGL_EXT_image_dma_buf_import_modifiers");
+ g_snprintf(v->frame_problem,sizeof(v->frame_problem),"DMA-BUF modifier unsupported: 0x%016" G_GINT64_MODIFIER "x",modifier);
  if (!mods && modifier!=0 && modifier!=MOD_INVALID) return FALSE;
  GUnixFDList *list=g_dbus_message_get_unix_fd_list(g_dbus_method_invocation_get_message(inv));
- if (!list) return FALSE;
+ if (!list) {g_strlcpy(v->frame_problem,"DMA-BUF descriptors missing",sizeof(v->frame_problem));return FALSE;}
  const EGLint fdkeys[]={EGL_DMA_BUF_PLANE0_FD_EXT,EGL_DMA_BUF_PLANE1_FD_EXT,EGL_DMA_BUF_PLANE2_FD_EXT,EGL_DMA_BUF_PLANE3_FD_EXT};
  const EGLint offkeys[]={EGL_DMA_BUF_PLANE0_OFFSET_EXT,EGL_DMA_BUF_PLANE1_OFFSET_EXT,EGL_DMA_BUF_PLANE2_OFFSET_EXT,EGL_DMA_BUF_PLANE3_OFFSET_EXT};
  const EGLint pitchkeys[]={EGL_DMA_BUF_PLANE0_PITCH_EXT,EGL_DMA_BUF_PLANE1_PITCH_EXT,EGL_DMA_BUF_PLANE2_PITCH_EXT,EGL_DMA_BUF_PLANE3_PITCH_EXT};
@@ -318,13 +327,13 @@ static gboolean import_dma(Viewer *v,GDBusMethodInvocation *inv,GVariant *handle
  attrs[n]=EGL_NONE;
  EGLImageKHR image=ok?eglCreateImageKHR(v->display,EGL_NO_CONTEXT,EGL_LINUX_DMA_BUF_EXT,NULL,attrs):EGL_NO_IMAGE_KHR;
  for (guint p=0;p<planes;p++) if (fds[p]>=0) close(fds[p]);
- if (image==EGL_NO_IMAGE_KHR) return FALSE;
+ if (image==EGL_NO_IMAGE_KHR) {g_snprintf(v->frame_problem,sizeof(v->frame_problem),"EGL DMA-BUF import failed: egl=0x%04x, fourcc=0x%08x, modifier=0x%016" G_GINT64_MODIFIER "x",eglGetError(),fourcc,modifier);return FALSE;}
  discard_source(v);v->image=image;glGenTextures(1,&v->source);glBindTexture(GL_TEXTURE_2D,v->source);
  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
  glEGLImageTargetTexture2DOES(GL_TEXTURE_2D,image);
- if (glGetError()!=GL_NO_ERROR) {discard_source(v);return FALSE;}
- dma_geometry(v,x,y,w,h,bw,bh,top);return TRUE;
+ if (glGetError()!=GL_NO_ERROR) {g_strlcpy(v->frame_problem,"OpenGL could not bind the imported EGL image",sizeof(v->frame_problem));discard_source(v);return FALSE;}
+ dma_geometry(v,x,y,w,h,bw,bh,top);v->frame_problem[0]=0;return TRUE;
 }
 static gboolean copy_dma(Viewer *v) {
  if (!v->source) return FALSE;
@@ -339,10 +348,25 @@ static gboolean copy_dma(Viewer *v) {
  glFinish();glBindFramebuffer(GL_DRAW_FRAMEBUFFER,previous);v->flip=FALSE;
  v->cache_valid=glGetError()==GL_NO_ERROR;return v->cache_valid;
 }
+static void report_display_recovery(Viewer *v,const char *message) {
+ char *reason=g_strescape(message,NULL);
+ g_print("{\"event\":\"display-recovery\",\"console\":%u,\"accelerated\":%s,\"reason\":\"%s\"}\n",v->console_id,v->accelerated?"true":"false",reason);
+ fflush(stdout);g_free(reason);
+}
 static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,const gchar *iface,
  const gchar *name,GVariant *params,GDBusMethodInvocation *inv,gpointer data) {
  (void)conn;(void)sender;(void)path;(void)iface;
- Viewer *v=data;gboolean ok=TRUE;gtk_gl_area_make_current(GTK_GL_AREA(v->area));
+ Viewer *v=data;gboolean ok=TRUE;
+ gboolean scanout=!strcmp(name,"Scanout") || !strcmp(name,"ScanoutDMABUF") || !strcmp(name,"ScanoutDMABUF2");
+ gboolean update=!strcmp(name,"Update") || !strcmp(name,"UpdateDMABUF");
+ gboolean frame=scanout || update || !strcmp(name,"Disable");
+ if (update && v->awaiting_scanout) {
+  /* Acknowledge/drop queued updates while QEMU republishes the baseline.
+   * No producer buffer is read or displayed in this state. */
+  g_dbus_method_invocation_return_value(inv,NULL);return;
+ }
+ g_strlcpy(v->frame_problem,"Invalid adapter frame",sizeof(v->frame_problem));
+ gtk_gl_area_make_current(GTK_GL_AREA(v->area));
  if (gtk_gl_area_get_error(GTK_GL_AREA(v->area))) ok=FALSE;
  else if (!strcmp(name,"Scanout") || !strcmp(name,"Update")) {
   gint x=0,y=0,w,h;guint stride,format;GVariant *pixels;
@@ -381,6 +405,7 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
   g_variant_unref(handles);g_variant_unref(offsets);g_variant_unref(strides);
  } else if (!strcmp(name,"UpdateDMABUF")) {
   gint x,y,w,h;g_variant_get(params,"(iiii)",&x,&y,&w,&h);
+  g_snprintf(v->frame_problem,sizeof(v->frame_problem),"UpdateDMABUF region=%d,%d %dx%d, scanout=%ux%u, imported=%s",x,y,w,h,v->width,v->height,v->source?"yes":"no");
   ok=region(v,x,y,w,h) && copy_dma(v);
   if (ok) {v->dma_frames++;v->last_dma=TRUE;}
  } else if (!strcmp(name,"Disable")) {
@@ -405,6 +430,14 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
  if (!gtk_gl_area_get_error(GTK_GL_AREA(v->area))) frame_error=glGetError();
  if (frame_error!=GL_NO_ERROR) ok=FALSE;
  if (ok) {
+  if (scanout) {
+   v->awaiting_scanout=FALSE;
+   if (v->reconnect_timer) {g_source_remove(v->reconnect_timer);v->reconnect_timer=0;}
+  }
+  if (frame && v->cache_valid && v->recovery_attempt) {
+   v->recovery_attempt=0;
+   g_print("{\"event\":\"display-recovered\",\"console\":%u,\"accelerated\":%s}\n",v->console_id,v->accelerated?"true":"false");fflush(stdout);
+  }
   if (!strcmp(name,"Update") || !strcmp(name,"UpdateDMABUF")) v->seen_update=TRUE;
   if (v->parent) select_console(v->parent);
   if (!strcmp(name,"Scanout") || !strcmp(name,"Update") || !strcmp(name,"UpdateDMABUF") || !strcmp(name,"Disable"))
@@ -412,14 +445,18 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
   g_dbus_method_invocation_return_value(inv,NULL);
  }
  else {
-  g_dbus_method_invocation_return_dbus_error(inv,"org.winboat.Helios.DisplayError","Invalid adapter frame; waiting for the next scanout.");
+  char *detail=g_strdup_printf("Console %u %s: %s; GL=0x%04x; requesting fresh scanout.",v->console_id,name,v->frame_problem,frame_error);
+  g_dbus_method_invocation_return_dbus_error(inv,"org.winboat.Helios.DisplayError",detail);
+  g_printerr("%s\n",detail);g_free(detail);
+  if (frame && v->parent) report_display_recovery(v,v->frame_problem);
+  if (!frame && frame_error==GL_NO_ERROR && !gtk_gl_area_get_error(GTK_GL_AREA(v->area))) return;
   if (v->parent && frame_error!=GL_CONTEXT_LOST && !gtk_gl_area_get_error(GTK_GL_AREA(v->area))) {
    /* A broken adapter frame must not tear down another working console. */
    discard_source(v);
    for (int i=0;i<8 && glGetError()!=GL_NO_ERROR;i++) {} /* Isolate adapter GL errors. */
    v->cache_valid=FALSE;v->seen_update=FALSE;v->width=v->height=0;
    select_console(v->parent);gtk_gl_area_queue_render(GTK_GL_AREA(v->area));
-   g_printerr("Console %u: %s failed; waiting for a new scanout.\n",v->console_id,name);
+   refresh_scanout(v);
   } else {
    char *message=g_strdup_printf("%s failed: host OpenGL display error.",name);
    fatal(v,message);g_free(message);
@@ -449,6 +486,14 @@ static gboolean reconnect_console(gpointer data) {
   G_VARIANT_TYPE("(h)"),G_DBUS_CALL_FLAGS_NONE,10000,NULL,NULL,registered,d);
  return G_SOURCE_REMOVE;
 }
+static void refresh_scanout(Viewer *v) {
+ v->awaiting_scanout=TRUE;
+ if (v->reconnect_timer) return;
+ guint attempt=MIN(v->recovery_attempt,4u);v->recovery_attempt++;
+ guint delay=MIN(10u,1u<<attempt);
+ g_printerr("Console %u: re-registering in %u seconds to recover its scanout.\n",v->console_id,delay);
+ v->reconnect_timer=g_timeout_add_seconds(delay,reconnect_console,v);
+}
 static void listener_failed(Viewer *d,const char *message) {
  Viewer *root=d->parent;
  gboolean other=FALSE;
@@ -457,7 +502,8 @@ static void listener_failed(Viewer *d,const char *message) {
   if (candidate!=d && candidate->peer && !g_dbus_connection_is_closed(candidate->peer)) other=TRUE;
  }
  if (!other) {fatal(d,message);return;}
- d->cache_valid=FALSE;d->seen_update=FALSE;d->registered=FALSE;select_console(root);
+ d->cache_valid=FALSE;d->seen_update=FALSE;d->registered=FALSE;d->awaiting_scanout=TRUE;select_console(root);
+ report_display_recovery(d,"Display listener disconnected; reconnecting this adapter");
  g_printerr("Console %u: %s; reconnecting this adapter.\n",d->console_id,message);
  if (!d->reconnect_timer) d->reconnect_timer=g_timeout_add_seconds(1,reconnect_console,d);
 }
@@ -774,7 +820,7 @@ int main(int argc,char **argv) {
  const char *version_error=gtk_check_version(4,8,0);
  if (version_error) {g_printerr("GTK 4.8 or newer is required: %s\n",version_error);return 1;}
  desktop_gl();
- if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 4");return 0;}
+ if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 5");return 0;}
  if (argc==2 && !strcmp(argv[1],"--check-gl")) {
   if (!gtk_init_check()) {g_printerr("GTK cannot open the host X11/Wayland display.\n");return 1;}
   GtkWidget *window=gtk_window_new(),*area=display_area();
@@ -783,6 +829,7 @@ int main(int argc,char **argv) {
   const GError *error=gtk_gl_area_get_error(GTK_GL_AREA(area));
   int result=error?1:0;
   if (error) g_printerr("Host GTK OpenGL: %s\n",error->message);
+  else if (eglGetCurrentDisplay()==EGL_NO_DISPLAY) {g_printerr("Host GTK OpenGL has no EGL context; DMA-BUF import is unavailable.\n");result=1;}
   else if (!glGetString(GL_VERSION) || !glGetString(GL_RENDERER)) {g_printerr("Host GTK OpenGL returned no version/renderer.\n");result=1;}
   else g_print("Host GTK OpenGL: %s; renderer: %s; backend: %s\n",glGetString(GL_VERSION),glGetString(GL_RENDERER),G_OBJECT_TYPE_NAME(gdk_display_get_default()));
   gtk_window_destroy(GTK_WINDOW(window));return result;

@@ -21,11 +21,27 @@ export const localDisplayMessage = ref('');
 let openingConsole: Promise<void> | undefined;
 let adapterTimer: ReturnType<typeof setInterval> | undefined;
 let adapterGeneration=0;
+let adapterAPIPort:number|undefined;
+let lastFallback=-Infinity;
+let viewerUnavailable=false;
 const viewer = new HeliosViewer(() => child.spawn(binary(), ['--address', heliosDisplayAddress(localDisplayDirectory()), '--control-stdin'],
     { env: desktopEnvironment(), stdio: ['pipe', 'pipe', 'pipe'] }), (state, message) => {
     localDisplayState.value = state; localDisplayMessage.value = message;
-});
+    if (state==='closed' || state==='failed') reportViewerAvailability(false);
+},10000,1000,reportViewerAvailability);
 
+function reportViewerAvailability(unavailable:boolean):void {
+    viewerUnavailable=unavailable;
+    if (adapterAPIPort===undefined) return;
+    const now=performance.now();
+    if (unavailable && now-lastFallback<5000) return;
+    lastFallback=unavailable ? now : -Infinity;
+    const nodeFetch: typeof import('node-fetch').default = require('node-fetch');
+    void nodeFetch(`http://127.0.0.1:${adapterAPIPort}/graphics/adapters/recovery`,{
+        method:'POST',timeout:3000,headers:{'X-WinBoat-Recovery':unavailable?'display-fallback':'display-ready'},
+    }).then(response=>{if(!response.ok) console.warn(`Display recovery hint rejected: ${response.status}`);})
+      .catch(()=>{}); // Guest API can be offline during installation/reboot.
+}
 function desktopEnvironment(): NodeJS.ProcessEnv {
     return nativeDesktopEnvironment(hostEnvironment(), remote.app.isPackaged ? path.dirname(process.resourcesPath) : undefined);
 }
@@ -41,7 +57,7 @@ export async function requireLocalDisplay(): Promise<void> {
     if (!hostEnvironment().DISPLAY && !hostEnvironment().WAYLAND_DISPLAY) throw new Error('Local Desktop needs a running X11 or Wayland desktop session.');
     try {
         const { stdout } = await execFile(binary(), ['--version'], { timeout: 3000, env: desktopEnvironment() });
-        if (stdout.trim() !== 'winboat-helios-viewer 4') throw new Error('Viewer protocol mismatch.');
+        if (stdout.trim() !== 'winboat-helios-viewer 5') throw new Error('Viewer protocol mismatch.');
     }
     catch { throw new Error('The local Helios viewer needs its bundled executable, GTK 4.8+, libepoxy and a desktop session. Install the GTK4 runtime or use Browser Display.'); }
     try { await execFile(binary(), ['--check-gl'], {timeout: 8000, env: desktopEnvironment()}); }
@@ -114,11 +130,13 @@ function displayFailure(message: string): void {
 
 export function followLocalDisplay(enabled: boolean, apiPort = GUEST_API_PORT): void {
     if (adapterTimer) {clearInterval(adapterTimer);adapterTimer=undefined;}
+    adapterAPIPort=enabled ? apiPort : undefined;lastFallback=-Infinity;viewerUnavailable=false;
     const generation=++adapterGeneration;
     viewer.updateAdapters(null);
     if (enabled) {
         const nodeFetch: typeof import('node-fetch').default = require('node-fetch');
         const poll = skipWhileRunning(async () => {
+            if (viewerUnavailable) reportViewerAvailability(true);
             try {
                 const response=await nodeFetch(`http://127.0.0.1:${apiPort}/graphics/adapters`,{timeout:3000});
                 const state=response.ok ? await response.json() : null;

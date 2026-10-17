@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const graphicsProtocol = "helios-watchdog-v1"
+const graphicsProtocol = "helios-watchdog-v2"
 
 type displayAdapter struct {
 	State       string `json:"state"`
@@ -25,9 +25,10 @@ type displayAdapters struct {
 	Error        string         `json:"error,omitempty"`
 }
 type graphicsMonitor struct {
-	mu         sync.RWMutex
-	snapshot   displayAdapters
-	lastSample time.Time
+	mu                     sync.RWMutex
+	snapshot               displayAdapters
+	lastSample             time.Time
+	viewerUnavailableUntil time.Time
 }
 
 func newGraphicsMonitor() *graphicsMonitor {
@@ -54,10 +55,13 @@ func (m *graphicsMonitor) update(data []byte, err error) {
 	m.snapshot = next
 	m.lastSample = time.Now()
 }
-func (m *graphicsMonitor) run(ctx context.Context, collect func(context.Context) ([]byte, error)) {
+func (m *graphicsMonitor) run(ctx context.Context, collect func(context.Context, bool) ([]byte, error)) {
 	for {
 		check, cancel := context.WithTimeout(ctx, 12*time.Second)
-		data, err := collect(check)
+		m.mu.RLock()
+		viewerUnavailable := time.Now().Before(m.viewerUnavailableUntil)
+		m.mu.RUnlock()
+		data, err := collect(check, viewerUnavailable)
 		cancel()
 		m.update(data, err)
 		select {
@@ -78,4 +82,24 @@ func (m *graphicsMonitor) status(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	json.NewEncoder(w).Encode(snapshot)
+}
+
+// Only a fixed display recovery hint is accepted, never device IDs or commands.
+// GET status remains read-only; the existing watchdog owns all PnP operations.
+func (m *graphicsMonitor) viewerRecovery(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	operation := r.Header.Get("X-WinBoat-Recovery")
+	if operation != "display-fallback" && operation != "display-ready" {
+		http.Error(w, "Explicit display recovery header required", http.StatusBadRequest)
+		return
+	}
+	m.mu.Lock()
+	m.viewerUnavailableUntil = time.Time{}
+	if operation == "display-fallback" {
+		m.viewerUnavailableUntil = time.Now().Add(15 * time.Second)
+	}
+	m.mu.Unlock()
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(map[string]string{"status": "queued"})
 }

@@ -23,7 +23,7 @@ export class HeliosViewer {
     private retryAttempt = 0;
     private automaticFailure: (message: string) => void = () => {};
     constructor(private spawn: () => ChildProcess,
-        private status: (state: ViewerState, message: string) => void, private timeout = 10000, private retryDelay = 1000) {}
+        private status: (state: ViewerState, message: string) => void, private timeout = 10000, private retryDelay = 1000, private recovery?: (unavailable:boolean)=>void) {}
 
     /** Follow VM lifecycle without opening duplicate windows or requiring RDP. */
     setAutomatic(enabled: boolean, onFailure: (message: string) => void): void {
@@ -73,9 +73,22 @@ export class HeliosViewer {
         child.stdout?.on('data', (data: Buffer) => {
             if (closed) return;
             output = (output + data.toString()).slice(-16384);
-            if (!ready && output.split('\n').slice(0, -1).includes('{"event":"ready","transport":"dbus"}')) {
-                ready = true; this.retryAttempt = 0; clearTimeout(timer);
-                this.status('ready', 'Local Desktop connected. Ctrl+Alt+Enter toggles fullscreen.'); resolve();
+            const lines=output.split('\n');output=lines.pop() || '';
+            for (const line of lines) {
+                let event: {event?:string;transport?:string;console?:number;reason?:string;accelerated?:boolean};
+                try {event=JSON.parse(line);} catch {continue;}
+                if (!event || typeof event !== 'object') continue;
+                if (!ready && event.event === 'ready' && event.transport === 'dbus') {
+                    ready = true; this.retryAttempt = 0; clearTimeout(timer);
+                    this.status('ready', 'Local Desktop connected. Ctrl+Alt+Enter toggles fullscreen.'); resolve();
+                } else if (ready && event.event === 'display-recovery' && typeof event.reason === 'string') {
+                    const message=`Display ${event.console}: ${event.reason.slice(0,512)}. Reconnecting this display automatically…`;
+                    console.warn(message);this.status('ready',message);
+                    if (event.accelerated === true) this.recovery?.(true);
+                } else if (ready && event.event === 'display-recovered') {
+                    if (event.accelerated === true) this.recovery?.(false);
+                    this.status('ready','Local Desktop connected. Ctrl+Alt+Enter toggles fullscreen.');
+                }
             }
         });
         child.stderr?.on('data', (data: Buffer) => { errors = (errors + data.toString()).slice(-8192); });

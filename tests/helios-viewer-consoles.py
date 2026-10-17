@@ -134,13 +134,14 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
                        for component in (*reversed(colors[(y // 12) * 2 + x // 16]), 255))
         red = bytes([0, 0, 255, 255]) * (32 * 24)
         gray = bytes([80, 80, 80, 255]) * (32 * 24)
+        failed_peer = None
         stage = 0
         visible = False
         started = time.monotonic()
         loop = GLib.MainLoop()
 
         def tick():
-            global stage, visible
+            global stage, visible, failed_peer
             try:
                 if failures:
                     raise RuntimeError(failures[0])
@@ -158,6 +159,7 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
                 elif stage == 1:
                     call(1, 'Update', '(iiiiuuay)', (0, 0, 32, 24, 128, 0x20020888, pixels))
                 elif stage == 2:
+                    failed_peer = peers[1]
                     # A corrupt Helios update must fall back within the same
                     # viewer process instead of destroying the VGA listener.
                     try:
@@ -166,7 +168,14 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
                         assert 'DisplayError' in str(error), error
                     else:
                         raise AssertionError('Invalid frame was accepted')
+                    # Producer updates queued after that failure are discarded
+                    # and acknowledged until a fresh scanout is requested.
+                    call(1, 'UpdateDMABUF', '(iiii)', (0, 0, 32, 24))
                 elif stage == 3:
+                    # QEMU republishes its baseline only when a new listener
+                    # registers. Ordinary updates cannot restore a lost source.
+                    if peers[1] is failed_peer or peers[1].is_closed():
+                        return True
                     call(1, 'Scanout', '(uuuuay)', (32, 24, 128, 0x20020888, pixels))
                     call(1, 'Update', '(iiiiuuay)', (0, 0, 32, 24, 128, 0x20020888, pixels))
                 elif stage == 4:
@@ -205,6 +214,14 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
                     viewer.stdin.write('adapters 1 1\n');viewer.stdin.flush()
                 elif stage == 13:
                     call(0, 'Update', '(iiiiuuay)', (0, 0, 32, 24, 128, 0x20020888, red))
+                elif stage == 14:
+                    # Invalid cursor metadata must not invalidate a good frame.
+                    try:
+                        call(1, 'CursorDefine', '(iiiiay)', (0, 0, 0, 0, b''))
+                    except GLib.Error as error:
+                        assert 'DisplayError' in str(error), error
+                    else:
+                        raise AssertionError('Invalid cursor was accepted')
                 elif stage == 15:
                     visible_frame()
                     visible = True

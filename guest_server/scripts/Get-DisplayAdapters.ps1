@@ -1,5 +1,5 @@
 # A fixed watchdog operation: only re-enable WinBoat's QEMU bootstrap VGA.
-param([switch]$Recover, [switch]$LibraryOnly)
+param([switch]$Recover, [switch]$LibraryOnly, [switch]$ViewerUnavailable)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 function Get-WinBoatDisplayState {
@@ -28,11 +28,11 @@ function Set-WinBoatDisplayRecoveryTime([long]$Ticks) {
     New-Item -Path 'HKLM:\SOFTWARE\WinBoat\DisplayRecovery' -Force | Out-Null
     New-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\WinBoat\DisplayRecovery' -Name LastAttemptTicks -PropertyType QWord -Value $Ticks -Force | Out-Null
 }
-function Invoke-WinBoatDisplayCheck([bool]$Repair) {
+function Invoke-WinBoatDisplayCheck([bool]$Repair,[bool]$ViewerUnavailable=$false) {
     $state=Get-WinBoatDisplayState
-    # Do not undo an intentional VGA disable while Helios is healthy. Never
+    # Preserve an intentional VGA disable while Helios and its viewer are healthy. Never
     # disable adapters, re-install drivers or reboot from the watchdog.
-    if ($Repair -and $state.heliosPresent -and $state.helios.state -notin @('running','unknown') -and $state.basic.state -in @('disabled','failed')) {
+    if ($Repair -and $state.heliosPresent -and ($ViewerUnavailable -or $state.helios.state -notin @('running','unknown')) -and $state.basic.state -in @('disabled','failed')) {
         $now=[DateTime]::UtcNow.Ticks
         $elapsed=$now - (Get-WinBoatDisplayRecoveryTime)
         if ($elapsed -ge 0 -and $elapsed -lt [TimeSpan]::FromSeconds(30).Ticks) {$state.recovery='cooldown';return $state}
@@ -47,4 +47,4 @@ function Invoke-WinBoatDisplayCheck([bool]$Repair) {
     return $state
 }
 if ($LibraryOnly) {return}
-Invoke-WinBoatDisplayCheck ([bool]$Recover) | ConvertTo-Json -Depth 5 -Compress
+Invoke-WinBoatDisplayCheck ([bool]$Recover) ([bool]$ViewerUnavailable) | ConvertTo-Json -Depth 5 -Compress

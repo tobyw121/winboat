@@ -437,7 +437,7 @@ statischen Desktop ohne nachfolgendes Update. Die QEMU-Gerätenamen
 Bei einem Helios-Ausfall fällt dasselbe Viewer-Fenster auf die verfügbare VGA
 zurück. Ist auch VGA deaktiviert, aktiviert die Guest API diesen Adapter;
 bei einem PnP-Fehler startet sie ausschließlich diesen Adapter neu. Sie lässt
-VGA in Ruhe, solange Helios läuft, deaktiviert keine Adapter und führt für
+VGA in Ruhe, solange Helios läuft und gültige Bilder liefert, deaktiviert keine Adapter und führt für
 solche Wiederherstellungen keinen Windows-Neustart aus. Erneute
 Wiederherstellungsversuche sind auf einen Versuch pro 30 Sekunden begrenzt.
 Nach einem neuen gültigen Helios-Bild und bestätigtem Treiberzustand wechselt
@@ -455,10 +455,40 @@ Der Guest Server stellt fehlende oder veraltete Installationsaufgaben beim
 Start wieder her, sofern Helios für diese VM ausgewählt wurde.
 
 Die App aktualisiert ältere Guest APIs anhand der Kennung
-`graphics_protocol=helios-watchdog-v1`, auch wenn beide noch Version `0.8.7`
+`graphics_protocol=helios-watchdog-v2`, auch wenn beide noch Version `0.8.7`
 melden. Für diese Änderung sind die neue AppImage und ihr Guest-API-Update
 nötig. Die bestehende VM muss den separaten VGA-Adapter behalten (Host-Protokoll
 `dbus-v6`). Ein vollständig abgestürztes Windows kann seine Guest API nicht
 mehr ausführen; die Überwachung ersetzt daher keinen VM-Neustart nach einem
 Bluescreen. PnP-Status und Viewer-Framefehler erkennen außerdem keinen beliebigen
 GPU-Hänger, bei dem Windows den Treiber weiterhin als fehlerfrei meldet.
+
+### Bildfehler beim Wechsel des Adapters
+
+Der Viewer verwendet ausdrücklich Desktop-OpenGL über **EGL**, auch unter X11.
+Ein GLX-Kontext kann OpenGL anzeigen, aber keine EGL-DMA-BUFs importieren. Die
+Vorprüfung kontrolliert deshalb zusätzlich den tatsächlichen EGL-Kontext.
+Manuelle `GDK_DEBUG`-Optionen sind dafür nicht nötig.
+
+Nach einem ungültigen Scanout/Update meldet sich nur die betroffene Konsole mit
+begrenzter Wiederholungsrate erneut bei QEMU an. QEMU liefert dadurch wieder
+einen vollständigen Scanout. Updates, die noch zur verworfenen Bildquelle
+gehören, werden bis dahin ohne Zugriff auf deren Speicher verworfen und
+bestätigt. Das Fenster und die andere Konsole bleiben geöffnet. Fehlerhafte
+Cursor-Metadaten verwerfen keinen gültigen Desktop mehr.
+
+Der ursprüngliche Fehlergrund (einschließlich EGL-Fehlercode, Format und
+Modifier bei einem Importfehler) erscheint in WinBoat während der
+Wiederherstellung und in der Terminal-Ausgabe. Sobald wieder ein gültiges Bild
+vorliegt, verschwindet die Wiederherstellungsmeldung. Damit werden dauerhafte
+GPU-/Importprobleme sichtbar, statt sie als allgemeines Umschaltproblem zu
+melden.
+
+Wenn Windows Helios weiterhin als `running` meldet, der Viewer aber keine
+gültigen Helios-Bilder verarbeiten kann, meldet er dies ausdrücklich mit
+`POST /graphics/adapters/recovery` und dem Header
+`X-WinBoat-Recovery: display-fallback`. Die Guest API darf dann die deaktivierte
+VGA auch bei fehlerfreiem PnP-Status wieder aktivieren. Nach einem gültigen
+Helios-Bild hebt `display-ready` diesen zeitlich begrenzten Hinweis wieder auf.
+Die API akzeptiert dabei keine Geräte-IDs oder Befehle aus der Anfrage; der
+Watchdog bearbeitet ausschließlich den erkannten Bootstrap-VGA-Adapter.

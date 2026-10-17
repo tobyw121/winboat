@@ -16,6 +16,11 @@ function pnputil.exe {
 }
 $state=Invoke-WinBoatDisplayCheck $true
 if($state.helios.state -ne 'running' -or $state.basic.state -ne 'disabled' -or $global:enables.Count){throw 'Healthy Helios must preserve intentionally disabled VGA'}
+# Exact reported case: Helios PnP is healthy, VGA disabled, viewer cannot import
+# or present Helios frames. Its explicit hint must still restore bootstrap VGA.
+$state=Invoke-WinBoatDisplayCheck $true $true
+if($state.helios.state -ne 'running' -or $state.basic.state -ne 'running' -or $global:enables.Count -ne 1){throw 'Viewer failure with healthy Helios PnP did not restore VGA'}
+$global:devices[1].ConfigManagerErrorCode=22; $global:attempt=0; $global:enables=@()
 $global:devices[0].ConfigManagerErrorCode=43
 $state=Invoke-WinBoatDisplayCheck $false
 if($global:enables.Count){throw 'Read-only diagnostics mutated Windows'}
