@@ -5,15 +5,16 @@ $ErrorActionPreference = 'Stop'
 function Test-AtlasUILaunchState($State, [bool]$RestartStalled = $false) {
     if ($State.mode -ne 'ame-oobe' -or $State.release -ne '0.5.0-hotfix' -or $State.applied) { return 'Not an incomplete supported AME ISO setup.' }
     $d = $State.diagnostics
+    $clients = @($d.processes | Where-Object {$_.ProcessName -eq 'AME.Client' -and $_.SessionId -gt 0})
     $criticalErrors = @($d.errors | Where-Object {$_ -notin @('WinBoat Atlas observer status unavailable','Observer script version unavailable')})
     if ($criticalErrors.Count -or -not $d.shim.originalAME -or $d.files.Count -ne 4 -or
         @($d.files | Where-Object {-not $_.exists}).Count) { return 'AME diagnostic or payload verification failed.' }
     if ($d.logon.shell -ne 'ame-oobe' -or -not $d.setupAccount.exists -or $d.setupAccount.disabled) { return 'The temporary setup-account handoff is missing.' }
-    if (@($d.processes | Where-Object { ($_.ProcessName -eq 'AME.Client' -and -not $RestartStalled) -or $_.ProcessName -in @('msoobe','msoobeext','CloudExperienceHost','UserOOBEBroker') }).Count) { return 'AME UI or Windows setup is already active.' }
+    if (($clients.Count -and -not $RestartStalled) -or @($d.processes | Where-Object {$_.ProcessName -in @('msoobe','msoobeext','CloudExperienceHost','UserOOBEBroker')}).Count) { return 'AME UI or Windows setup is already active.' }
     if ($RestartStalled -and ($d.handoffPhase -ne 'handshake-ended-without-window' -or
         $d.logon.consoleAccount -ne 'setup-account' -or $d.service.Count -ne 1 -or
         $d.service[0].State -ne 'Stopped' -or $d.service[0].ExitCode -ne 1067 -or
-        @($d.processes | Where-Object {$_.ProcessName -eq 'AME.Client'}).Count -ne 1)) {
+        $clients.Count -ne 1)) {
         return 'Not a verified ended UI handshake with one leftover setup client.'
     }
     return $null
@@ -50,7 +51,7 @@ try {
     if ($restartRequested) {
         $stage = 'validate-stalled-client'
         Import-AtlasSessionLauncher
-        $client = @($d.processes | Where-Object {$_.ProcessName -eq 'AME.Client'})[0]
+        $client = @($d.processes | Where-Object {$_.ProcessName -eq 'AME.Client' -and $_.SessionId -gt 0})[0]
         [WinBoat.AtlasSessionLauncher]::ValidateStalled([uint32]$client.Id, $executable, [string]$account[0].SID)
         $attempt = Join-Path $env:ProgramData 'WinBoat\Atlas\ui-restart-attempt.json'
         if (Test-Path -LiteralPath $attempt) { @{status='blocked'; message='A stalled-UI restart was already attempted. Review diagnostics before another attempt.'} | ConvertTo-Json -Compress; exit 0 }
@@ -61,7 +62,7 @@ try {
             $marker.Write($bytes,0,$bytes.Length)
         } finally { $marker.Dispose() }
         [WinBoat.AtlasSessionLauncher]::StopStalled([uint32]$client.Id, $executable, [string]$account[0].SID)
-        if (@(Get-Process -Name 'AME.Client' -ErrorAction SilentlyContinue).Count) { throw 'Another AME client appeared; refusing a duplicate.' }
+        if (@(Get-Process -Name 'AME.Client' -ErrorAction SilentlyContinue | Where-Object {$_.SessionId -gt 0}).Count) { throw 'Another AME client appeared; refusing a duplicate.' }
     }
     $stage = 'start-service-and-client'
     $launch = Invoke-AtlasSessionLaunch $executable ([string]$account[0].SID)

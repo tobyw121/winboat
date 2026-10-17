@@ -154,7 +154,7 @@ try {
         }
         $service = Get-CimInstance Win32_Service -Filter "Name='ameoobe'"
         $consoleUser = [string](Get-CimInstance Win32_ComputerSystem).UserName
-        $clientActive = @(Get-Process -Name 'AME.Client' -ErrorAction SilentlyContinue).Count -gt 0
+        $clientActive = @(Get-Process -Name 'AME.Client' -ErrorAction SilentlyContinue | Where-Object {$_.SessionId -gt 0}).Count -gt 0
         $failure = Get-AtlasHandoffFailure $service $consoleUser $clientActive
         if ($clientActive -and $null -ne $service -and $service.State -eq 'Stopped') {
             Publish-AtlasOOBE 'waiting' 'AME client is running but its OOBE service stopped. Inspect the Windows console and crash diagnostics; Atlas completion is not confirmed.'

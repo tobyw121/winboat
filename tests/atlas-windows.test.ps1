@@ -136,3 +136,7 @@ try {
         ($withLogAccess | ConvertTo-Json -Depth 10) -match 'private|S-1-5-21') {throw 'Log ACL inspection failed or leaked identities/log contents.'}
 } finally {$env:ProgramData=$oldProgramData; $env:SystemRoot=$oldSystemRoot}
 Write-Host 'Optional log directory/file ACL inspection passed with OS-query fixtures.'
+$folder=Join-Path ([IO.Path]::GetTempPath()) 'AME/OOBE'
+if ((Get-AtlasServiceExecutable ('"{0}" --service' -f (Join-Path $folder 'AME.Client.exe')) $folder) -ne 'shared-client' -or
+    (Get-AtlasServiceExecutable ('"{0}" --service' -f (Join-Path $folder 'OOBE.exe')) $folder) -ne 'legacy-oobe' -or
+    (Get-AtlasServiceExecutable 'private-executable --service' $folder) -ne 'other') {throw 'Service executable classification failed or exposed unknown commands.'}

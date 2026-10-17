@@ -116,6 +116,8 @@ class MediaTests(unittest.TestCase):
         result = Hive(path)
         for number in ['001', '002']:
             self.assertEqual(result.get(f'ControlSet{number}\\Services\\ameoobe', 'Start'), (4, struct.pack('<I', 2)))
+            self.assertEqual(result.get(f'ControlSet{number}\\Services\\ameoobe', 'ImagePath'),
+                             (2, ('"%ProgramData%\\AME\\OOBE\\AME.Client.exe" --service\0').encode('utf-16-le')))
         self.assertIsNone(result.node('ControlSet003'))
 
     def assert_answer(self, data, ame):

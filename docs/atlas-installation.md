@@ -40,8 +40,9 @@ WinBoat zeigt die AME-Ursache auch bei einem zurückgesetzten HTTP-Zugriff an.
    Installationsindex eingebettet. Die originale `msoobe.exe` bleibt als
    `msoobeext.exe` erhalten; der originale AME-Shim übernimmt ihren Platz.
    `iso.conf` und `oobe.conf` entsprechen AMEs Datenformaten.
-   Der gepinnte Shim benötigt den Dateinamen `AME.Client.exe`, der Dienst
-   dagegen `OOBE.exe`. Beide Namen enthalten denselben unveränderten Client.
+   Der gepinnte Shim benötigt `AME.Client.exe`. Auch der Dienst startet dieselbe
+   Datei: AMEs IPC-Prüfung vergleicht die vollständigen EXE-Pfade der Partner.
+   `OOBE.exe` bleibt als unveränderte Legacy-Kopie für ältere Tools vorhanden.
 5. Die Antwortdateien wählen Pro aus und überlassen AME die Benutzererstellung.
    `SetupComplete.cmd` übernimmt die Installation des WinBoat-Gastdienstes;
    ein vorhandener WIM-SetupComplete-Hook wird vorher ausgeführt.
@@ -122,7 +123,8 @@ mitgelieferte Shim prüft jedoch ausdrücklich `AME.Client.exe`; fehlt diese
 Datei, wechselt er zur Microsoft-OOBE zurück, stellt die ursprüngliche
 `msoobe.exe` wieder her und entfernt den AME-Dienst. Da die Antwortdatei die
 Benutzererstellung AME überlässt, können dann auch die gewählten Windows-
-Zugangsdaten fehlen. Die Korrektur behält beide benötigten Client-Dateinamen.
+Zugangsdaten fehlen. Die Korrektur behält den vom Shim benötigten Clientnamen.
+Seit Host-Protokoll `ame-oobe-v3` verwendet auch der Dienst diesen gleichen Pfad.
 
 Sie gilt für neu vorbereitete Installationsmedien. Eine bereits installierte
 Windows-Kopie wird durch einen Git-Pull oder Container-Neustart nicht erneut
@@ -272,7 +274,7 @@ verwenden; die bestehende VM-Disk vorher sichern. Ein bloßes Update der Anwendu
 Die Regressionstests prüfen Windows-Abfragen mit Fixtures. Ein vollständiger
 Windows-/AME-Installationslauf muss zusätzlich auf dem VM-Host verifiziert werden.
 
-### Offline-Übergabe und Dateirechte (Host-Protokoll `ame-oobe-v2`)
+### Offline-Übergabe und Dateirechte (Host-Protokoll `ame-oobe-v3`)
 
 Die Offline-Anpassung verwendet die existierenden ControlSets aus
 `SYSTEM\Select\Default` und `Current`. Ohne diese Auswahl muss `ControlSet001`
@@ -342,6 +344,39 @@ Ein bereits entfernter Observer-Task wird als `not-registered` ausgewiesen; echt
 Abfragefehler werden weiterhin separat gemeldet.
 
 ### Einmaliger Wiederanlauf nach beendetem UI-Handshake
+
+#### Unterschiedliche Client-/Dienstpfade reparieren
+
+Die bisherige Injection startete den Dienst über `OOBE.exe`, die Oberfläche
+über `AME.Client.exe`. AMEs unveränderte `AME.Interprocess`-Bibliothek aktiviert
+die Pfadprüfung standardmäßig und verlangt beim Dienst den gleichen vollständigen
+EXE-Pfad des Clients. Zwei gleich gehashte Dateien mit unterschiedlichen Namen
+genügen nicht. Die GUI kann deshalb `Window Loaded` und `Window InterLink
+Initialized` melden, ohne `Window Registered` zu erreichen. Die optionale Meldung
+`Service event could not be opened.` allein beweist diesen Pfadfehler nicht.
+
+Neue Medien setzen den Dienst auf `"%ProgramData%\AME\OOBE\AME.Client.exe"
+--service`; der Host muss dafür mit Protokoll `ame-oobe-v3` neu gebaut werden.
+Für eine bestehende, genau so blockierte VM gibt es eine getrennte Reparatur:
+
+```bash
+git pull --ff-only origin work
+python3 scripts/atlas/diagnose-vm.py --update-guest --repair-ame-ipc
+```
+
+Sie prüft die Originaldatei, Setup-Benutzer/Sitzung, den alten Dienstpfad und den
+beendeten IPC-Handshake. Nur der gestoppte `ameoobe`-Dienst unter LocalSystem
+wird über die Windows-Dienstverwaltung umkonfiguriert; anschließend wird der
+verifizierte alte GUI-Prozess ersetzt und AME einmal neu gestartet. Ein eigener
+persistenter Marker verhindert Wiederholungen. Die bereits verbrauchte einfache
+UI-Wiederholung wird nicht zurückgesetzt. Windows bleibt laufen, Kennwörter und
+AME-Binärdateien bleiben unverändert; die IPC-Sicherheitsprüfung bleibt aktiv.
+`serviceExecutable: shared-client` bestätigt die Konfiguration. `launched`
+bestätigt nur den Prozessstart; `Window Registered`/`Window Signaled` und der
+geprüfte Playbook-Abschluss müssen anschließend an der VM bestätigt werden.
+
+Dienst und GUI heißen danach beide `AME.Client`. WinBoat unterscheidet sie über
+die Sitzung: der Dienst läuft in Sitzung 0, die Oberfläche in der Benutzersitzung.
 
 Wenn ein Wiederanlauf `launched` meldet, aber die Konsole weiterhin „Just a
 moment“ zeigt, keine neue VM anlegen und den Wiederanlauf nicht wiederholen.

@@ -45,6 +45,12 @@ function Get-AtlasShellKind([string]$Shell, [string]$Client) {
     if ([string]::IsNullOrWhiteSpace($Shell)) { return 'missing' }
     return 'other'
 }
+function Get-AtlasServiceExecutable([string]$Command, [string]$Folder) {
+    $expanded=[Environment]::ExpandEnvironmentVariables($Command)
+    if ($expanded -ieq ('"{0}" --service' -f (Join-Path $Folder 'AME.Client.exe'))) { return 'shared-client' }
+    if ($expanded -ieq ('"{0}" --service' -f (Join-Path $Folder 'OOBE.exe'))) { return 'legacy-oobe' }
+    return 'other'
+}
 function Select-AtlasFailureKinds([string[]]$Lines) {
     # Never return exception messages: they may include command-line credentials.
     @($Lines | ForEach-Object {
@@ -92,8 +98,13 @@ $result = [ordered]@{ diagnosticsVersion = 2; collectedAtUtc = [DateTime]::UtcNo
 $result.collectorHash = (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $root = Join-Path $env:ProgramData 'AME'
 try {
-    $result.service = @(Get-CimInstance Win32_Service -Filter "Name='ameoobe'" |
+    $service = @(Get-CimInstance Win32_Service -Filter "Name='ameoobe'")
+    $result.service = @($service |
         Select-Object Name, State, StartMode, ProcessId, ExitCode, ServiceSpecificExitCode)
+    $result.serviceExecutable = 'unknown'
+    if ($service.Count -eq 1 -and $null -ne $service[0].PSObject.Properties['PathName']) {
+        $result.serviceExecutable = Get-AtlasServiceExecutable $service[0].PathName (Join-Path $root 'OOBE')
+    }
 } catch { $result.errors += 'AME service status unavailable' }
 $result.processes = @(Get-Process -Name 'OOBE','AME.Client','msoobe','msoobeext','CloudExperienceHost','UserOOBEBroker','LogonUI' -ErrorAction SilentlyContinue |
     Select-Object ProcessName, Id, SessionId, Responding,
@@ -193,6 +204,7 @@ try {
 } catch { $result.errors += 'AME setup-account permissions unavailable' }
 try {
     $result.uiRestartAttempted = Test-Path -LiteralPath (Join-Path $env:ProgramData 'WinBoat\Atlas\ui-restart-attempt.json')
+    $result.ipcPathRepairAttempted = Test-Path -LiteralPath (Join-Path $env:ProgramData 'WinBoat\Atlas\ipc-path-repair.json')
     $result.clientInspection = @()
     # Windows PowerShell 5.1 has no $IsWindows automatic variable.
     if ($env:OS -eq 'Windows_NT') {
@@ -200,7 +212,7 @@ try {
             Add-Type -Path (Join-Path $PSScriptRoot 'AtlasProcessDiagnostics.cs')
         }
         $setupSid = if ($account.Count -eq 1) { [string]$account[0].SID } else { '' }
-        $result.clientInspection = @(foreach ($client in @($result.processes | Where-Object {$_.ProcessName -eq 'AME.Client'} | Select-Object -First 2)) {
+        $result.clientInspection = @(foreach ($client in @($result.processes | Where-Object {$_.ProcessName -eq 'AME.Client' -and $_.SessionId -gt 0} | Select-Object -First 2)) {
             [WinBoat.AtlasProcessDiagnostics]::Inspect([uint32]$client.Id, (Join-Path $root 'OOBE\AME.Client.exe'), $setupSid)
         })
     }

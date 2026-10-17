@@ -95,6 +95,8 @@ def main():
                         help='Repair verified setup-account access and REBOOT Windows into OOBE using Sysprep; no password reset')
     actions.add_argument('--restart-ame-ui', action='store_true',
                         help='Replace one verified old AME client after a failed GUI handshake; Windows stays running')
+    actions.add_argument('--repair-ame-ipc', action='store_true',
+                        help='Align the legacy AME service with the verified client path and restart AME once; Windows stays running')
     actions.add_argument('--launch-ame-ui', action='store_true',
                         help='Start the pinned AME client as the existing signed-in defaultuser0 console user; no Windows reboot')
     args = parser.parse_args()
@@ -155,9 +157,10 @@ def main():
         json.dump(diagnostics, stream, indent=2)
     print(json.dumps(diagnostics, indent=2))
     print(f'Recording: {output}')
-    if args.recover_oobe or args.launch_ame_ui or args.restart_ame_ui:
+    if args.recover_oobe or args.launch_ame_ui or args.restart_ame_ui or args.repair_ame_ipc:
         route, operation = ('recovery', 'restart-oobe') if args.recover_oobe else ('launch-ui', 'launch-ame-ui')
         if args.restart_ame_ui: route, operation = 'restart-ui', 'restart-ame-ui'
+        if args.repair_ame_ipc: route, operation = 'repair-ipc', 'repair-ame-ipc'
         message = 'Windows will REBOOT' if args.recover_oobe else 'The AME service/UI will restart; the explicit restart action may end the verified stalled client. Windows stays running'
         print(f'Requesting guarded AME action. {message}; passwords are not reset.', flush=True)
         request = urllib.request.Request(base + '/provisioning/atlas/' + route, data=b'',

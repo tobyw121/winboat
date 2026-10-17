@@ -88,7 +88,9 @@ def prepare_install(software, system):
         service = f'{control_set}\\Services\\ameoobe'
         for name, value in {'DisplayName': 'AME OOBE', 'ObjectName': 'LocalSystem'}.items():
             system.set(service, name, value, 1)
-        system.set(service, 'ImagePath', '"%ProgramData%\\AME\\OOBE\\OOBE.exe" --service', 2)
+        # InterLink's service verifies that its peer has the SAME executable path.
+        # The pinned shim launches AME.Client.exe, so the service must use it too.
+        system.set(service, 'ImagePath', '"%ProgramData%\\AME\\OOBE\\AME.Client.exe" --service', 2)
         for name, value in {'ErrorControl': 0, 'Start': 2, 'Type': 16}.items():
             system.set(service, name, value)
         # Suppress automatic guest disk encryption, matching AME's generated unattend.

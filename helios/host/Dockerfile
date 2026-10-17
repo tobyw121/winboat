@@ -38,7 +38,7 @@ RUN --mount=type=secret,id=proxy_ca \
     python3 -m pip install --target /opt/winboat-atlas/lib --require-hashes --no-compile -r /tmp/atlas-requirements.txt; \
     rm -rf /var/lib/apt/lists/* /root/.cache/pip
 ENV PYTHONPATH=/opt/winboat-atlas/lib
-LABEL org.winboat.atlas.iso="ame-oobe-v2"
+LABEL org.winboat.atlas.iso="ame-oobe-v3"
 FROM atlas-runtime AS runtime
 RUN --mount=type=secret,id=proxy_ca \
     set -eu; \

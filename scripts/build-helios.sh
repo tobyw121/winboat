@@ -88,7 +88,7 @@ display_version=$(sed -n "s/^export const HELIOS_DISPLAY_VERSION = '\([^']*\)';$
 actual_display=$(docker image inspect --format '{{ index .Config.Labels "org.winboat.helios.display" }}' "$image")
 [[ "$actual_display" == "$display_version" ]] || die 'The Helios image lacks the required local display protocol. Rebuild without --skip-host.'
 atlas_tools=$(docker image inspect --format '{{ index .Config.Labels "org.winboat.atlas.iso" }}' "$image")
-[[ "$atlas_tools" == ame-oobe-v2 ]] || die 'The Helios image lacks the required AME offline tools. Rebuild without --skip-host.'
+[[ "$atlas_tools" == ame-oobe-v3 ]] || die 'The Helios image lacks the required AME offline tools. Rebuild without --skip-host.'
 docker run --rm --network none --entrypoint /opt/helios/check-runtime.sh "$image" \
     || die 'Helios OpenGL runtime is missing or incomplete. Rebuild the host image without --skip-host.'
 # Exercise actual QEMU/memfd/QMP without pretending to test a GPU or Windows.

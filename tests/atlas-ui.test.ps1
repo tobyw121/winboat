@@ -10,7 +10,7 @@ $state = [pscustomobject]@{mode='ame-oobe'; release='0.5.0-hotfix'; applied=$fal
         logon=@{shell='ame-oobe'}; setupAccount=@{exists=$true; disabled=$false}; processes=@(@{ProcessName='LogonUI'})}}
 if ($null -ne (Test-AtlasUILaunchState $state)) { throw 'Incomplete setup was rejected.' }
 foreach ($mutate in @({param($s) $s.applied=$true}, {param($s) $s.diagnostics.setupAccount.disabled=$true},
-    {param($s) $s.diagnostics.processes += [pscustomobject]@{ProcessName='AME.Client'}},
+    {param($s) $s.diagnostics.processes += [pscustomobject]@{ProcessName='AME.Client';SessionId=1}},
     {param($s) $s.diagnostics.shim.originalAME=$false})) {
     $copy = $state | ConvertTo-Json -Depth 8 | ConvertFrom-Json
     & $mutate $copy
@@ -63,7 +63,7 @@ foreach ($mutate in @(
     {param($s) $s.diagnostics.handoffPhase='window-launched'},
     {param($s) $s.diagnostics.service[0].State='Running'},
     {param($s) $s.diagnostics.logon.consoleAccount='other'},
-    {param($s) $s.diagnostics.processes += [pscustomobject]@{ProcessName='AME.Client'}},
+    {param($s) $s.diagnostics.processes += [pscustomobject]@{ProcessName='AME.Client';SessionId=1}},
     {param($s) $s.applied=$true}
 )) {
     $copy=$stalled | ConvertTo-Json -Depth 8 | ConvertFrom-Json
@@ -71,6 +71,9 @@ foreach ($mutate in @(
     if (-not (Test-AtlasUILaunchState $copy $true)) { throw 'Restart accepted active UI, another user, multiple clients or applied playbook.' }
 }
 Write-Host 'Explicit stalled UI restart preflight guards passed; no processes were terminated.'
+$serviceOnly=$state | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+$serviceOnly.diagnostics.processes += [pscustomobject]@{ProcessName='AME.Client';SessionId=0}
+if (Test-AtlasUILaunchState $serviceOnly) {throw 'The canonical service executable was mistaken for an active GUI.'}
 $copy=$state | ConvertTo-Json -Depth 8 | ConvertFrom-Json
 $copy.diagnostics.errors=@('WinBoat Atlas observer status unavailable')
 if (Test-AtlasUILaunchState $copy) {throw 'Missing observer incorrectly prevents verified original UI startup.'}
@@ -114,6 +117,67 @@ try {
         $blocked.errorCode -ne 1008 -or $blocked.reason -ne 'operation-failed' -or
         [WinBoat.AtlasSessionLauncher]::Stops -ne $stops -or (Test-Path (Join-Path $root 'ui-restart-attempt.json'))) {throw 'Native refusal lost its stage or changed a client before validation.'}
     Write-Host 'Native validation failure preserves its stage/code and does not consume a retry or stop a client.'
+    # Run the actual IPC repair against a legacy service fixture; native process
+    # operations are still the guarded fixture type, not real Windows processes.
+    Copy-Item (Join-Path $RepoRoot 'guest_server/scripts/Repair-AtlasIPC.ps1') $scripts
+    Copy-Item $scriptFile (Join-Path $scripts 'Start-AtlasOOBEClient.ps1') -Force
+    @'
+param([switch]$LibraryOnly)
+function Get-AtlasServiceExecutable($Command,$Folder) {
+ if($Command -eq 'legacy') {return 'legacy-oobe'}
+ if($Command -eq ('"{0}" --service' -f (Join-Path $Folder 'AME.Client.exe'))) {return 'shared-client'}
+ return 'other'
+}
+if(-not $LibraryOnly) {$global:atlasActionDiagnostic}
+'@ | Set-Content (Join-Path $scripts 'Get-AtlasDiagnostics.ps1')
+    . (Join-Path $RepoRoot 'guest_server/scripts/Repair-AtlasIPC.ps1') -LibraryOnly
+    $stalled.diagnostics | Add-Member serviceExecutable 'legacy-oobe'
+    $stalled.diagnostics | Add-Member guiStartupPhase 'ipc-initialized'
+    if (Test-AtlasIPCRepairState $stalled) {throw 'Verified IPC mismatch was rejected.'}
+    foreach ($mutate in @({param($s) $s.diagnostics.serviceExecutable='shared-client'},
+        {param($s) $s.diagnostics.guiStartupPhase='ipc-registered'}, {param($s) $s.applied=$true})) {
+        $copy=$stalled | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+        & $mutate $copy
+        if (-not (Test-AtlasIPCRepairState $copy)) {throw 'Repair accepted a different or completed handoff.'}
+    }
+    $global:atlasActionDiagnostic=$stalled.diagnostics | ConvertTo-Json -Depth 8
+    $global:atlasFixtureServicePath='legacy'; $global:atlasServiceChanges=0
+    function Get-CimInstance {
+        param($ClassName,$Filter)
+        if ($ClassName -eq 'Win32_UserAccount') {return [pscustomobject]@{SID='S-1-5-21-1-2-3-1000'}}
+        return [pscustomobject]@{Name='ameoobe';State='Stopped';StartName='LocalSystem';PathName=$global:atlasFixtureServicePath}
+    }
+    function Invoke-CimMethod {
+        param($InputObject,$MethodName,$Arguments)
+        if ($MethodName -ne 'Change' -or $Arguments.PathName -notlike '*AME.Client.exe" --service') {throw 'Unexpected service mutation.'}
+        $global:atlasServiceChanges++; $global:atlasFixtureServicePath=$Arguments.PathName
+        return [pscustomobject]@{ReturnValue=0}
+    }
+    $global:atlasObserverStops=0
+    function Stop-ScheduledTask { [CmdletBinding()]param($TaskName) if($TaskName -ne 'WinBoatAtlasOOBE') {throw 'Unexpected task.'}; $global:atlasObserverStops++ }
+    [WinBoat.AtlasSessionLauncher]::ValidSession=$true
+    [WinBoat.AtlasSessionLauncher]::ServiceStarted=$false
+    $beforeStops=[WinBoat.AtlasSessionLauncher]::Stops
+    $result=& (Join-Path $scripts 'Repair-AtlasIPC.ps1') | ConvertFrom-Json
+    if ($result.status -ne 'launched' -or $global:atlasServiceChanges -ne 1 -or $global:atlasObserverStops -ne 1 -or
+        [WinBoat.AtlasSessionLauncher]::Stops -ne ($beforeStops+1)) {throw ('IPC repair did not perform the verified path change and single AME restart: '+($result | ConvertTo-Json -Compress))}
+    $stalled.diagnostics.serviceExecutable='shared-client'
+    $global:atlasActionDiagnostic=$stalled.diagnostics | ConvertTo-Json -Depth 8
+    $repeat=& (Join-Path $scripts 'Repair-AtlasIPC.ps1') | ConvertFrom-Json
+    if ($repeat.status -ne 'blocked' -or $global:atlasServiceChanges -ne 1) {throw 'An already repaired service was modified again.'}
+    $rejected=$false
+    try {Set-AtlasCanonicalService ([pscustomobject]@{Name='ameoobe';State='Running';StartName='LocalSystem'}) 'client.exe'} catch {$rejected=$true}
+    if (-not $rejected -or $global:atlasServiceChanges -ne 1) {throw 'A running service was reconfigured.'}
+    $stalled.diagnostics.serviceExecutable='legacy-oobe'
+    $global:atlasActionDiagnostic=$stalled.diagnostics | ConvertTo-Json -Depth 8
+    $global:atlasFixtureServicePath='legacy'
+    Remove-Item (Join-Path $root 'ipc-path-repair.json')
+    function Invoke-CimMethod {param($InputObject,$MethodName,$Arguments) return [pscustomobject]@{ReturnValue=5}}
+    $beforeStops=[WinBoat.AtlasSessionLauncher]::Stops
+    $failed=& (Join-Path $scripts 'Repair-AtlasIPC.ps1') | ConvertFrom-Json
+    if ($failed.status -ne 'failed' -or $failed.stage -ne 'change-service-path' -or $failed.servicePathChanged -or
+        $failed.clientStopped -or [WinBoat.AtlasSessionLauncher]::Stops -ne $beforeStops -or $global:atlasObserverStops -ne 1) {throw 'A failed service change stopped a client/observer or reported success.'}
+    Write-Host 'Actual IPC repair dispatch, configuration verification, same-user restart and repeat refusal passed with Windows API fixtures.'
 } finally {
     $env:ProgramData=$oldData; $env:SystemRoot=$oldRoot
     Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue
