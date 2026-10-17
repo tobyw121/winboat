@@ -288,3 +288,20 @@ der physischen Host-GPU.
 Diese Änderung benötigt nur eine neu gebaute Linux-Anwendung einschließlich des
 nativen Viewers. Das Host-Image mit `dbus-v4` und die Windows-Installation müssen
 dafür nicht ersetzt werden.
+
+Wenn der neue Viewer weiterhin keinen GL-Kontext erstellen kann, liefert
+folgender Befehl eine Host-Diagnose ohne weiteren Build und ohne VM-Änderung:
+
+```bash
+python3 scripts/helios/diagnose-local-display.py
+```
+
+Das Skript extrahiert nur den Viewer aus der zuletzt gebauten AppImage in `dist/`
+in ein temporäres Verzeichnis und führt dessen GL-Prüfung außerhalb von Electron
+aus. Es zeigt die Host-GTK-Version und prüft nur EGL-/GLX-Schalter, die diese
+GTK-Version selbst anbietet. Die zusätzliche Cairo-Probe ändert ausschließlich
+den Fenster-Compositor des Prüfprozesses; die GL-Fläche benötigt weiterhin
+OpenGL. Diese Varianten sind Diagnosen, keine dauerhaft angewendeten Workarounds.
+Für eine bestimmte AppImage gibt es `--appimage /pfad/zur/WinBoat.AppImage`.
+Die VM kann während dieser Diagnose weiterlaufen; Passwörter und vollständige
+Umgebungsvariablen werden nicht ausgegeben.
