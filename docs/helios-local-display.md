@@ -1,7 +1,10 @@
 # Lokaler Helios-Desktop (experimentell)
 
-WinBoat kann den Helios-Desktop optional in einem nativen GTK4-/OpenGL-Fenster
-öffnen. Die Option bleibt standardmäßig ausgeschaltet. Browser Display und
+WinBoat bevorzugt für neue Helios-VMs ein natives GTK4-/OpenGL-Fenster, sofern
+Viewer, GTK4, D-Bus, Host-Image und Desktop-Sitzung verfügbar sind. Die Einrichtung
+bietet dafür die vorausgewählte Option **Prefer Local Desktop**; sie lässt sich
+abwählen. Fehlen Voraussetzungen, wird Browser Display verwendet und der Grund
+in der Einrichtung angezeigt. Vorhandene VMs werden nicht automatisch umgestellt. Browser Display und
 RemoteApps bleiben verfügbar. Windows und die Grafiktreiber werden durch diesen
 Viewer nicht ersetzt.
 
@@ -26,10 +29,24 @@ es mit `npm run build:helios:viewer`. `npm run build` allein baut weiterhin nur
 die Electron-Anwendung und leert das Verzeichnis `build/`.
 
 1. Den bestehenden Helios-Adapter und Windows-Treiber nach `helios.md` einrichten.
-2. Automatischen Containerstart ausschalten. Unter **Settings → Container → Local desktop (experimental)** einschalten und
+2. Unter **Settings → Container → Local desktop (experimental)** einschalten und
    speichern. Die VM wird dabei wie bei anderen Containeränderungen neu gestartet.
+   Der Schalter deaktiviert den automatischen Containerstart am Host-Boot, weil
+   der private Anzeigedienst an die Desktop-Sitzung gebunden ist.
 3. **Windows Desktop** öffnen. **Ctrl+Alt+Enter** schaltet den Viewer auf Vollbild
    und zurück. Browser Display lässt sich jederzeit gesondert öffnen.
+
+**Open Local Desktop** steht auch direkt in Einstellungen und Einrichtung zur
+Verfügung. Der Verbindungsstatus zeigt Start, Verbindung und Fehler an; bei
+Viewer-Fehlern öffnet WinBoat Browser Display. Mehrfaches Öffnen während des
+Starts erzeugt nur einen Viewer. Normales Schließen beendet nur das Fenster.
+Beim Stoppen der VM wird der Viewer absichtlich beendet, ohne Browser-Fallback.
+
+Das native Fenster bietet außerdem **Fullscreen**, **Ctrl+Alt+Del** und einen
+Hinweis, solange kein Windows-Bild empfangen wird. Gehaltene Tasten/Maustasten
+werden beim normalen Schließen und beim Stoppsignal freigegeben. Anzeige und
+Windows-Anmeldung sind unabhängig: Ein fehlender Windows-Benutzer oder eine
+blockierte AME-OOBE wird durch den Wechsel des Anzeigefensters nicht repariert.
 
 Die Einstellung prüft Viewer-Version und Image-Fähigkeitslabel `dbus-v3`.
 Ein älteres Host-Image muss neu gebaut werden. Schlägt die Viewer-Anmeldung oder

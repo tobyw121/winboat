@@ -2,6 +2,8 @@ import { HELIOS_IMAGE } from '../../shared/helios';
 import { HELIOS_DISPLAY_CAPABILITY, HELIOS_DISPLAY_VERSION, HELIOS_DISPLAY_MOUNT,
     heliosDisplayAddress, heliosDisplayBusConfig, heliosDisplayDirectory } from '../../shared/helios-display';
 import type { ComposeConfig } from '../../types';
+import { ref } from 'vue';
+import { HeliosViewer, type ViewerState } from '../../shared/helios-viewer';
 const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
 const net: typeof import('net') = require('net');
@@ -10,7 +12,13 @@ const { promisify }: typeof import('util') = require('util');
 const remote: typeof import('@electron/remote') = require('@electron/remote');
 const execFile = promisify(child.execFile);
 let startingBus: Promise<void> | undefined;
-let activeViewer: import('child_process').ChildProcess | undefined;
+export const localDisplayState = ref<ViewerState>('closed');
+export const localDisplayMessage = ref('');
+let openingConsole: Promise<void> | undefined;
+const viewer = new HeliosViewer(() => child.spawn(binary(), ['--address', heliosDisplayAddress(localDisplayDirectory())],
+    { stdio: ['ignore', 'pipe', 'pipe'] }), (state, message) => {
+    localDisplayState.value = state; localDisplayMessage.value = message;
+});
 
 function binary(): string {
     return remote.app.isPackaged ? path.join(process.resourcesPath, 'native', 'winboat-helios-viewer')
@@ -20,12 +28,13 @@ export function localDisplayDirectory(): string {
     return heliosDisplayDirectory(process.getuid!(), process.env.XDG_RUNTIME_DIR);
 }
 export async function requireLocalDisplay(): Promise<void> {
+    if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) throw new Error('Local Desktop needs a running X11 or Wayland desktop session.');
     try {
         const { stdout } = await execFile(binary(), ['--version'], { timeout: 3000 });
         if (stdout.trim() !== 'winboat-helios-viewer 3') throw new Error('Viewer protocol mismatch.');
     }
     catch { throw new Error('The local Helios viewer needs its bundled executable, GTK 4.8+, libepoxy and a desktop session. Install the GTK4 runtime or use Browser Display.'); }
-    const { stdout } = await execFile('docker', ['image', 'inspect', '--format', `{{ index .Config.Labels "${HELIOS_DISPLAY_CAPABILITY}" }}`, HELIOS_IMAGE]);
+    const { stdout } = await execFile('docker', ['image', 'inspect', '--format', `{{ index .Config.Labels "${HELIOS_DISPLAY_CAPABILITY}" }}`, HELIOS_IMAGE], { timeout: 5000 });
     if (stdout.trim() !== HELIOS_DISPLAY_VERSION) throw new Error('Rebuild the Helios host image to enable local display support.');
 }
 
@@ -79,33 +88,20 @@ export async function prepareLocalDisplay(compose: ComposeConfig): Promise<void>
 }
 
 export async function launchLocalDisplay(onFailure: (message: string) => void): Promise<void> {
-    if (activeViewer && activeViewer.exitCode === null) return;
-    await new Promise<void>((resolve, reject) => {
-        const process = child.spawn(binary(), ['--address', heliosDisplayAddress(localDisplayDirectory())], { stdio: ['ignore', 'pipe', 'pipe'] });
-        activeViewer = process;
-        let ready = false, output = '', errors = '', settled = false;
-        const timer = setTimeout(() => { process.kill(); fail('Local display did not become ready within 10 seconds.'); }, 10000);
-        const fail = (message: string) => {
-            clearTimeout(timer);
-            if (settled) return;
-            settled = true;
-            if (ready) onFailure(message); else reject(new Error(message));
+    await viewer.open(onFailure);
+}
+export function closeLocalDisplay(): void { viewer.close(); }
+export function openLocalDesktop(browserURL: string): Promise<void> {
+    if (!openingConsole) openingConsole = (async () => {
+        const fallback = (message: string) => {
+            console.warn(`Local Helios display: ${message}`);
+            localDisplayState.value = 'failed'; localDisplayMessage.value = `${message} Browser Display opened.`;
+            void remote.shell.openExternal(browserURL).catch((error: Error) => {
+                localDisplayMessage.value = `${message} Browser Display could not open: ${error.message}`;
+            });
         };
-        process.stdout!.on('data', (data: Buffer) => {
-            output = (output + data.toString()).slice(-16384);
-            if (!ready && output.split('\n').some(line => line === '{"event":"ready","transport":"dbus"}')) {
-                ready = true; clearTimeout(timer); resolve();
-            }
-        });
-        process.stderr!.on('data', (data: Buffer) => { errors = (errors + data.toString()).slice(-8192); });
-        process.once('error', error => {
-            if (activeViewer === process) activeViewer = undefined;
-            fail(error.message);
-        });
-        process.once('exit', code => {
-            if (activeViewer === process) activeViewer = undefined;
-            clearTimeout(timer);
-            if (code !== 0 || !ready) fail(errors || 'The local display disconnected before it was ready.');
-        });
-    });
+        try { await launchLocalDisplay(fallback); }
+        catch (error) { if (!(error instanceof Error && error.name === 'AbortError')) fallback(error instanceof Error ? error.message : String(error)); }
+    })().finally(() => { openingConsole = undefined; });
+    return openingConsole;
 }

@@ -24,6 +24,7 @@ export type InstallConfiguration = {
     customIsoPath?: string;
     shareHomeFolder: boolean;
     heliosEnabled: boolean;
+    localDisplayEnabled?: boolean;
     hardwareIdentityEnabled: boolean;
     reduceCpuMarkers: boolean;
     atlasEnabled: boolean;

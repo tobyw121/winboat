@@ -1,5 +1,5 @@
 import { requireHelios } from './helios';
-import { prepareLocalDisplay, launchLocalDisplay } from './helios-display';
+import { prepareLocalDisplay, openLocalDesktop, closeLocalDisplay } from './helios-display';
 import { ref, type Ref } from "vue";
 import { WINBOAT_DIR, GUEST_API_PORT, GUEST_RDP_PORT, GUEST_QMP_PORT, GUEST_NOVNC_PORT } from "./constants";
 import type { ComposeConfig, GuestServerUpdateResponse, GuestServerVersion, Metrics, WinApp, CustomAppCallbacks } from "../../types";
@@ -502,13 +502,15 @@ export class Winboat {
             logger.error("There was an error performing the container action.");
             logger.error(e);
             throw e;
+        } finally {
+            this.containerActionLoading.value = false;
         }
         logger.info("Successfully started WinBoat container");
-        this.containerActionLoading.value = false;
     }
 
     async stopContainer() {
         logger.info("Stopping WinBoat container...");
+        closeLocalDisplay();
         this.containerActionLoading.value = true;
         try {
             const { stdout } = await execAsync("docker container stop WinBoat");
@@ -517,9 +519,10 @@ export class Winboat {
             logger.error("There was an error performing the container action.");
             logger.error(e);
             throw e;
+        } finally {
+            this.containerActionLoading.value = false;
         }
         logger.info("Successfully stopped WinBoat container");
-        this.containerActionLoading.value = false;
     }
 
     async pauseContainer() {
@@ -644,13 +647,8 @@ export class Winboat {
         const compose = this.parseCompose();
         if (app.Path === InternalApps.WINDOWS_DESKTOP && compose.services.windows.environment.HELIOS === '1') {
             // Keep games on the Helios console adapter, not an RDP virtual display.
-            const fallback = (message: string) => {
-                logger.warn(`Local Helios display: ${message}`);
-                customAppCallbacks[CustomAppCommands.NOVNC_COMMAND]!(this);
-            };
             if (compose.services.windows.environment.HELIOS_DISPLAY === 'dbus') {
-                try { await launchLocalDisplay(fallback); }
-                catch (error) { fallback(error instanceof Error ? error.message : String(error)); }
+                await openLocalDesktop(`http://127.0.0.1:${this.getHostPort(GUEST_NOVNC_PORT)}`);
             } else customAppCallbacks[CustomAppCommands.NOVNC_COMMAND]!(this);
             this.appMgr?.incrementAppUsage(app);
             this.appMgr?.writeToDisk();

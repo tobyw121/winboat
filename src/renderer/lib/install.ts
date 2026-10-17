@@ -1,5 +1,7 @@
 import { configureHelios, validateHeliosProgress, HELIOS_REVISION } from '../../shared/helios';
 import { requireHelios, heliosBundlePath } from './helios';
+import { prepareLocalDisplay, localDisplayDirectory } from './helios-display';
+import { preferHeliosDisplay } from '../../shared/helios-display';
 import { configureVmIdentity } from '../../shared/vm-identity';
 import { loadOrCreateVmIdentity } from '../../shared/vm-identity-store';
 import { validateAtlasSelection, validateAtlasProgress, configureAtlasIso, ATLAS_ISO_LABEL, ATLAS_ISO_VERSION } from '../../shared/atlas';
@@ -105,6 +107,8 @@ export class InstallManager {
     portMgr: Ref<PortManager | null>;
     private containerRestarts: number | undefined;
     private nextContainerCheck = 0;
+    localDisplayConfigured = false;
+    localDisplayUnavailableReason = '';
 
     constructor(conf: InstallConfiguration) {
         this.conf = conf;
@@ -166,6 +170,15 @@ export class InstallManager {
         const host = this.conf.heliosEnabled ? await requireHelios() : undefined;
         composeContent.services.windows = configureHelios(composeContent.services.windows,
             this.conf.heliosEnabled, host?.renderNode, host?.nvidia);
+        try {
+            const windows = await preferHeliosDisplay(composeContent.services.windows, this.conf.localDisplayEnabled,
+                localDisplayDirectory, candidate => prepareLocalDisplay({ ...composeContent, services: { ...composeContent.services, windows: candidate } }));
+            composeContent.services.windows = windows;
+            this.localDisplayConfigured = windows.environment.HELIOS_DISPLAY === 'dbus';
+        } catch (error) {
+            this.localDisplayUnavailableReason = error instanceof Error ? error.message : String(error);
+            logger.warn(`Local Desktop unavailable; using Browser Display: ${this.localDisplayUnavailableReason}`);
+        }
         if (this.conf.hardwareIdentityEnabled) {
             const os: typeof import('os') = require('os');
             const hardwareIdentity = loadOrCreateVmIdentity(fs, this.conf.installFolder,

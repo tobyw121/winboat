@@ -466,6 +466,13 @@
                                         ></x-switch>
                                     </div>
                                 </x-card>
+                                <x-card v-if="heliosEnabled" class="flex justify-between items-center p-4 mt-3 bg-neutral-800/20">
+                                    <div>
+                                        <h2 class="my-0 text-base font-semibold">Prefer Local Desktop</h2>
+                                        <p class="text-sm text-gray-400">Use the native GTK4 window when available, otherwise Browser Display. Local mode disables VM startup at host boot and requires your desktop session.</p>
+                                    </div>
+                                    <x-switch :toggled="localDisplayEnabled" @toggle="localDisplayEnabled = !localDisplayEnabled"></x-switch>
+                                </x-card>
                             </div>
 
                             <div>
@@ -619,6 +626,11 @@
                             WinBoat is now installing Windows. Please be patient as this may take up to an hour.
                             In the meantime, you can grab a coffee and check the installation status <a :href="novncURL" @click="openAnchorLink">in your browser</a>.
                         </p>
+                        <div v-if="localDisplayConfigured" class="mb-4">
+                            <x-button @click="openLocalDesktop(novncURL)" :disabled="localDisplayState === 'opening'">Open Local Desktop</x-button>
+                            <p class="text-sm text-gray-400">{{ localDisplayMessage || 'Native console available; Ctrl+Alt+Enter toggles fullscreen.' }}</p>
+                        </div>
+                        <p v-else-if="localDisplayUnavailableReason" class="text-sm text-gray-400">Local Desktop unavailable: {{ localDisplayUnavailableReason }} Browser Display remains available.</p>
     
                         <!-- Installing -->
                         <div v-if="installState !== InstallStates.COMPLETED && installState !== InstallStates.INSTALL_ERROR" class="flex flex-col h-full items-center justify-center gap-4">
@@ -665,6 +677,7 @@
 </template>
 
 <script setup lang="ts">
+import { openLocalDesktop, localDisplayState, localDisplayMessage } from '../lib/helios-display';
 import { Icon } from '@iconify/vue';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -784,6 +797,9 @@ const password = ref("");
 const confirmPassword = ref("");
 const homeFolderSharing = ref(false);
 const heliosEnabled = ref(true);
+const localDisplayEnabled = ref(true);
+const localDisplayConfigured = ref(false);
+const localDisplayUnavailableReason = ref('');
 const hardwareIdentityEnabled = ref(true);
 const reduceCpuMarkers = ref(true);
 const atlasEnabled = ref(false);
@@ -970,6 +986,7 @@ function install() {
         password: password.value,
         shareHomeFolder: homeFolderSharing.value,
         heliosEnabled: heliosEnabled.value && heliosSupportAvailable.value,
+        localDisplayEnabled: localDisplayEnabled.value,
         hardwareIdentityEnabled: hardwareIdentityEnabled.value,
         reduceCpuMarkers: reduceCpuMarkers.value,
         atlasEnabled: atlasEnabled.value,
@@ -982,6 +999,8 @@ function install() {
     // Begin installation and attach event listeners
     installManager.emitter.on("stateChanged", newState => {
         installState.value = newState;
+        localDisplayConfigured.value = installManager?.localDisplayConfigured ?? false;
+        localDisplayUnavailableReason.value = installManager?.localDisplayUnavailableReason ?? '';
         console.log("Install state changed", newState);
     });
 

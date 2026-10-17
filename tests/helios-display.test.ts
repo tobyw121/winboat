@@ -2,10 +2,29 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ref, isProxy } from 'vue';
 import { configureHelios } from '../src/shared/helios';
-import { configureHeliosDisplay, heliosDisplayAddress, heliosDisplayBusConfig, heliosDisplayDirectory } from '../src/shared/helios-display';
+import { configureHeliosDisplay, preferHeliosDisplay, heliosDisplayAddress, heliosDisplayBusConfig, heliosDisplayDirectory } from '../src/shared/helios-display';
 
 const service = () => ({ image: 'standard', devices: [], environment: { HELIOS: '1', ARGUMENTS: '-qmp tcp:0.0.0.0:7149,server,wait=off' },
     volumes: ['disk:/storage', '/home/alice:/shared'], ports: ['3389:3389'] });
+
+test('new Helios VMs prefer native display only after its session and runtime are prepared', async () => {
+    const original = { ...service(), restart: 'unless-stopped' };
+    let checks = 0;
+    const selected = await preferHeliosDisplay(original, undefined, () => '/run/user/1000/winboat-helios', async candidate => {
+        checks++; assert.equal(candidate.restart, 'no'); assert.equal(candidate.environment.HELIOS_DISPLAY, 'dbus');
+    });
+    assert.equal(checks, 1); assert.equal(selected.restart, 'no');
+    assert.equal(original.restart, 'unless-stopped'); assert.equal(original.environment.HELIOS_DISPLAY, undefined);
+    await assert.rejects(preferHeliosDisplay(original, true, () => '/tmp/display', async () => { throw new Error('GTK unavailable'); }), /GTK unavailable/);
+    assert.equal(original.restart, 'unless-stopped'); assert.deepEqual(original.volumes, service().volumes);
+});
+test('browser opt-out and ordinary Windows installs never depend on the local runtime', async () => {
+    const unused = () => { throw new Error('Local display must not be probed'); };
+    const original = { ...service(), restart: 'unless-stopped' };
+    assert.equal(await preferHeliosDisplay(original, false, unused, unused), original);
+    const standard = { ...original, environment: {} };
+    assert.equal(await preferHeliosDisplay(standard, true, unused, unused), standard);
+});
 
 test('local display settings accept a reactive compose service without mutating it', () => {
     const original = ref(service());

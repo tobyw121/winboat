@@ -4,6 +4,7 @@
  */
 #include <gtk/gtk.h>
 #include <gio/gunixfdlist.h>
+#include <glib-unix.h>
 #include <epoxy/gl.h>
 #include <epoxy/egl.h>
 #include <sys/socket.h>
@@ -11,6 +12,7 @@
 #include <stdint.h>
 #include <math.h>
 #include <string.h>
+#include <signal.h>
 
 #define CONSOLE "/org/qemu/Display1/Console_0"
 #define LISTENER "/org/qemu/Display1/Listener"
@@ -35,7 +37,7 @@ static const char xml[] =
  "</method></interface></node>";
 
 typedef struct {
- GtkWidget *window, *area;
+ GtkWidget *window, *area, *waiting;
  GMainLoop *loop;
  GDBusConnection *bus, *peer;
  GDBusProxy *mouse;
@@ -169,6 +171,7 @@ static void draw(Viewer *v, GLuint texture, const float *rect, gboolean flip) {
 }
 static gboolean render(GtkGLArea *area,GdkGLContext *context,Viewer *v) {
  (void)area;(void)context;
+ gtk_widget_set_visible(v->waiting,!v->width || !v->cache_valid);
  int scale=gtk_widget_get_scale_factor(v->area), x,y,w,h;
  glDisable(GL_BLEND);glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT);
  viewport(v,gtk_widget_get_width(v->area)*scale,gtk_widget_get_height(v->area)*scale,&x,&y,&w,&h);
@@ -377,6 +380,19 @@ static void realize(GtkGLArea *area,Viewer *v) {
   G_VARIANT_TYPE("(h)"),G_DBUS_CALL_FLAGS_NONE,10000,NULL,NULL,registered,v);
 }
 static gboolean close_window(GtkWindow *window,Viewer *v) {(void)window;release_input(v);g_main_loop_quit(v->loop);return FALSE;}
+static gboolean terminate_viewer(gpointer data) {Viewer *v=data;release_input(v);g_main_loop_quit(v->loop);return G_SOURCE_REMOVE;}
+static void fullscreen_clicked(GtkButton *button,Viewer *v) {
+ (void)button;release_input(v);
+ if (gtk_window_is_fullscreen(GTK_WINDOW(v->window))) gtk_window_unfullscreen(GTK_WINDOW(v->window));
+ else gtk_window_fullscreen(GTK_WINDOW(v->window));
+ gtk_widget_grab_focus(v->area);
+}
+static void secure_attention(GtkButton *button,Viewer *v) {
+ (void)button;release_input(v);const guint keys[]={0x1d,0x38,0xd3};
+ for (guint i=0;i<G_N_ELEMENTS(keys);i++) input(v,IFACE "Keyboard","Press",g_variant_new("(u)",keys[i]));
+ for (guint i=G_N_ELEMENTS(keys);i>0;i--) input(v,IFACE "Keyboard","Release",g_variant_new("(u)",keys[i-1]));
+ gtk_widget_grab_focus(v->area);
+}
 static gboolean stats(Viewer *v) {
  g_printerr("{\"event\":\"statistics\",\"dmabufFrames\":%" G_GUINT64_FORMAT ",\"softwareFrames\":%" G_GUINT64_FORMAT ",\"renderedFrames\":%" G_GUINT64_FORMAT "}\n",v->dma_frames,v->software_frames,v->rendered_frames);return G_SOURCE_CONTINUE;
 }
@@ -409,7 +425,7 @@ int main(int argc,char **argv) {
  if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 3");return 0;}
  if (argc==2 && !strcmp(argv[1],"--self-test")) {
   g_assert(dimensions(1920,1080));g_assert(!dimensions(0,1));g_assert(!dimensions(UINT32_MAX,2));g_assert(!dimensions(8192,8192));
-  g_assert_cmpuint(qnum(38),==,30);g_assert_cmpuint(qnum(105),==,0x9d);g_assert_cmpuint(qnum(1),==,0);
+  g_assert_cmpuint(qnum(38),==,30);g_assert_cmpuint(qnum(105),==,0x9d);g_assert_cmpuint(qnum(119),==,0xd3);g_assert_cmpuint(qnum(1),==,0);
   Viewer check={.qemu_uid=1234};GCredentials *credentials=g_credentials_new();
   g_assert_true(g_credentials_set_unix_user(credentials,1234,NULL));
   g_assert_true(authorize_qemu(NULL,NULL,credentials,&check));check.qemu_uid=5678;
@@ -440,7 +456,19 @@ int main(int argc,char **argv) {
  if (!gtk_init_check()) {g_printerr("No GTK display available.\n");return 1;}
  v.window=gtk_window_new();gtk_window_set_title(GTK_WINDOW(v.window),"WinBoat — Helios Desktop");gtk_window_set_default_size(GTK_WINDOW(v.window),1024,640);
  v.area=gtk_gl_area_new();gtk_gl_area_set_required_version(GTK_GL_AREA(v.area),3,3);gtk_gl_area_set_auto_render(GTK_GL_AREA(v.area),FALSE);
- gtk_widget_set_focusable(v.area,TRUE);gtk_window_set_child(GTK_WINDOW(v.window),v.area);
+ gtk_widget_set_focusable(v.area,TRUE);
+ GtkWidget *overlay=gtk_overlay_new();gtk_overlay_set_child(GTK_OVERLAY(overlay),v.area);
+ v.waiting=gtk_label_new("Waiting for the Windows display…\nCtrl+Alt+Enter toggles fullscreen.");
+ gtk_widget_set_halign(v.waiting,GTK_ALIGN_CENTER);gtk_widget_set_valign(v.waiting,GTK_ALIGN_CENTER);
+ gtk_widget_set_can_target(v.waiting,FALSE);gtk_overlay_add_overlay(GTK_OVERLAY(overlay),v.waiting);
+ gtk_window_set_child(GTK_WINDOW(v.window),overlay);
+ GtkWidget *bar=gtk_header_bar_new(),*full=gtk_button_new_with_label("Fullscreen"),*attention=gtk_button_new_with_label("Ctrl+Alt+Del");
+ gtk_widget_set_tooltip_text(full,"Toggle fullscreen (Ctrl+Alt+Enter)");
+ gtk_widget_set_tooltip_text(attention,"Send Ctrl+Alt+Delete to Windows");
+ gtk_header_bar_pack_start(GTK_HEADER_BAR(bar),attention);gtk_header_bar_pack_end(GTK_HEADER_BAR(bar),full);
+ gtk_window_set_titlebar(GTK_WINDOW(v.window),bar);
+ g_signal_connect(full,"clicked",G_CALLBACK(fullscreen_clicked),&v);g_signal_connect(attention,"clicked",G_CALLBACK(secure_attention),&v);
+ g_unix_signal_add(SIGTERM,terminate_viewer,&v);g_unix_signal_add(SIGINT,terminate_viewer,&v);
  g_signal_connect(v.area,"realize",G_CALLBACK(realize),&v);g_signal_connect(v.area,"render",G_CALLBACK(render),&v);
  g_signal_connect(v.window,"close-request",G_CALLBACK(close_window),&v);
  GtkEventController *keys=gtk_event_controller_key_new();g_signal_connect(keys,"key-pressed",G_CALLBACK(key_press),&v);g_signal_connect(keys,"key-released",G_CALLBACK(key_release),&v);gtk_widget_add_controller(v.area,keys);

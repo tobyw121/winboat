@@ -45,3 +45,13 @@ export function configureHeliosDisplay<T extends { environment: Record<string, s
     }
     return next;
 }
+
+export async function preferHeliosDisplay<T extends { environment: Record<string, string>; volumes: string[]; restart: string }>(
+    service: T, preferred: boolean | undefined, directory: () => string, prepare: (candidate: T) => Promise<void>,
+): Promise<T> {
+    if (service.environment.HELIOS !== '1' || preferred === false) return service;
+    const candidate = configureHeliosDisplay(service, true, directory());
+    candidate.restart = 'no';
+    await prepare(candidate);
+    return candidate;
+}

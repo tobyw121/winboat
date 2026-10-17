@@ -94,10 +94,14 @@
                         <p class="text-neutral-400 text-[0.9rem] !pt-0 !mt-0">
                             Open Windows in a native window. Requires GTK4. Browser Display remains available.
                             Saving this option restarts the VM. Audio and captured gaming mouse input are not included yet.
-                            Disable automatic container startup before enabling local desktop.
+                            Host boot auto-start is disabled when this mode is enabled. Start the VM from your desktop session.
                         </p>
                     </div>
-                    <x-switch :toggled="localDisplayEnabled" @toggle="localDisplayEnabled = !localDisplayEnabled" size="large"></x-switch>
+                    <div class="flex flex-col gap-2 items-end">
+                        <x-switch :toggled="localDisplayEnabled" @toggle="toggleLocalDisplay" size="large"></x-switch>
+                        <x-button v-if="origLocalDisplayEnabled" :disabled="isApplyingChanges || localDisplayState === 'opening'" @click="openLocalDesktop(localBrowserURL)">Open Local Desktop</x-button>
+                        <span v-if="localDisplayMessage" class="text-sm text-neutral-400 max-w-sm">{{ localDisplayMessage }}</span>
+                    </div>
                 </x-card>
 
                 <!-- Shared Home Folder -->
@@ -133,12 +137,13 @@
                             </h1>
                         </div>
                         <p class="text-neutral-400 text-[0.9rem] !pt-0 !mt-0">
-                            If enabled, the Windows container will automatically be started when the system boots up
+                            If enabled, the Windows container starts when the system boots. Unavailable while Local Desktop is selected.
                         </p>
                     </div>
                     <div class="flex flex-row justify-center items-center gap-2">
                         <x-switch
                             :toggled="autoStartContainer"
+                            :disabled="heliosEnabled && localDisplayEnabled"
                             @toggle="(_: any) => autoStartContainer = !autoStartContainer"
                             size="large"
                         ></x-switch>
@@ -498,7 +503,7 @@
 import { configureHelios, HELIOS_IMAGE } from '../../shared/helios';
 import { requireHelios } from '../lib/helios';
 import { configureHeliosDisplay } from '../../shared/helios-display';
-import { requireLocalDisplay, localDisplayDirectory } from '../lib/helios-display';
+import { requireLocalDisplay, localDisplayDirectory, openLocalDesktop, localDisplayState, localDisplayMessage } from '../lib/helios-display';
 
 import { computed, onMounted, ref } from 'vue';
 import { ContainerStatus, Winboat } from '../lib/winboat';
@@ -515,6 +520,7 @@ import {
     RESTART_NO,
     GUEST_RDP_PORT,
     GUEST_API_PORT,
+    GUEST_NOVNC_PORT,
     DEFAULT_HOST_QMP_PORT,
 } from '../lib/constants';
 import { PortManager } from '../utils/port';
@@ -555,6 +561,15 @@ const origApplicationScale = ref(0);
 const heliosEnabled = ref(false);
 const origHeliosEnabled = ref(false);
 const localDisplayEnabled = ref(false);
+const localBrowserURL = computed(() => `http://127.0.0.1:${qmpPortManager.value?.getHostPort(GUEST_NOVNC_PORT) ?? GUEST_NOVNC_PORT}`);
+async function toggleLocalDisplay() {
+    if (!localDisplayEnabled.value) {
+        try { await requireLocalDisplay(); }
+        catch (error) { localDisplayMessage.value = error instanceof Error ? error.message : String(error); return; }
+        autoStartContainer.value = false;
+    }
+    localDisplayEnabled.value = !localDisplayEnabled.value;
+}
 const origLocalDisplayEnabled = ref(false);
 const heliosSupportAvailable = ref(checkHeliosSupport());
 
@@ -663,7 +678,7 @@ async function saveDockerCompose() {
         compose.value!.services.windows = configureHelios(compose.value!.services.windows,
             heliosEnabled.value, host?.renderNode, host?.nvidia);
         const local = heliosEnabled.value && localDisplayEnabled.value;
-        if (local && autoStartContainer.value) throw new Error('Disable automatic container startup before enabling local desktop. Its display service starts with your desktop session.');
+        if (local) { autoStartContainer.value = false; compose.value!.services.windows.restart = RESTART_NO; }
         if (local) await requireLocalDisplay();
         compose.value!.services.windows = configureHeliosDisplay(compose.value!.services.windows,
             local, local ? localDisplayDirectory() : undefined);
