@@ -1,5 +1,5 @@
 export const HELIOS_DISPLAY_CAPABILITY = 'org.winboat.helios.display';
-export const HELIOS_DISPLAY_VERSION = 'dbus-v4';
+export const HELIOS_DISPLAY_VERSION = 'dbus-v5';
 export const HELIOS_DISPLAY_MOUNT = '/run/helios-display';
 
 export function heliosDisplayDirectory(uid: number, runtime?: string): string {

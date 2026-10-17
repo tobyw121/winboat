@@ -51,12 +51,13 @@ RUN --mount=type=secret,id=proxy_ca \
       mesa-vulkan-drivers libegl-mesa0 libgl1-mesa-dri; \
     rm -rf /var/lib/apt/lists/*
 LABEL org.winboat.helios.revision="d82ce565ac792eb48da5e59f2a82a12ff221851d"
-LABEL org.winboat.helios.display="dbus-v4"
+LABEL org.winboat.helios.display="dbus-v5"
 LABEL org.winboat.helios.runtime="glvnd-v3"
 RUN --mount=from=compiled,source=/opt/helios,target=/build/runtime \
     --mount=type=bind,source=helios/host,target=/build/host \
     cp -a /build/runtime /opt/helios && \
     test "$(cat /opt/helios/revision)" = d82ce565ac792eb48da5e59f2a82a12ff221851d && \
+    cmp /build/host/patches/SHA256SUMS /opt/helios/host-patches.sha256 && \
     install -m 755 /build/host/check-runtime.sh /opt/helios/check-runtime.sh && \
     install -m 755 /build/host/display.sh /run/display.sh && \
     install -m 755 /build/host/qemu.sh /usr/bin/qemu-system-x86_64 && \

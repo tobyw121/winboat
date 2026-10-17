@@ -1,0 +1,192 @@
+--- a/ui/dbus.c
++++ b/ui/dbus.c
+@@ -34,6 +34,7 @@
+ #ifdef CONFIG_OPENGL
+ #include "ui/egl-helpers.h"
+ #include "ui/egl-context.h"
++#include "dbus-gl-context.h"
+ #endif
+ #include "qemu/audio.h"
+ #include "audio/audio_int.h" /* FIXME: use QOM dynamic cast instead of drv->name */
+@@ -63,12 +64,22 @@
+ static void
+ dbus_create_texture(DisplayGLCtx *ctx, DisplaySurface *surface)
+ {
++    g_auto(DBusGLContextScope) scope = { 0 };
++
++    if (!dbus_gl_context_bind(&scope)) {
++        return;
++    }
+     surface_gl_create_texture(ctx->gls, surface);
+ }
+ 
+ static void
+ dbus_destroy_texture(DisplayGLCtx *ctx, DisplaySurface *surface)
+ {
++    g_auto(DBusGLContextScope) scope = { 0 };
++
++    if (!dbus_gl_context_bind(&scope)) {
++        return;
++    }
+     surface_gl_destroy_texture(ctx->gls, surface);
+ }
+ 
+@@ -76,6 +87,11 @@
+ dbus_update_texture(DisplayGLCtx *ctx, DisplaySurface *surface,
+                     int x, int y, int w, int h)
+ {
++    g_auto(DBusGLContextScope) scope = { 0 };
++
++    if (!dbus_gl_context_bind(&scope)) {
++        return;
++    }
+     surface_gl_update_texture(ctx->gls, surface, x, y, w, h);
+ }
+ 
+--- a/ui/dbus-listener.c
++++ b/ui/dbus-listener.c
+@@ -39,6 +39,7 @@
+ #include "ui/shader.h"
+ #include "ui/egl-helpers.h"
+ #include "ui/egl-context.h"
++#include "dbus-gl-context.h"
+ #include "ui/qemu-pixman.h"
+ #endif
+ #include "trace.h"
+@@ -72,6 +73,7 @@
+     DisplaySurface *ds;
+     enum share_kind ds_share;
+ 
++    bool software_surface;
+     bool ds_mapped;
+     bool can_share_map;
+ 
+@@ -253,6 +255,14 @@
+     DBusDisplayListener *ddl = container_of(dcl, DBusDisplayListener, dcl);
+ #endif
+ 
++    g_auto(DBusGLContextScope) scope = { 0 };
++
++    /* Flush the producer context when present. Venus may instead leave no
++     * EGL context current; bind the display context for that case. */
++    if (eglGetCurrentContext() == EGL_NO_CONTEXT &&
++        !dbus_gl_context_bind(&scope)) {
++        return;
++    }
+     trace_dbus_update_gl(x, y, w, h);
+ 
+     glFlush();
+@@ -399,6 +409,7 @@
+                                 QemuDmaBuf *dmabuf)
+ {
+     DBusDisplayListener *ddl = container_of(dcl, DBusDisplayListener, dcl);
++    ddl->software_surface = false;
+ 
+     if (ddl->scanout_dmabuf_v2_proxy) {
+         dbus_scanout_dmabuf_v2(ddl, dmabuf);
+@@ -597,7 +608,15 @@
+     uint32_t offset[DMABUF_MAX_PLANES], stride[DMABUF_MAX_PLANES], fourcc;
+     uint64_t modifier;
+ 
+-    assert(tex_id);
++    g_auto(DBusGLContextScope) scope = { 0 };
++
++    if (!tex_id) {
++        error_report("dbus: refusing an empty GL scanout texture");
++        return;
++    }
++    if (!dbus_gl_context_bind(&scope)) {
++        return;
++    }
+     if (!egl_dmabuf_export_texture(tex_id, fd, (EGLint *)offset, (EGLint *)stride,
+                                    (EGLint *)&fourcc, &num_planes, &modifier)) {
+         error_report("%s: failed to export dmabuf for texture", __func__);
+@@ -646,6 +665,11 @@
+         return;
+     }
+ 
++    g_auto(DBusGLContextScope) scope = { 0 };
++
++    if (!dbus_gl_context_bind(&scope)) {
++        return;
++    }
+     ddl_discard_cursor_messages(ddl);
+ 
+     egl_dmabuf_import_texture(dmabuf);
+@@ -749,6 +773,12 @@
+ {
+     DBusDisplayListener *ddl = container_of(dcl, DBusDisplayListener, dcl);
+ 
++    /* A software/placeholder surface can exist before GL texture creation.
++     * Keep its updates in the software protocol until the next gfx switch. */
++    if (ddl->software_surface) {
++        dbus_gfx_update(dcl, x, y, w, h);
++        return;
++    }
+ #ifdef CONFIG_PIXMAN
+     pixman_region32_t rect_region;
+     pixman_region32_init_rect(&rect_region, x, y, w, h);
+@@ -862,7 +892,17 @@
+ 
+     ddl->ds = new_surface;
+     ddl->ds_share = SHARE_KIND_NONE;
+-    if (ddl->ds) {
++#ifdef CONFIG_PIXMAN
++    pixman_region32_clear(&ddl->gl_damage);
++#else
++    ddl->gl_damage = 0;
++#endif
++    ddl->software_surface = ddl->ds && !ddl->ds->texture;
++    if (ddl->software_surface) {
++        /* No DMA-BUF exists for this surface. Publish the complete software
++         * baseline rather than passing texture 0 to the GL exporter. */
++        ddl_scanout(ddl);
++    } else if (ddl->ds) {
+         int width = surface_width(ddl->ds);
+         int height = surface_height(ddl->ds);
+ 
+--- /dev/null
++++ b/ui/dbus-gl-context.h
+@@ -0,0 +1,42 @@
++/* SPDX-License-Identifier: MIT
++ * The renderer may release/change EGL context between display callbacks.
++ * Bind the display's shared context and restore the caller, including NONE.
++ */
++#ifndef QEMU_DBUS_GL_CONTEXT_H
++#define QEMU_DBUS_GL_CONTEXT_H
++
++#include "ui/egl-helpers.h"
++#include "ui/egl-context.h"
++
++typedef struct DBusGLContextScope {
++    EGLDisplay display;
++    EGLContext context;
++    EGLSurface draw, read;
++    bool saved;
++} DBusGLContextScope;
++
++static inline void dbus_gl_context_restore(DBusGLContextScope *scope)
++{
++    if (scope->saved &&
++        !eglMakeCurrent(scope->display != EGL_NO_DISPLAY ?
++                        scope->display : qemu_egl_display,
++                        scope->draw, scope->read, scope->context)) {
++        error_report("dbus: restoring EGL context failed: %s",
++                     qemu_egl_get_error_string());
++    }
++}
++G_DEFINE_AUTO_CLEANUP_CLEAR_FUNC(DBusGLContextScope, dbus_gl_context_restore)
++
++static inline bool dbus_gl_context_bind(DBusGLContextScope *scope)
++{
++    scope->display = eglGetCurrentDisplay();
++    scope->context = eglGetCurrentContext();
++    scope->draw = eglGetCurrentSurface(EGL_DRAW);
++    scope->read = eglGetCurrentSurface(EGL_READ);
++    if (qemu_egl_make_context_current(NULL, qemu_egl_rn_ctx) < 0) {
++        return false;
++    }
++    scope->saved = true;
++    return true;
++}
++#endif

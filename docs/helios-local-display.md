@@ -97,7 +97,7 @@ werden beim normalen Schließen und beim Stoppsignal freigegeben. Anzeige und
 Windows-Anmeldung sind unabhängig: Ein fehlender Windows-Benutzer oder eine
 blockierte AME-OOBE wird durch den Wechsel des Anzeigefensters nicht repariert.
 
-Die Einstellung prüft Viewer-Version und Image-Fähigkeitslabel `dbus-v4`.
+Die Einstellung prüft Viewer-Version und Image-Fähigkeitslabel `dbus-v5`.
 Ein älteres Host-Image muss neu gebaut werden. Schlägt die Viewer-Anmeldung oder
 Frame-Übernahme fehl, meldet WinBoat den Fehler und bietet einen erneuten
 Verbindungsversuch. Ein laufender nativer GL-Modus besitzt keinen VNC-Listener.
@@ -344,7 +344,7 @@ erzwungen. Ein erfolgreicher Software-Test ersetzt weiterhin keinen Test mit
 der physischen Host-GPU.
 
 Diese Änderung benötigt nur eine neu gebaute Linux-Anwendung einschließlich des
-nativen Viewers. Das Host-Image mit `dbus-v4` und die Windows-Installation müssen
+nativen Viewers. Das Host-Image mit `dbus-v5` und die Windows-Installation müssen
 dafür nicht ersetzt werden.
 
 Wenn der neue Viewer weiterhin keinen GL-Kontext erstellen kann, liefert
@@ -363,3 +363,32 @@ OpenGL. Diese Varianten sind Diagnosen, keine dauerhaft angewendeten Workarounds
 Für eine bestimmte AppImage gibt es `--appimage /pfad/zur/WinBoat.AppImage`.
 Die VM kann während dieser Diagnose weiterlaufen; Passwörter und vollständige
 Umgebungsvariablen werden nicht ausgegeben.
+
+### QEMU-Abbruch beim Start des Windows-Installers
+
+`dbus_scanout_texture: Assertion tex_id failed` stammt aus dem Host-QEMU.
+Der D-Bus-Patch in `dbus-v5` bindet für Software-Oberflächen und ihren
+Textur-Export den EGL-Anzeigekontext und stellt danach den vorherigen Kontext
+wieder her. Oberflächen ohne GL-Textur erhalten eine vollständige Software-
+Bildausgabe und Software-Updates. Beim Bildschirmwechsel verwirft QEMU alte
+GL-Änderungsregionen, damit sie nicht die neue Software-Oberfläche betreffen.
+
+Dafür das **Host-Image neu bauen**, einschließlich der QEMU-Patches:
+
+```bash
+./scripts/build-helios.sh
+```
+
+`--skip-host` und der Austausch allein des AppImages reichen für diesen
+QEMU-Fix nicht. Das neue AppImage verlangt das Host-Label `dbus-v5`, sodass
+ein altes Image vor dem nächsten lokalen VM-Start erkannt wird. Danach die
+bestehende VM mit dem neuen Image erneut starten; die Windows-Festplatte
+muss dafür nicht gelöscht werden.
+
+`npm run test:helios:qemu-dbus` prüft beide Host-Patches gegen die gepinnten,
+SHA-256-geprüften QEMU-Dateien und führt die betroffenen Funktionen mit
+Mesa/EGL aus. Es benötigt Git, einen C-Compiler, pkg-config sowie die
+Entwicklungspakete für GLib/GIO, libepoxy und pixman. Die ursprünglichen
+Textur-Callbacks müssen im Regressionstest scheitern; die gepatchten Varianten
+müssen mit und ohne pixman-Änderungsregionen bestehen. Windows und ein echter
+DMA-BUF-Export über die physische GPU werden dadurch nicht getestet.

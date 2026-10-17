@@ -25,5 +25,9 @@ done < /build/host-dependencies.tsv
 # QEMU's pinned build-time subprojects; firmware is provided by the dockur base.
 git -C /build/helios/qemu-helios submodule update --init --depth 1
 (cd /build/patches && sha256sum -c SHA256SUMS)
-git -C /build/helios/qemu-helios apply --check /build/patches/0001-dbus-listener-authenticated-owner.patch
-git -C /build/helios/qemu-helios apply /build/patches/0001-dbus-listener-authenticated-owner.patch
+# Apply in manifest order and track added files in the temporary checkout's
+# index, so checkout --force removes them before the next cached build.
+while read -r checksum patch; do
+    git -C /build/helios/qemu-helios apply --check --index "/build/patches/$patch"
+    git -C /build/helios/qemu-helios apply --index "/build/patches/$patch"
+done < /build/patches/SHA256SUMS

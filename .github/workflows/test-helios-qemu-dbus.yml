@@ -1,0 +1,31 @@
+name: Test Helios QEMU D-Bus display
+on:
+  workflow_dispatch:
+  push:
+    branches: [work]
+    paths:
+      - '.github/workflows/test-helios-qemu-dbus.yml'
+      - 'helios/host/**'
+      - 'helios/source.lock.json'
+      - 'tests/helios-qemu-dbus.*'
+  pull_request:
+    paths:
+      - 'helios/host/**'
+      - 'helios/source.lock.json'
+      - 'tests/helios-qemu-dbus.*'
+permissions:
+  contents: read
+jobs:
+  display:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install EGL test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc pkg-config libglib2.0-dev libepoxy-dev libpixman-1-dev libegl-mesa0 libgl1-mesa-dri
+      - name: Test pinned QEMU patches with real Mesa and protocol fixtures
+        run: python3 tests/helios-qemu-dbus.py

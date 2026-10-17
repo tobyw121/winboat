@@ -157,8 +157,10 @@ docker compose -f "$HOME/.winboat/docker-compose.yml" up -d --force-recreate win
 
 Dabei werden nur die gepaarten Binärdateien aus `/opt/helios` wiederverwendet;
 der Runtime-Unterbau und dessen Abhängigkeiten werden regulär neu aufgebaut.
-Der Build prüft die Revision und QEMUs Venus-Unterstützung. Für einen vollständigen
-Quellbuild bleibt `./scripts/build-helios.sh` der normale Einstieg.
+Der Build prüft die Revision, QEMUs Venus-Unterstützung und den beim
+Kompilieren gespeicherten Host-Patchsatz. Fehlt dessen Beleg oder passt er
+nicht zum aktuellen Checkout, ist ein vollständiger Quellbuild mit
+`./scripts/build-helios.sh` erforderlich.
 
 Das Neuerstellen des Containers übernimmt das korrigierte Image und erhält die
 eingebundene VM-Festplatte. Keine `data.img`, ISO oder Windows-Konfiguration

@@ -23,6 +23,7 @@
         "test:helios": "tsx --test tests/native-desktop-environment.test.ts tests/interval.test.ts tests/helios.test.ts tests/helios-display.test.ts tests/helios-viewer.test.ts tests/host-environment.test.ts tests/helios-installer.test.ts tests/vm-identity.test.ts tests/install-container.test.ts",
         "build": "node scripts/build.ts",
         "helios:fetch-installer": "node scripts/helios/fetch-installer.ts",
+        "test:helios:qemu-dbus": "python3 tests/helios-qemu-dbus.py",
         "test:helios:host": "node scripts/helios/smoke-host.ts",
         "test:vm-identity:qemu": "node scripts/helios/smoke-identity.ts",
         "test:helios:viewer": "bash scripts/helios/smoke-viewer.sh",
