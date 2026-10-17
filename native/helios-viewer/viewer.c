@@ -2,6 +2,10 @@
  * Local QEMU Display1 client. DMA-BUF imports use one GPU presentation copy;
  * UpdateDMABUF is acknowledged only after the source has finished being read.
  */
+/* Keep the GTK 4.8 API baseline when compiling with newer GTK headers. */
+#ifndef GDK_VERSION_MIN_REQUIRED
+#define GDK_VERSION_MIN_REQUIRED GDK_VERSION_4_8
+#endif
 #include <gtk/gtk.h>
 #include <gio/gunixfdlist.h>
 #include <glib-unix.h>
@@ -172,6 +176,17 @@ static GLuint shader(GLenum type,const char *text) {
  GLint ok;glGetShaderiv(s,GL_COMPILE_STATUS,&ok);
  if (!ok) {glDeleteShader(s);return 0;}return s;
 }
+static GtkWidget *display_area(void) {
+ GtkWidget *area=gtk_gl_area_new();
+ /* GTK 4.12+ allows GLES by default, but our shaders and BGRA uploads use
+  * desktop OpenGL. Select it explicitly, also when built against GTK 4.8.
+  * set_use_es(FALSE) alone is a no-op with the newer mixed-API default. */
+ if (g_object_class_find_property(G_OBJECT_GET_CLASS(area),"allowed-apis"))
+  g_object_set(area,"allowed-apis",GDK_GL_API_GL,NULL);
+ else g_object_set(area,"use-es",FALSE,NULL);
+ gtk_gl_area_set_required_version(GTK_GL_AREA(area),3,3);
+ return area;
+}
 static void draw(Viewer *v, GLuint texture, const float *rect, gboolean flip) {
  glUseProgram(v->program);glBindVertexArray(v->vao);glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,texture);
  glUniform1i(glGetUniformLocation(v->program,"image"),0);
@@ -218,6 +233,13 @@ static void texture_size(Viewer *v,guint w,guint h) {
  v->width=w;v->height=h;v->cache_valid=FALSE;glBindTexture(GL_TEXTURE_2D,v->texture);
  glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,w,h,0,GL_RGBA,GL_UNSIGNED_BYTE,NULL);
 }
+static void dma_geometry(Viewer *v,guint x,guint y,guint w,guint h,guint bw,guint bh,gboolean top) {
+ texture_size(v,w,h);
+ v->rect[0]=(float)x/bw;v->rect[1]=(float)y/bh;v->rect[2]=(float)w/bw;v->rect[3]=(float)h/bh;
+ /* Match QEMU's egl_fb_blit(..., !y0_top): its display-origin flag is
+  * opposite to the vertical flip needed by our bottom-up GL coordinates. */
+ v->source_flip=!top;
+}
 static gboolean import_dma(Viewer *v,GDBusMethodInvocation *inv,GVariant *handles,
  guint x,guint y,guint w,guint h,GVariant *offsets,GVariant *strides,guint planes,
  guint fourcc,guint bw,guint bh,guint64 modifier,gboolean top) {
@@ -257,8 +279,7 @@ static gboolean import_dma(Viewer *v,GDBusMethodInvocation *inv,GVariant *handle
  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
  glEGLImageTargetTexture2DOES(GL_TEXTURE_2D,image);
  if (glGetError()!=GL_NO_ERROR) {discard_source(v);return FALSE;}
- texture_size(v,w,h);v->rect[0]=(float)x/bw;v->rect[1]=(float)y/bh;v->rect[2]=(float)w/bw;v->rect[3]=(float)h/bh;
- v->source_flip=top;return TRUE;
+ dma_geometry(v,x,y,w,h,bw,bh,top);return TRUE;
 }
 static gboolean copy_dma(Viewer *v) {
  if (!v->source) return FALSE;
@@ -391,6 +412,18 @@ static void registered(GObject *object,GAsyncResult *result,gpointer data) {
  g_dbus_connection_new(G_IO_STREAM(stream),guid,G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_SERVER|G_DBUS_CONNECTION_FLAGS_DELAY_MESSAGE_PROCESSING,
                        auth,NULL,peer_ready,v);g_free(guid);g_object_unref(auth);g_object_unref(stream);
 }
+static gboolean initialize_gl(Viewer *v) {
+ const char *vertex="#version 330\nout vec2 uv;void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);uv=p;gl_Position=vec4(p*2-1,0,1);}";
+ const char *fragment="#version 330\nin vec2 uv;out vec4 color;uniform sampler2D image;uniform vec4 rect;uniform bool flip;void main(){vec2 p=uv;if(flip)p.y=1-p.y;color=vec4(texture(image,rect.xy+p*rect.zw).rgb,1);}";
+ GLuint vs=shader(GL_VERTEX_SHADER,vertex),fs=shader(GL_FRAGMENT_SHADER,fragment);
+ v->program=glCreateProgram();glAttachShader(v->program,vs);glAttachShader(v->program,fs);glLinkProgram(v->program);
+ glDeleteShader(vs);glDeleteShader(fs);GLint ok;glGetProgramiv(v->program,GL_LINK_STATUS,&ok);
+ if (!ok) return FALSE;
+ glGenVertexArrays(1,&v->vao);glGenFramebuffers(1,&v->fbo);glGenTextures(1,&v->texture);glBindTexture(GL_TEXTURE_2D,v->texture);
+ glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+ glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+ return glGetError()==GL_NO_ERROR;
+}
 static void realize(GtkGLArea *area,Viewer *v) {
  gtk_gl_area_make_current(area);
  const GError *gl_error=gtk_gl_area_get_error(area);
@@ -398,15 +431,7 @@ static void realize(GtkGLArea *area,Viewer *v) {
   char *message=g_strdup_printf("Host GTK OpenGL (%s): %s",G_OBJECT_TYPE_NAME(gdk_display_get_default()),gl_error->message);
   fatal(v,message);g_free(message);return;
  }
- const char *vertex="#version 330\nout vec2 uv;void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);uv=p;gl_Position=vec4(p*2-1,0,1);}";
- const char *fragment="#version 330\nin vec2 uv;out vec4 color;uniform sampler2D image;uniform vec4 rect;uniform bool flip;void main(){vec2 p=uv;if(flip)p.y=1-p.y;color=vec4(texture(image,rect.xy+p*rect.zw).rgb,1);}";
- GLuint vs=shader(GL_VERTEX_SHADER,vertex),fs=shader(GL_FRAGMENT_SHADER,fragment);
- v->program=glCreateProgram();glAttachShader(v->program,vs);glAttachShader(v->program,fs);glLinkProgram(v->program);
- glDeleteShader(vs);glDeleteShader(fs);GLint ok;glGetProgramiv(v->program,GL_LINK_STATUS,&ok);
- if (!ok) {fatal(v,"OpenGL shader initialization failed.");return;}
- glGenVertexArrays(1,&v->vao);glGenFramebuffers(1,&v->fbo);glGenTextures(1,&v->texture);glBindTexture(GL_TEXTURE_2D,v->texture);
- glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
- glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+ if (!initialize_gl(v)) {fatal(v,"OpenGL shader initialization failed.");return;}
  g_dbus_connection_call_with_unix_fd_list(v->bus,"org.qemu",CONSOLE,IFACE "Console","RegisterListenerReverse",NULL,
   G_VARIANT_TYPE("(h)"),G_DBUS_CALL_FLAGS_NONE,10000,NULL,NULL,registered,v);
 }
@@ -520,8 +545,7 @@ int main(int argc,char **argv) {
  if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 3");return 0;}
  if (argc==2 && !strcmp(argv[1],"--check-gl")) {
   if (!gtk_init_check()) {g_printerr("GTK cannot open the host X11/Wayland display.\n");return 1;}
-  GtkWidget *window=gtk_window_new(),*area=gtk_gl_area_new();
-  gtk_gl_area_set_required_version(GTK_GL_AREA(area),3,3);
+  GtkWidget *window=gtk_window_new(),*area=display_area();
   gtk_window_set_child(GTK_WINDOW(window),area);gtk_widget_realize(window);gtk_widget_realize(area);
   gtk_gl_area_make_current(GTK_GL_AREA(area));
   const GError *error=gtk_gl_area_get_error(GTK_GL_AREA(area));
@@ -566,7 +590,7 @@ int main(int argc,char **argv) {
  v.info=g_dbus_node_info_new_for_xml(xml,&err);
  if (!gtk_init_check()) {g_printerr("No GTK display available.\n");return 1;}
  v.window=gtk_window_new();gtk_window_set_title(GTK_WINDOW(v.window),"WinBoat — Helios Desktop");gtk_window_set_default_size(GTK_WINDOW(v.window),1024,640);
- v.area=gtk_gl_area_new();gtk_gl_area_set_required_version(GTK_GL_AREA(v.area),3,3);gtk_gl_area_set_auto_render(GTK_GL_AREA(v.area),FALSE);
+ v.area=display_area();gtk_gl_area_set_auto_render(GTK_GL_AREA(v.area),FALSE);
  gtk_widget_set_focusable(v.area,TRUE);
  GtkWidget *overlay=gtk_overlay_new();gtk_overlay_set_child(GTK_OVERLAY(overlay),v.area);
  v.waiting=gtk_label_new("Waiting for the Windows display…\nCtrl+Alt+Enter toggles fullscreen.");

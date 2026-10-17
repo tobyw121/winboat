@@ -15,7 +15,8 @@ WORKDIR /src
 
 FROM viewer-toolchain AS native-viewer
 RUN --mount=type=bind,target=/source \
-    bash /source/native/helios-viewer/build.sh /out/winboat-helios-viewer
+    bash /source/native/helios-viewer/build.sh /out/winboat-helios-viewer && \
+    bash /source/tests/helios-viewer-render.sh
 
 # Override with --build-context installer=/path/to/verified/windows-artifact.
 FROM scratch AS installer

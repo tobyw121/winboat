@@ -192,6 +192,18 @@ Der Recorder wurde mit einem echten QEMU/TCG-Container und kontrolliertem
 
 ### Fenstergröße und Bildpfad
 
+Der Viewer fordert Desktop-OpenGL 3.3 ausdrücklich an, auch auf GTK 4.12+.
+Die AppImage lässt sich direkt mit `./dist/winboat-0.8.7-x86_64.AppImage`
+starten; `GDK_DEBUG=gl-disable-gles` ist dafür nicht erforderlich.
+DMA-BUF-Bilder übernehmen QEMUs Bildausrichtung, ohne zusätzliche Drehung
+oder Spiegelung. Der Software-Bildpfad behält seine eigene Zeilenorientierung.
+
+`bash tests/helios-viewer-render.sh` prüft die tatsächlichen GL-Shader mit
+Mesa/Xvfb ohne `GDK_DEBUG`: alle vier Bildecken, beide DMA-BUF-Ausrichtungen,
+einen Ausschnitt aus einer größeren Textur und den Software-Bildpfad.
+Dafür werden die Entwicklungsbibliotheken GTK4 und libepoxy sowie Xvfb und
+xauth benötigt; der Test ist auch im Viewer-Smoke-Test enthalten.
+
 **Resize guest** fordert nach Größenänderungen mit 300 ms Verzögerung die
 Fensterauflösung über QEMUs `Console.SetUIInfo` an. Die Option ist zunächst aus;
 der Windows-Grafiktreiber muss die Anfrage unterstützen. Eine bestätigte
