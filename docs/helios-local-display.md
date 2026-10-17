@@ -564,6 +564,21 @@ nicht erneut eine Windows-Modusänderung auslöst. Die Tests prüfen erhaltene
 Bildpixel unter GL/GLES, verspätete Updates, automatische Wiederherstellung
 und ausbleibende doppelte Auflösungsanforderungen.
 
+Viewer 11 bietet in der Kopfzeile die Auswahl `Auto`, `VGA` und `Helios`.
+`Auto` ist beim Öffnen voreingestellt und verwendet weiterhin den bestätigten
+Helios-Treiber mit automatischem VGA-Rückfall. Die manuellen Modi zeigen
+ausschließlich den gewählten Adapter im selben Fenster. Ist er nicht
+verfügbar, erscheint eine entsprechende Wartemeldung; sobald wieder ein
+gültiges Bild vorliegt, wird es automatisch angezeigt. Andere Adapter können
+die manuelle Auswahl nicht durch neue Bilder oder Statusmeldungen ersetzen.
+
+Die Auswahl installiert oder aktiviert keine Windows-Treiber. Bekannte
+Treiberfehler und ungültige Bildpuffer werden auch manuell nicht übergangen.
+Eine ausdrückliche manuelle Helios-Auswahl darf bei unbekanntem Guest-API-Status
+ein bereits gültiges Helios-Bild anzeigen; `Auto` schützt die Installation
+weiterhin vor unbestätigten Helios-Platzhaltern. Die Auswahl gilt bis zum
+Schließen des Local-Desktop-Fensters.
+
 Der ursprüngliche Fehlergrund (einschließlich EGL-Fehlercode, Format und
 Modifier bei einem Importfehler) erscheint in WinBoat während der
 Wiederherstellung und in der Terminal-Ausgabe. Sobald wieder ein gültiges Bild

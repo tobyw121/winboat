@@ -161,6 +161,32 @@ int main(void) {
  glDeleteTextures(1,&v.source);glDeleteTextures(1,&v.texture);glDeleteTextures(1,&target);
  glDeleteFramebuffers(1,&fbo);glDeleteFramebuffers(1,&v.fbo);
  glDeleteVertexArrays(1,&v.vao);glDeleteProgram(v.program);
+ /* Exercise the same GtkDropDown and notify callback used in the header.
+  * Manual choices must survive ordinary frame/health re-selection, while
+  * Auto retains its installation gate and normal healthy-Helios preference. */
+ Viewer basic={.cache_valid=TRUE},helios={.cache_valid=TRUE,.accelerated=TRUE};
+ Viewer root={.area=area,.has_basic_console=TRUE,.helios_health=1,.basic_health=1};
+ root.waiting=gtk_label_new("");g_object_ref_sink(root.waiting);
+ root.consoles=g_ptr_array_new();g_ptr_array_add(root.consoles,&basic);g_ptr_array_add(root.consoles,&helios);
+ GtkWidget *selector=display_selector(&root);g_object_ref_sink(selector);
+ select_console(&root);g_assert_true(root.active==&helios);
+ gtk_drop_down_set_selected(GTK_DROP_DOWN(selector),1);g_assert_true(root.active==&basic);
+ select_console(&root);g_assert_true(root.active==&basic);
+ gtk_drop_down_set_selected(GTK_DROP_DOWN(selector),2);g_assert_true(root.active==&helios);
+ helios.cache_valid=FALSE;select_console(&root);g_assert_null(root.active);
+ g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(root.waiting)),==,"Waiting for Helios…");
+ helios.cache_valid=TRUE;select_console(&root);g_assert_true(root.active==&helios);
+ root.helios_health=2;select_console(&root);g_assert_null(root.active);
+ gtk_drop_down_set_selected(GTK_DROP_DOWN(selector),0);g_assert_true(root.active==&basic);
+ root.helios_health=1;select_console(&root);g_assert_true(root.active==&helios);
+ root.helios_health=0;helios.driver_confirmed=FALSE;select_console(&root);g_assert_true(root.active==&basic);
+ gtk_drop_down_set_selected(GTK_DROP_DOWN(selector),2);g_assert_true(root.active==&helios);
+ gtk_drop_down_set_selected(GTK_DROP_DOWN(selector),0);g_assert_true(root.active==&basic);
+ root.basic_health=2;
+ gtk_drop_down_set_selected(GTK_DROP_DOWN(selector),1);g_assert_null(root.active);
+ g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(root.waiting)),==,"Waiting for VGA / Basic Display Adapter…");
+ g_object_unref(selector);g_object_unref(root.waiting);g_ptr_array_free(root.consoles,TRUE);
+ puts("Header adapter selector: Auto/VGA/Helios, manual selection retention, unavailable-adapter waiting, recovery, explicit unknown-health override and automatic bootstrap safety passed.");
  gtk_window_destroy(GTK_WINDOW(window));
  puts("Selected GL API, both DMA orientations/crops and software frame corners passed without manual GDK_DEBUG.");
  return 0;

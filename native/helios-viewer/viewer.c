@@ -73,6 +73,7 @@ struct Viewer {
  guint console_id, pending_consoles, reconnect_timer;
  gboolean accelerated, seen_update, cursor_visible, awaiting_scanout;
  gboolean has_basic_console, driver_confirmed;
+ guint display_mode; /* 0 automatic, 1 VGA/Basic, 2 Helios; window-local choice */
  guint recovery_attempt;
  char frame_problem[512];
  gint helios_health, basic_health; /* 0 unknown, 1 running, 2 unavailable */
@@ -777,15 +778,19 @@ static void register_consoles(Viewer *v) {
   g_variant_new("(ss)",IFACE "VM","ConsoleIDs"),G_VARIANT_TYPE("(v)"),G_DBUS_CALL_FLAGS_NONE,5000,NULL,console_ids_ready,v);
 }
 static gboolean console_eligible(Viewer *v,Viewer *d) {
+ if ((v->display_mode==1 && d->accelerated) || (v->display_mode==2 && !d->accelerated)) return FALSE;
  if (!d->cache_valid || (d->accelerated?v->helios_health:v->basic_health)==2) return FALSE;
  /* QEMU can update a virtio placeholder before the Windows Helios driver is
   * installed. During bootstrap, only confirmed guest health may promote it.
   * A transient API outage can retain an already verified active desktop. */
- if (d->accelerated && v->helios_health!=1 && (v->has_basic_console || v->pending_consoles))
+ if (d->accelerated && v->display_mode!=2 && v->helios_health!=1 && (v->has_basic_console || v->pending_consoles))
   return v->active==d && d->driver_confirmed;
  return TRUE;
 }
 static void select_console(Viewer *v) {
+ const char *waiting=v->display_mode==1?"Waiting for VGA / Basic Display Adapter…":
+                     v->display_mode==2?"Waiting for Helios…":"Waiting for the Windows display…";
+ gtk_label_set_text(GTK_LABEL(v->waiting),waiting);
  Viewer *next=v->active && console_eligible(v,v->active)?v->active:NULL;
  for (guint i=0;i<v->consoles->len;i++) {
   Viewer *d=g_ptr_array_index(v->consoles,i);
@@ -803,6 +808,21 @@ static void select_console(Viewer *v) {
   request_resize(v);
  }
  gtk_gl_area_queue_render(GTK_GL_AREA(v->area));
+}
+static void display_mode_changed(GObject *object,GParamSpec *property,Viewer *v) {
+ (void)property;
+ guint mode=gtk_drop_down_get_selected(GTK_DROP_DOWN(object));
+ if (mode>2) return;
+ v->display_mode=mode;select_console(v);
+ gtk_widget_grab_focus(v->area);
+}
+static GtkWidget *display_selector(Viewer *v) {
+ const char *choices[]={"Auto","VGA","Helios",NULL};
+ GtkWidget *selector=gtk_drop_down_new_from_strings(choices);
+ gtk_widget_set_tooltip_text(selector,"Display adapter: Auto prefers healthy Helios and falls back to VGA. Manual selection stays on the chosen adapter. Does not install or enable Windows drivers.");
+ gtk_accessible_update_property(GTK_ACCESSIBLE(selector),GTK_ACCESSIBLE_PROPERTY_LABEL,"Display adapter",-1);
+ g_signal_connect(selector,"notify::selected",G_CALLBACK(display_mode_changed),v);
+ return selector;
 }
 static void adapter_health(Viewer *v,gint helios,gint basic) {
  for (guint i=0;i<v->consoles->len;i++) {
@@ -969,7 +989,7 @@ int main(int argc,char **argv) {
  const char *version_error=gtk_check_version(4,8,0);
  if (version_error) {g_printerr("GTK 4.8 or newer is required: %s\n",version_error);return 1;}
  configure_gl();
- if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 10");return 0;}
+ if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 11");return 0;}
  if (argc==2 && !strcmp(argv[1],"--check-gl")) {
   if (!gtk_init_check()) {g_printerr("GTK cannot open the host X11/Wayland display.\n");return 1;}
   GtkWidget *window=gtk_window_new(),*area=display_area();
@@ -1047,6 +1067,7 @@ int main(int argc,char **argv) {
  gtk_check_button_set_active(GTK_CHECK_BUTTON(aspect),TRUE);
  gtk_widget_set_tooltip_text(resize,"Request window resolution from Windows; requires guest driver support.");
  gtk_header_bar_pack_start(GTK_HEADER_BAR(bar),resize);gtk_header_bar_pack_start(GTK_HEADER_BAR(bar),aspect);
+ gtk_header_bar_pack_start(GTK_HEADER_BAR(bar),display_selector(&v));
  g_signal_connect(resize,"toggled",G_CALLBACK(resize_toggled),&v);g_signal_connect(aspect,"toggled",G_CALLBACK(aspect_toggled),&v);
  g_signal_connect(v.area,"resize",G_CALLBACK(resized),&v);
  if (smoke) gtk_check_button_set_active(GTK_CHECK_BUTTON(resize),TRUE);
