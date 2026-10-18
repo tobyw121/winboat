@@ -27,7 +27,7 @@
         "test:helios:host": "node scripts/helios/smoke-host.ts",
         "test:vm-identity:qemu": "node scripts/helios/smoke-identity.ts",
         "test:helios:viewer": "bash scripts/helios/smoke-viewer.sh",
-        "test:helios:windows": "pwsh -NoProfile -File tests/display-adapters.test.ps1 && pwsh -NoProfile -File tests/helios-provisioning.test.ps1 && pwsh -NoProfile -File tests/helios-windows.test.ps1",
+        "test:helios:windows": "pwsh -NoProfile -File tests/vcredist-provisioning.test.ps1 && pwsh -NoProfile -File tests/display-adapters.test.ps1 && pwsh -NoProfile -File tests/helios-provisioning.test.ps1 && pwsh -NoProfile -File tests/helios-windows.test.ps1",
         "test:shared-folders": "tsx --test tests/shared-folders.test.ts"
     },
     "repository": "https://github.com/TibixDev/winboat",

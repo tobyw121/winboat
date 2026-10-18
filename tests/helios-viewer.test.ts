@@ -111,13 +111,15 @@ test('guest adapter health is delivered on stdin and stale data restores automat
     f.children[1].ready();await next;f.viewer.close();
 });
 
-test('same-version legacy guest APIs are updated to deploy automatic display recovery', async () => {
-    const {guestNeedsUpdate,GUEST_GRAPHICS_PROTOCOL}=await import('../src/shared/guest-protocol');
+test('same-version legacy guest APIs update display recovery and automatic runtimes', async () => {
+    const {guestNeedsUpdate,GUEST_GRAPHICS_PROTOCOL,GUEST_RUNTIME_PROTOCOL}=await import('../src/shared/guest-protocol');
     assert.equal(guestNeedsUpdate({version:'0.8.7'},'0.8.7'),true);
     assert.equal(guestNeedsUpdate({version:'0.8.7',graphics_protocol:'old'},'0.8.7'),true);
     assert.equal(guestNeedsUpdate({version:'0.8.7',graphics_protocol:'helios-watchdog-v2'},'0.8.7'),true);
     assert.equal(guestNeedsUpdate({version:'0.8.7',graphics_protocol:'helios-watchdog-v3'},'0.8.7'),true);
-    assert.equal(guestNeedsUpdate({version:'0.8.7',graphics_protocol:GUEST_GRAPHICS_PROTOCOL},'0.8.7'),false);
+    assert.equal(guestNeedsUpdate({version:'0.8.7',graphics_protocol:GUEST_GRAPHICS_PROTOCOL},'0.8.7'),true);
+    assert.equal(guestNeedsUpdate({version:'0.8.7',graphics_protocol:GUEST_GRAPHICS_PROTOCOL,runtime_protocol:'old'},'0.8.7'),true);
+    assert.equal(guestNeedsUpdate({version:'0.8.7',graphics_protocol:GUEST_GRAPHICS_PROTOCOL,runtime_protocol:GUEST_RUNTIME_PROTOCOL},'0.8.7'),false);
     assert.equal(guestNeedsUpdate({version:'0.8.6',graphics_protocol:GUEST_GRAPHICS_PROTOCOL},'0.8.7'),true);
 });
 

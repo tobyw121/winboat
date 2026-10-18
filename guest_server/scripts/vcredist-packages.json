@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "revision": "vcredist-v1",
+  "source": {
+    "repository": "microsoft/winget-pkgs",
+    "revision": "16a1cf2cdb0ab480506cef361146633af6a7bfe4"
+  },
+  "packages": [
+    {
+      "id": "2008-x86",
+      "family": "2008",
+      "architecture": "x86",
+      "version": "9.0.30729.6161",
+      "url": "https://download.microsoft.com/download/5/D/8/5D8C65CB-C849-4025-8E95-C3966CAFD8AE/vcredist_x86.exe",
+      "sha256": "8742bcbf24ef328a72d2a27b693cc7071e38d3bb4b9b44dec42aa3d2c8d61d92",
+      "productCode": "{9BE518E6-ECC6-35A9-88E4-87755C07200F}",
+      "arguments": "/qn /norestart"
+    },
+    {
+      "id": "2008-x64",
+      "family": "2008",
+      "architecture": "x64",
+      "version": "9.0.30729.6161",
+      "url": "https://download.microsoft.com/download/5/D/8/5D8C65CB-C849-4025-8E95-C3966CAFD8AE/vcredist_x64.exe",
+      "sha256": "c5e273a4a16ab4d5471e91c7477719a2f45ddadb76c7f98a38fa5074a6838654",
+      "productCode": "{5FCE6D76-F5DC-37AB-B2B8-22AB8CEDB1D4}",
+      "arguments": "/qn /norestart"
+    },
+    {
+      "id": "2010-x86",
+      "family": "2010",
+      "architecture": "x86",
+      "version": "10.0.40219",
+      "url": "https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x86.exe",
+      "sha256": "99dce3c841cc6028560830f7866c9ce2928c98cf3256892ef8e6cf755147b0d8",
+      "productCode": "{F0C3E5D1-1ADE-321E-8167-68EF0DE699A5}",
+      "arguments": "/quiet /norestart"
+    },
+    {
+      "id": "2010-x64",
+      "family": "2010",
+      "architecture": "x64",
+      "version": "10.0.40219",
+      "url": "https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe",
+      "sha256": "f3b7a76d84d23f91957aa18456a14b4e90609e4ce8194c5653384ed38dada6f3",
+      "productCode": "{1D8E6291-B0D5-35EC-8441-6616F567A0F7}",
+      "arguments": "/quiet /norestart"
+    },
+    {
+      "id": "2012-x86",
+      "family": "2012",
+      "architecture": "x86",
+      "version": "11.0.61030.0",
+      "url": "https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x86.exe",
+      "sha256": "b924ad8062eaf4e70437c8be50fa612162795ff0839479546ce907ffa8d6e386",
+      "productCode": "{33d1fd90-4274-48a1-9bc1-97e33d9c2d6f}",
+      "arguments": "/install /quiet /norestart"
+    },
+    {
+      "id": "2012-x64",
+      "family": "2012",
+      "architecture": "x64",
+      "version": "11.0.61030.0",
+      "url": "https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x64.exe",
+      "sha256": "681be3e5ba9fd3da02c09d7e565adfa078640ed66a0d58583efad2c1e3cc4064",
+      "productCode": "{ca67548a-5ebe-413a-b50c-4b9ceb6d66c6}",
+      "arguments": "/install /quiet /norestart"
+    },
+    {
+      "id": "2013-x86",
+      "family": "2013",
+      "architecture": "x86",
+      "version": "12.0.40664.0",
+      "url": "https://download.visualstudio.microsoft.com/download/pr/10912113/5da66ddebb0ad32ebd4b922fd82e8e25/vcredist_x86.exe",
+      "sha256": "53b605d1100ab0a88b867447bbf9274b5938125024ba01f5105a9e178a3dcdbd",
+      "productCode": "{9dff3540-fc85-4ed5-ac84-9e3c7fd8bece}",
+      "arguments": "/install /quiet /norestart"
+    },
+    {
+      "id": "2013-x64",
+      "family": "2013",
+      "architecture": "x64",
+      "version": "12.0.40664.0",
+      "url": "https://download.visualstudio.microsoft.com/download/pr/10912041/cee5d6bca2ddbcd039da727bf4acb48a/vcredist_x64.exe",
+      "sha256": "a4bba7701e355ae29c403431f871a537897c363e215cafe706615e270984f17c",
+      "productCode": "{042d26ef-3dbe-4c25-95d3-4c1b11b235a7}",
+      "arguments": "/install /quiet /norestart"
+    },
+    {
+      "id": "2015+-x86",
+      "family": "2015+",
+      "architecture": "x86",
+      "version": "14.44.35211.0",
+      "url": "https://download.visualstudio.microsoft.com/download/pr/73aabf2e-9532-4f68-99f7-3247081a619c/0C09F2611660441084CE0DF425C51C11E147E6447963C3690F97E0B25C55ED64/VC_redist.x86.exe",
+      "sha256": "0c09f2611660441084ce0df425c51c11e147e6447963c3690f97e0b25c55ed64",
+      "productCode": "{0b5169e3-39da-4313-808e-1f9c0407f3bf}",
+      "arguments": "/install /quiet /norestart"
+    },
+    {
+      "id": "2015+-x64",
+      "family": "2015+",
+      "architecture": "x64",
+      "version": "14.44.35211.0",
+      "url": "https://download.visualstudio.microsoft.com/download/pr/73aabf2e-9532-4f68-99f7-3247081a619c/CC0FF0EB1DC3F5188AE6300FAEF32BF5BEEBA4BDD6E8E445A9184072096B713B/VC_redist.x64.exe",
+      "sha256": "cc0ff0eb1dc3f5188ae6300faef32bf5beeba4bdd6e8e445a9184072096b713b",
+      "productCode": "{d8bbe9f9-7c5b-42c6-b715-9ee898a2e515}",
+      "arguments": "/install /quiet /norestart"
+    }
+  ]
+}

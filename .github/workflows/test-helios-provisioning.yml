@@ -13,6 +13,10 @@ on:
       - 'guest_server/scripts/Get-HeliosDiagnostics.ps1'
       - 'tests/helios-diagnostics.test.ps1'
       - 'guest_server/main.go'
+      - 'guest_server/runtime_provisioning*'
+      - 'guest_server/scripts/Start-VCRedistProvisioning.ps1'
+      - 'guest_server/scripts/vcredist-packages.json'
+      - 'tests/vcredist-provisioning.test.ps1'
       - 'guest_server/scripts/Start-HeliosProvisioning.ps1'
       - 'guest_server/scripts/Get-WinBoatFileSha256.ps1'
       - 'guest_server/scripts/Start-AtlasHelios.ps1'
@@ -29,6 +33,10 @@ on:
       - 'guest_server/scripts/Get-HeliosDiagnostics.ps1'
       - 'tests/helios-diagnostics.test.ps1'
       - 'guest_server/main.go'
+      - 'guest_server/runtime_provisioning*'
+      - 'guest_server/scripts/Start-VCRedistProvisioning.ps1'
+      - 'guest_server/scripts/vcredist-packages.json'
+      - 'tests/vcredist-provisioning.test.ps1'
       - 'guest_server/scripts/Start-HeliosProvisioning.ps1'
       - 'guest_server/scripts/Get-WinBoatFileSha256.ps1'
       - 'guest_server/scripts/Start-AtlasHelios.ps1'
@@ -48,6 +56,7 @@ jobs:
       - name: Test provisioning and handoff (PowerShell 7)
         shell: pwsh
         run: |
+          ./tests/vcredist-provisioning.test.ps1
           ./tests/display-adapters.test.ps1
           ./tests/helios-diagnostics.test.ps1
           ./tests/helios-provisioning.test.ps1
@@ -55,6 +64,7 @@ jobs:
       - name: Test provisioning and handoff (Windows PowerShell 5.1)
         shell: powershell
         run: |
+          ./tests/vcredist-provisioning.test.ps1
           ./tests/display-adapters.test.ps1
           ./tests/helios-diagnostics.test.ps1
           ./tests/helios-provisioning.test.ps1
@@ -77,3 +87,22 @@ jobs:
           if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
           go build -o "$env:RUNNER_TEMP/winboat_guest_server.exe" .
           if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+
+  runtimes:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify Microsoft payloads and install missing runtimes on disposable Windows
+        shell: powershell
+        run: |
+          . ./guest_server/scripts/Start-VCRedistProvisioning.ps1 -LibraryOnly
+          $cache = Join-Path $env:RUNNER_TEMP 'winboat-vcredist'
+          New-Item -ItemType Directory -Force $cache | Out-Null
+          $packages = @(Get-VCRedistPackages)
+          # Check all payload hashes/signatures, even when the runner already
+          # has a newer compatible runtime and installation would be skipped.
+          foreach ($package in $packages) { Get-VCRedistInstaller $package $cache | Out-Null }
+          Invoke-VCRedistPackages $packages $cache | ConvertTo-Json -Depth 5

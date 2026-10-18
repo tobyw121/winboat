@@ -1,5 +1,48 @@
 # AtlasOS mit WinBoat
 
+## Automatische Visual-C++-Laufzeitpakete
+
+Der WinBoat-Gastdienst richtet fehlende Microsoft Visual C++ Redistributables
+automatisch ein: **2008 SP1, 2010 SP1, 2012 Update 4, 2013 und 2015+**, jeweils
+für **x86 und x64**. Separate offizielle Pakete für 2009, 2011 und 2014 gibt es
+nicht. Für 2015 wird das kompatible gemeinsame 2015–2022-Paket
+14.44.35211 verwendet; vorhandene neuere v14-Pakete bleiben erhalten.
+
+Dies gilt für Standard-Windows und beide AME-/Atlas-Installationsmethoden.
+Die SYSTEM-Aufgabe `WinBoatVCRedistProvisioning` wartet auf den erfolgreichen
+Abschluss ausgewählter Atlas-/Helios-Einrichtungen. Sie läuft ohne Dialoge und
+ohne erzwungenen Neustart. Neustartbedarf des Microsoft-Installers (3010) steht
+im Abschlussbeleg. Ein separater FreeRDP-Login ist nicht nötig.
+
+Der Gast benötigt Internetzugang zu `download.microsoft.com` und
+`download.visualstudio.microsoft.com`. Versionen, Original-URLs und SHA-256
+sind in `guest_server/scripts/vcredist-packages.json` festgelegt, mit Herkunft
+aus einem konkreten Commit von Microsofts WinGet-Paketarchiv. Jeder Download
+wird zusätzlich auf eine gültige Microsoft-Authenticode-Signatur geprüft;
+Binärdateien werden nicht aus fremden Runtime-Sammelpaketen bezogen.
+
+Bei fehlendem Netz oder belegtem Windows Installer versucht die Aufgabe es nach
+15 Minuten sowie beim nächsten Windows-Start erneut. Bereits installierte
+passende Pakete werden übersprungen; Exitcode „bereits installiert“ allein
+genügt nicht als Erfolgsnachweis. Nach vollständigem Erfolg entfernt sich die
+Aufgabe und löscht ihre Installer. Der Status steht unter
+`C:\ProgramData\WinBoat\VCRedist\status.json` sowie über die Guest API:
+
+```bash
+curl -s http://127.0.0.1:7148/provisioning/vcredist
+```
+
+Bestehende VMs benötigen keine neue Windows-Installation: Die neue AppImage
+erkennt den fehlenden `runtime_protocol: vcredist-v1` und aktualisiert den
+Gastdienst. Dieser registriert die Aufgabe nach seinem Neustart. Die Pakete
+werden im Hintergrund ergänzt; Atlas-/Helios-Status wird dadurch nicht als
+Runtime-Erfolgsnachweis umgedeutet.
+
+Die lokalen PowerShell-Tests verwenden Netzwerk-/Installer-Fixtures. Zusätzlich
+prüft CI auf einem kurzlebigen Windows-Runner alle zehn echten Downloads und
+Signaturen und führt die Installation fehlender Pakete mit Registry-Nachprüfung
+aus. So bleiben simulierte Ablauftests und Windows-Integration unterscheidbar.
+
 Unter **Setup → Windows Configuration → Installation mode** stehen Standard
 Windows sowie zwei Atlas-Methoden zur Auswahl. Beide Methoden funktionieren mit
 heruntergeladenem Windows und mit einer unter **Custom ISO → Select ISO File**

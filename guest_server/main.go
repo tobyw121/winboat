@@ -129,6 +129,7 @@ func getVersion(w http.ResponseWriter, r *http.Request) {
 	response := map[string]string{
 		"version":           Version,
 		"graphics_protocol": graphicsProtocol,
+		"runtime_protocol":  runtimeProtocol,
 		"commit_hash":       CommitHash,
 		"build_time":        BuildTimestamp,
 	}
@@ -304,6 +305,7 @@ func main() {
 	graphics := newGraphicsMonitor()
 	go graphics.run(context.Background(), collectDisplayAdapters)
 	go ensureSelectedHelios()
+	go ensureVCRedist()
 	r.HandleFunc("/graphics/adapters", graphics.status).Methods("GET")
 	r.HandleFunc("/graphics/diagnostics", graphics.diagnostics(collectHeliosDiagnostics)).Methods("GET")
 	r.HandleFunc("/graphics/adapters/recovery", graphics.viewerRecovery).Methods("POST")
@@ -311,6 +313,7 @@ func main() {
 	r.HandleFunc("/health", getHealth).Methods("GET")
 	r.HandleFunc("/graphics/helios", getHeliosStatus).Methods("GET")
 	r.HandleFunc("/provisioning/atlas", getAtlasStatus).Methods("GET")
+	r.HandleFunc("/provisioning/vcredist", getVCRedistStatus).Methods("GET")
 	r.HandleFunc("/provisioning/atlas/diagnostics", atlasDiagnosticsHandler(collectAtlasDiagnostics)).Methods("GET")
 	r.HandleFunc("/provisioning/atlas/recovery", getAtlasRecoveryStatus).Methods("GET")
 	r.HandleFunc("/provisioning/atlas/recovery", atlasRecoveryHandler("restart-oobe", recoverAtlasOOBE)).Methods("POST")
