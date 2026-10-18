@@ -803,3 +803,39 @@ Docker-Umgebung mit dem Windows-Passwort wird nicht ausgelesen.
 `org.winboat.*`-Labels. Zusätzlich werden, soweit vorhanden, begrenzte Auszüge
 aus `/run/shm/qemu.log` und `qemu.out` gespeichert: QEMU kann seinen Trace
 dorthin statt in die Docker-Ausgabe schreiben.
+
+
+### Startauflösung und Zoom (Viewer 13)
+
+Unter **Configuration → Windows resolution** stehen 1024×768, 1280×720,
+1280×800, 1366×768, 1440×900, 1600×900, 1920×1080, 1920×1200,
+2560×1440, 2560×1600 und 3840×2160 zur Auswahl. **Save resolution and restart**
+speichert diese Einstellung unabhängig von noch ungespeicherten CPU-/RAM-
+Änderungen und erstellt den VM-Container neu. Die Windows-Disk bleibt erhalten.
+VGA und Helios erhalten dieselbe Startgröße; VGA hat dafür 64 MiB Bildspeicher.
+Ohne Einstellung bleibt 1280×800 der Standard. Eine Windows-Spiegelung kann
+beide Ausgänge auf eine gemeinsam unterstützte Größe beschränken.
+
+Local Desktop zeigt die tatsächlich empfangene Bildgröße in der Statusleiste.
+**Fit** passt den gesamten Desktop an das Fenster an; **Keep aspect** erhält
+dabei das Seitenverhältnis. Alternativ stehen 50, 75, 100, 125, 150 und 200 Prozent
+zur Verfügung. Die Prozente beziehen sich auf physische Host-Pixel, auch auf
+HiDPI-Monitoren. Zu große Bilder werden bei festem Zoom mittig beschnitten;
+mit Fit wird wieder der vollständige Desktop sichtbar. Der Mauszeiger folgt
+derselben Skalierung. Zoom ändert weder die Windows-Auflösung noch die
+Anzeigetopologie.
+
+Der mitgelieferte Windows-Treiber übernimmt die native Größe beim Start des
+Geräts und bietet während dieses Starts nur diesen Modus an. Die Auswahl
+ersetzt deshalb kein dynamisches Umschalten mehrerer Modi in Windows:
+**Zum Ändern ist ein VM-Neustart nötig.** „Resize guest“ sendet weiterhin einen
+Größenwunsch; die Statusleiste unterscheidet gesendete Wünsche von tatsächlich
+angewendeten Größen. Eine QEMU-Bestätigung allein gilt nicht als erfolgreicher
+Windows-Moduswechsel.
+
+Diese Funktion benötigt den Host-Runtime-Stand `glvnd-v4` und Viewer 13.
+Zum Aktualisieren `./scripts/build-helios.sh` ohne `--skip-host` ausführen.
+Der Windows-Treiber selbst wird durch diese Änderung nicht neu gebaut.
+Die Cloud-Prüfung umfasst echte QEMU-Initialisierung unter TCG, die
+Startskripte und Mesa-Rendering über OpenGL/GLES bis 4K. Ein Windows-Gast
+mit physischer NVIDIA-/AMD-GPU steht in der Cloud nicht zur Verfügung.

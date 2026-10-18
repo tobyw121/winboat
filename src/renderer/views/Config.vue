@@ -105,6 +105,18 @@
                     </div>
                 </x-card>
 
+                <x-card v-if="heliosEnabled" class="p-4 my-0 w-full bg-neutral-800/20">
+                    <h1 class="text-lg font-semibold mb-2">Windows resolution</h1>
+                    <p class="text-neutral-400 text-sm">Choose the startup resolution for Helios and VGA. Saving restarts the VM. Local Desktop scales the picture to its window; zoom does not change the Windows resolution.</p>
+                    <div class="flex items-center gap-3 mt-3">
+                        <select v-model="resolution" aria-label="Windows startup resolution" :disabled="isApplyingChanges" class="rounded bg-neutral-900 p-2">
+                            <option v-for="mode in HELIOS_RESOLUTIONS" :key="mode.key" :value="mode.key">{{ mode.label }}</option>
+                        </select>
+                        <x-button :disabled="isApplyingChanges || !origHeliosEnabled || resolution === origResolution" @click="saveResolution">Save resolution and restart</x-button>
+                    </div>
+                    <p v-if="resolutionMessage" class="text-sm text-neutral-400 mt-2">{{ resolutionMessage }}</p>
+                </x-card>
+
                 <x-card class="p-4 my-0 w-full bg-neutral-800/20">
                     <h1 class="text-lg font-semibold mb-3">Shared Folders</h1>
                     <SharedFolders v-model="sharedFolders" :disabled="isApplyingChanges" />
@@ -499,6 +511,7 @@ import {sharedFolderErrors, type SharedFolder} from '../../shared/shared-folders
 import {changedResourceErrors} from '../../shared/configuration-resources';
 import {configuredSharedFolders, prepareSharedFolders, checkSharedFolders, type ShareCheck} from '../lib/shared-folders';
 import { configureHelios, HELIOS_IMAGE } from '../../shared/helios';
+import { HELIOS_RESOLUTIONS, DEFAULT_HELIOS_RESOLUTION, heliosResolution, configureHeliosResolution } from '../../shared/helios-resolution';
 import { requireHelios } from '../lib/helios';
 import { resolveHeliosDisplay } from '../../shared/helios-display';
 import { requireLocalDisplay, prepareLocalDisplay, localDisplayDirectory, openLocalDesktop, localDisplayState, localDisplayMessage } from '../lib/helios-display';
@@ -546,6 +559,23 @@ const origRamGB = ref(0);
 const maxRamGB = ref(0);
 const sharedFolders = ref<SharedFolder[]>([]);
 const origSharedFolders = ref('[]');
+const resolution = ref(DEFAULT_HELIOS_RESOLUTION);
+const origResolution = ref(DEFAULT_HELIOS_RESOLUTION);
+const resolutionMessage = ref('');
+async function saveResolution() {
+    if (isApplyingChanges.value) return;
+    isApplyingChanges.value = true; resolutionMessage.value = '';
+    try {
+        await requireHelios();
+        const next = winboat.parseCompose();
+        next.services.windows = configureHeliosResolution(next.services.windows, resolution.value);
+        await winboat.replaceCompose(next);
+        compose.value = winboat.parseCompose();
+        origResolution.value = heliosResolution(compose.value.services.windows);
+        resolutionMessage.value = 'Startup resolution saved. Windows is restarting with the selected size.';
+    } catch (error) {resolutionMessage.value = error instanceof Error ? error.message : String(error);}
+    finally {isApplyingChanges.value = false;}
+}
 const checkingShares = ref(false);
 const shareResults = ref<ShareCheck[]>([]);
 const shareTestError = ref('');
@@ -667,6 +697,8 @@ async function assignValues() {
 
     heliosEnabled.value = compose.value.services.windows.image === HELIOS_IMAGE && compose.value.services.windows.environment.HELIOS === '1';
     origHeliosEnabled.value = heliosEnabled.value;
+    resolution.value = heliosResolution(compose.value.services.windows);
+    origResolution.value = resolution.value;
     localDisplayEnabled.value = wbConfig.config.localDisplayPreferred ?? compose.value.services.windows.environment.HELIOS_DISPLAY === 'dbus';
     origLocalDisplayEnabled.value = localDisplayEnabled.value;
     heliosSupportAvailable.value = checkHeliosSupport();
@@ -700,6 +732,7 @@ async function saveDockerCompose() {
         const host = heliosEnabled.value ? await requireHelios() : undefined;
         compose.value!.services.windows = configureHelios(compose.value!.services.windows,
             heliosEnabled.value, host?.renderNode, host?.nvidia);
+        if (heliosEnabled.value) compose.value!.services.windows = configureHeliosResolution(compose.value!.services.windows, resolution.value);
         const local = heliosEnabled.value && localDisplayEnabled.value;
         if (local) { autoStartContainer.value = false; compose.value!.services.windows.restart = RESTART_NO; }
         const display = await resolveHeliosDisplay(compose.value!.services.windows, local, localDisplayDirectory,
@@ -798,6 +831,7 @@ const saveButtonDisabled = computed(() => {
     const hasResourceChanges = 
         origNumCores.value !== numCores.value ||
         origRamGB.value !== ramGB.value ||
+        (heliosEnabled.value && resolution.value !== origResolution.value) ||
         JSON.stringify(sharedFolders.value) !== origSharedFolders.value ||
         (!compose.value?.services.windows['x-winboat-shared-folders'] && sharedFolders.value.some(folder => folder.enabled)) ||
         freerdpPort.value !== origFreerdpPort.value ||

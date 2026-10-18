@@ -43,7 +43,8 @@ static const char xml[] =
 
 typedef struct Viewer Viewer;
 struct Viewer {
- GtkWidget *window, *area, *waiting, *status;
+ GtkWidget *window, *area, *waiting, *status, *aspect;
+ double zoom; /* zero fits the window; otherwise physical pixels per guest pixel */
  char *screenshot_path;
  GMainLoop *loop;
  GDBusConnection *bus, *peer;
@@ -162,12 +163,15 @@ static void key_release(GtkEventControllerKey *controller, guint value, guint co
  if (n && v->held[n]) {input(v,IFACE "Keyboard","Release",g_variant_new("(u)",n));v->held[n]=FALSE;}
 }
 static void focus_leave(GtkEventControllerFocus *controller, Viewer *v) {(void)controller;release_input(v);}
-static void viewport(Viewer *v, int w, int h, int *x, int *y, int *dw, int *dh) {
- if (v->stretch) {*x=0;*y=0;*dw=w;*dh=h;return;}
+static void viewport_at_scale(Viewer *v, int w, int h, int device_scale,int *x, int *y, int *dw, int *dh) {
+ if (v->stretch && !v->zoom) {*x=0;*y=0;*dw=w;*dh=h;return;}
  Viewer *d=displayed(v);
- double scale=MIN((double)w/MAX(d->width,1u),(double)h/MAX(d->height,1u));
+ double scale=v->zoom?v->zoom/MAX(device_scale,1):MIN((double)w/MAX(d->width,1u),(double)h/MAX(d->height,1u));
  *dw=MAX(1,(int)(d->width*scale));*dh=MAX(1,(int)(d->height*scale));
  *x=(w-*dw)/2;*y=(h-*dh)/2;
+}
+static void viewport(Viewer *v,int w,int h,int *x,int *y,int *dw,int *dh) {
+ viewport_at_scale(v,w,h,v->area?gtk_widget_get_scale_factor(v->area):1,x,y,dw,dh);
 }
 static void motion(GtkEventControllerMotion *controller, double x, double y, Viewer *v) {
  (void)controller;
@@ -287,8 +291,8 @@ static gboolean render(GtkGLArea *area,GdkGLContext *context,Viewer *v) {
  gtk_widget_set_visible(v->waiting,!d->width || !d->cache_valid);
  int scale=gtk_widget_get_scale_factor(v->area), x,y,w,h;
  glDisable(GL_BLEND);glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT);
- viewport(v,gtk_widget_get_width(v->area)*scale,gtk_widget_get_height(v->area)*scale,&x,&y,&w,&h);
- glViewport(x,y,w,h);
+ viewport(v,gtk_widget_get_width(v->area),gtk_widget_get_height(v->area),&x,&y,&w,&h);
+ glViewport(x*scale,y*scale,w*scale,h*scale);
  if (d->texture && d->width && d->cache_valid) {
   const float rect[]={0,0,1,1};draw(v,d->texture,rect,d->flip);v->rendered_frames++;
  }
@@ -947,10 +951,24 @@ static void aspect_toggled(GtkCheckButton *button,Viewer *v) {
  v->stretch=!gtk_check_button_get_active(button);v->have_position=FALSE;
  gtk_gl_area_queue_render(GTK_GL_AREA(v->area));gtk_widget_grab_focus(v->area);
 }
+static void zoom_changed(GObject *object,GParamSpec *pspec,Viewer *v) {
+ (void)pspec;
+ const double levels[]={0,0.5,0.75,1,1.25,1.5,2};
+ guint selected=gtk_drop_down_get_selected(GTK_DROP_DOWN(object));
+ if (selected>=G_N_ELEMENTS(levels)) return;
+ release_input(v);v->zoom=levels[selected];v->have_position=FALSE;
+ gtk_widget_set_sensitive(v->aspect,selected==0);
+ gtk_gl_area_queue_render(GTK_GL_AREA(v->area));gtk_widget_grab_focus(v->area);
+}
 static gboolean stats(Viewer *v) {
  Viewer *d=displayed(v);
- char *text=g_strdup_printf("%u × %u · %s · guest resize: %s (%" G_GUINT64_FORMAT " accepted)",
-  d->width,d->height,d->last_dma?"DMA-BUF / OpenGL":"Software / OpenGL",v->resize_failed?"unsupported/failed":v->auto_resize?"enabled":"off",v->resize_requests);
+ char zoom[32];
+ if (v->zoom) g_snprintf(zoom,sizeof zoom,"%.0f%%",v->zoom*100);
+ else g_strlcpy(zoom,v->stretch?"stretch":"fit",sizeof zoom);
+ const char *resize_state=v->resize_failed?"failed":!v->auto_resize?"off":
+  (d->requested_width && (d->requested_width!=d->width || d->requested_height!=d->height))?"requested / not applied":"matched";
+ char *text=g_strdup_printf("%u × %u · zoom: %s · %s · guest resize: %s (%" G_GUINT64_FORMAT " requests sent)",
+  d->width,d->height,zoom,d->last_dma?"DMA-BUF / OpenGL":"Software / OpenGL",resize_state,v->resize_requests);
  gtk_label_set_text(GTK_LABEL(v->status),text);g_free(text);
  g_printerr("{\"event\":\"statistics\",\"dmabufFrames\":%" G_GUINT64_FORMAT ",\"softwareFrames\":%" G_GUINT64_FORMAT ",\"renderedFrames\":%" G_GUINT64_FORMAT "}\n",d->dma_frames,d->software_frames,v->rendered_frames);return G_SOURCE_CONTINUE;
 }
@@ -991,7 +1009,7 @@ int main(int argc,char **argv) {
  const char *version_error=gtk_check_version(4,8,0);
  if (version_error) {g_printerr("GTK 4.8 or newer is required: %s\n",version_error);return 1;}
  configure_gl();
- if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 12");return 0;}
+ if (argc==2 && !strcmp(argv[1],"--version")) {puts("winboat-helios-viewer 13");return 0;}
  if (argc==2 && !strcmp(argv[1],"--check-gl")) {
   if (!gtk_init_check()) {g_printerr("GTK cannot open the host X11/Wayland display.\n");return 1;}
   GtkWidget *window=gtk_window_new(),*area=display_area();
@@ -1022,6 +1040,12 @@ int main(int argc,char **argv) {
   Viewer geometry={.width=1920,.height=1080};int x,y,w,h;
   viewport(&geometry,800,600,&x,&y,&w,&h);g_assert_cmpint(w,==,800);g_assert_cmpint(h,==,450);g_assert_cmpint(y,==,75);
   geometry.stretch=TRUE;viewport(&geometry,800,600,&x,&y,&w,&h);g_assert_cmpint(h,==,600);g_assert_cmpint(y,==,0);
+  geometry.zoom=1;viewport(&geometry,800,600,&x,&y,&w,&h);g_assert_cmpint(w,==,1920);g_assert_cmpint(h,==,1080);g_assert_cmpint(x,==,-560);
+  /* A 100% physical zoom on a HiDPI display uses half as many logical units.
+   * Render and pointer conversion share exactly this same rectangle. */
+  viewport_at_scale(&geometry,800,600,2,&x,&y,&w,&h);g_assert_cmpint(w,==,960);g_assert_cmpint(h,==,540);g_assert_cmpint(x,==,-80);
+  geometry.width=3840;geometry.height=2160;geometry.zoom=0.5;
+  viewport_at_scale(&geometry,800,600,2,&x,&y,&w,&h);g_assert_cmpint(w,==,960);g_assert_cmpint(h,==,540);
   Viewer check={.qemu_uid=1234};GCredentials *credentials=g_credentials_new();
   g_assert_true(g_credentials_set_unix_user(credentials,1234,NULL));
   g_assert_true(authorize_qemu(NULL,NULL,credentials,&check));check.qemu_uid=5678;
@@ -1066,10 +1090,16 @@ int main(int argc,char **argv) {
  gtk_widget_set_tooltip_text(attention,"Send Ctrl+Alt+Delete to Windows");
  gtk_header_bar_pack_start(GTK_HEADER_BAR(bar),attention);gtk_header_bar_pack_end(GTK_HEADER_BAR(bar),full);
  GtkWidget *resize=gtk_check_button_new_with_label("Resize guest"),*aspect=gtk_check_button_new_with_label("Keep aspect");
+ v.aspect=aspect;
  gtk_check_button_set_active(GTK_CHECK_BUTTON(aspect),TRUE);
- gtk_widget_set_tooltip_text(resize,"Request window resolution from Windows; requires guest driver support.");
+ gtk_widget_set_tooltip_text(resize,"Send a window-size hint. The bundled Helios driver uses its startup resolution; choose it in WinBoat Configuration and restart the VM.");
  gtk_header_bar_pack_start(GTK_HEADER_BAR(bar),resize);gtk_header_bar_pack_start(GTK_HEADER_BAR(bar),aspect);
  gtk_header_bar_pack_start(GTK_HEADER_BAR(bar),display_selector(&v));
+ const char *zoom_levels[]={"Fit","50%","75%","100%","125%","150%","200%",NULL};
+ GtkWidget *zoom=gtk_drop_down_new_from_strings(zoom_levels);
+ gtk_widget_set_tooltip_text(zoom,"Display zoom only. Fixed percentages use physical pixels and centre/crop pictures larger than the window. Fit shows the complete Windows desktop.");
+ gtk_header_bar_pack_start(GTK_HEADER_BAR(bar),zoom);
+ g_signal_connect(zoom,"notify::selected",G_CALLBACK(zoom_changed),&v);
  g_signal_connect(resize,"toggled",G_CALLBACK(resize_toggled),&v);g_signal_connect(aspect,"toggled",G_CALLBACK(aspect_toggled),&v);
  g_signal_connect(v.area,"resize",G_CALLBACK(resized),&v);
  if (smoke) gtk_check_button_set_active(GTK_CHECK_BUTTON(resize),TRUE);

@@ -102,6 +102,21 @@ int main(void) {
  }
  upload_software(&v,0,0,2,2,12,TRUE,padded);
  draw(&v,v.texture,full,TRUE);expect_corners(fbo);
+ /* Reallocate real textures across HD, odd/padded rows, UHD and back down.
+  * Presentation must retain orientation while scaling to a small viewport. */
+ const unsigned extents[][2]={{1920,1080},{1366,768},{3840,2160},{1280,800}};
+ for(unsigned mode=0;mode<G_N_ELEMENTS(extents);mode++) {
+  unsigned width=extents[mode][0],height=extents[mode][1],stride=width*4+8;
+  guint8 *pixels=g_malloc0((gsize)stride*height);
+  for(unsigned y=0;y<height;y++) for(unsigned x=0;x<width;x++) {
+   const guint8 *color=software[(y>=height/2)*2+(x>=width/2)];
+   guint8 *pixel=pixels+(gsize)y*stride+x*4;
+   pixel[0]=color[2];pixel[1]=color[1];pixel[2]=color[0];pixel[3]=255;
+  }
+  texture_size(&v,width,height);upload_software(&v,0,0,width,height,stride,TRUE,pixels);g_free(pixels);
+  glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,4,4);
+  draw(&v,v.texture,full,TRUE);expect_corners(fbo);
+ }
  /* Real EGLImage binding, independently of DMA-BUF availability in Xvfb.
   * A stale GL error must not make a valid imported image look unsupported. */
  discard_source(&v);

@@ -7,6 +7,7 @@ set -Eeuo pipefail
 [[ "$HELIOS" == 1 ]] || { echo 'Use the standard Windows image when Helios is disabled.' >&2; exit 1; }
 [[ "$RENDERNODE" =~ ^/dev/dri/renderD[0-9]+$ ]] || { echo 'Invalid DRM render node.' >&2; exit 1; }
 [[ -c "$RENDERNODE" && -r "$RENDERNODE" && -w "$RENDERNODE" ]] || { echo "Helios cannot access $RENDERNODE" >&2; exit 1; }
+source /opt/helios/display-resolution.sh
 # dockur's network/config stages use DISPLAY independently of QEMU's backend:
 # reserve the console ports and remove msg.html when preinstallation finishes.
 # Keep dockur's HTTP status/installation endpoint active in both modes.
@@ -35,12 +36,12 @@ if [[ "$bootstrap" == auto ]]; then
 fi
 case "$bootstrap" in
     1|yes)
-        DISPLAY_OPTS+=' -device VGA,id=helios-bootstrap'
+        DISPLAY_OPTS+=" -device VGA,id=helios-bootstrap,xres=$HELIOS_DISPLAY_WIDTH,yres=$HELIOS_DISPLAY_HEIGHT,vgamem_mb=64"
         echo 'Helios: bootstrap VGA enabled for Windows Setup/AME; Helios GPU remains attached.' ;;
     0|no) ;;
     *) echo 'Invalid HELIOS_BOOTSTRAP_DISPLAY (use auto, 1/yes or 0/no).' >&2; exit 1 ;;
 esac
-DISPLAY_OPTS+=" -device virtio-gpu-gl-pci,id=heliosgpu,venus=on,blob=on,hostmem=8G,max_hostmem=8G"
+DISPLAY_OPTS+=" -device virtio-gpu-gl-pci,id=heliosgpu,venus=on,blob=on,hostmem=8G,max_hostmem=8G,xres=$HELIOS_DISPLAY_WIDTH,yres=$HELIOS_DISPLAY_HEIGHT"
 # The D-Bus GL context only accepts D-Bus listeners. Registering VNC against
 # it aborts QEMU at startup. EGL-headless supplies the 2D readback VNC needs.
 if [[ "${HELIOS_DISPLAY:-novnc}" == novnc ]]; then

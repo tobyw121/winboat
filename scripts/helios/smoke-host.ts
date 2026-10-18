@@ -24,7 +24,7 @@ const display = docker(['run', '--rm', '-i', '--network', 'none', '--device', '/
     '--entrypoint', 'bash', HELIOS_IMAGE, '-s'], startup);
 assert.ok(display.includes('venus=on,blob=on'));
 assert.ok(display.includes('-vnc :0,websocket=5700'));
-assert.ok(display.includes('-device VGA,id=helios-bootstrap -device virtio-gpu-gl-pci'));
+assert.ok(display.includes('-device VGA,id=helios-bootstrap,xres=1280,yres=800,vgamem_mb=64 -device virtio-gpu-gl-pci'));
 assert.ok(display.includes('memory-backend-memfd,id=helios-ram,size=128M,share=on'));
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'winboat-display-args-'));
 const socket = net.createServer();
@@ -37,7 +37,7 @@ try {
     assert.ok(local.includes('dbus,addr=unix:path=/run/helios-display/bus,gl=on,rendernode=/dev/dri/renderD128'));
     assert.ok(!local.includes('-vnc '), 'Native D-Bus GL cannot register a VNC listener');
     assert.ok(local.includes('venus=on,blob=on'));
-    assert.ok(local.includes('-device VGA,id=helios-bootstrap -device virtio-gpu-gl-pci'));
+    assert.ok(local.includes('-device VGA,id=helios-bootstrap,xres=1280,yres=800,vgamem_mb=64 -device virtio-gpu-gl-pci'));
 } finally {
     await new Promise<void>(resolve => socket.close(() => resolve()));
     fs.rmSync(temporary, { recursive: true });

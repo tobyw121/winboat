@@ -21,11 +21,15 @@ if [[ "${HELIOS_DISPLAY:-novnc}" == dbus ]]; then
 else
     [[ "$DISPLAY_OPTS" == *'-display egl-headless,'* && "$DISPLAY_OPTS" == *'-vnc :0,websocket=5700'* ]]
 fi
-[[ "$DISPLAY_OPTS" == *'-device VGA,id=helios-bootstrap -device virtio-gpu-gl-pci'* ]]
+[[ "$DISPLAY_OPTS" == *"-device VGA,id=helios-bootstrap,xres=$HELIOS_DISPLAY_WIDTH,yres=$HELIOS_DISPLAY_HEIGHT,vgamem_mb=64 -device virtio-gpu-gl-pci"* ]]
 # A ready marker only belongs to a confirmed, matching Helios installation.
 printf '%s\n' "$HELIOS_REVISION" > "$STORAGE/.winboat-helios-ready"
 source /run/display.sh
-[[ "$DISPLAY_OPTS" != *'VGA,id=helios-bootstrap'* ]]
+if [[ "${HELIOS_DISPLAY:-novnc}" == dbus ]]; then
+    [[ "$DISPLAY_OPTS" == *'VGA,id=helios-bootstrap'* ]]
+else
+    [[ "$DISPLAY_OPTS" != *'VGA,id=helios-bootstrap'* ]]
+fi
 printf 'stale-revision\n' > "$STORAGE/.winboat-helios-ready"
 source /run/display.sh
 [[ "$DISPLAY_OPTS" == *'VGA,id=helios-bootstrap'* ]]

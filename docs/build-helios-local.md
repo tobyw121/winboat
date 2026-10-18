@@ -81,20 +81,31 @@ Das Build-Skript erstellt dafür zusätzlich `winboat/atlas:0.5.0-hotfix`;
 das Helios-Image enthält dieselben Offline-Werkzeuge. Das Atlas-Playbook ist
 einschließlich Prüfsumme und Lizenz im Repository und AppImage enthalten.
 
+## Auflösung und Skalierung
+
+Unter **Configuration → Windows resolution** lässt sich die Startgröße von
+1024×768 bis 3840×2160 auswählen. Speichern startet die VM neu.
+Local Desktop (Viewer 13) bietet Fit und Zoomstufen von 50 bis 200 Prozent;
+die tatsächliche Bildgröße erscheint unten im Fenster. Der mitgelieferte
+Windows-Treiber übernimmt die ausgewählte Auflösung beim Gerätestart;
+ein dynamischer Windows-Moduswechsel ist damit noch nicht implementiert.
+Details: [Local Desktop](helios-local-display.md#startauflösung-und-zoom-viewer-13).
+
 ## Grafikprobleme beim Start
 
 ### Kein Bild während Windows Setup oder AME
 
 `Display output is not active` kann auftreten, wenn nur die Helios-GPU vorhanden
-ist, deren Windows-Treiber erst später installiert wird. Die Runtime `glvnd-v3`
+ist, deren Windows-Treiber erst später installiert wird. Die Runtime `glvnd-v4`
 fügt deshalb wie der upstream Helios-Installer einen Standard-VGA-Adapter vor
 der Helios-GPU hinzu. noVNC und der GTK-Viewer zeigen während der Einrichtung
 dessen Konsole 0. Die Helios-GPU bleibt angeschlossen.
 
 Nach geprüftem Gaststatus `finished` mit `installed=true` speichert der aktuelle
 WinBoat-Installer atomar `.winboat-helios-ready` im VM-Speicherverzeichnis. Beim
-nächsten Containerstart entfernt die Runtime den VGA-Adapter, sofern die
-Revision im Marker genau passt. Sie unterbricht oder startet Windows dafür
+nächsten Containerstart entfernt die Runtime im Browser-Modus den VGA-Adapter,
+sofern die Revision im Marker genau passt. Local Desktop behält VGA als
+Rückfallkonsole. Sie unterbricht oder startet Windows dafür
 nicht automatisch neu. Fehlende, veraltete und verlinkte Marker behalten VGA.
 
 `HELIOS_BOOTSTRAP_DISPLAY=auto` ist der Standard; `1`/`yes` erzwingt VGA,

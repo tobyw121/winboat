@@ -8,12 +8,40 @@ import { parse } from 'yaml';
 import { reactive, ref, isProxy } from 'vue';
 import { HELIOS_REVISION, HELIOS_GUEST_REVISION, HELIOS_IMAGE, configureHelios, validateHeliosProgress } from '../src/shared/helios';
 import { verifyBundle } from '../scripts/helios/bundle';
+import { HELIOS_RESOLUTIONS, configureHeliosResolution, heliosResolution } from '../src/shared/helios-resolution';
 
 const service = () => ({
     image: 'ghcr.io/dockur/windows:5.07',
     environment: { ARGUMENTS: '-qmp tcp:0.0.0.0:7149,server,wait=off', VIRGL: '1', PASSWORD: 'local-test-value' },
     devices: ['/dev/kvm', '/dev/dri:/dev/dri', '/dev/snd:/dev/snd'],
     volumes: ['disk:/storage'], ports: ['3389:3389/tcp'],
+});
+
+test('startup resolution presets survive Compose reload and reject executable input', async () => {
+    const {spawnSync} = await import('node:child_process');
+    const {stringify} = await import('yaml');
+    const original = configureHelios(service(), true, '/dev/dri/renderD128');
+    const before = JSON.stringify(original);
+    assert.equal(heliosResolution(original), '1280x800');
+    for (const mode of HELIOS_RESOLUTIONS) {
+        const updated = configureHeliosResolution(reactive(original), mode.key);
+        const reloaded = parse(stringify(updated));
+        assert.equal(heliosResolution(reloaded), mode.key);
+        assert.deepEqual(updated.volumes, original.volumes);
+        assert.equal(updated.environment.ARGUMENTS, original.environment.ARGUMENTS);
+        assert.equal(JSON.stringify(original), before);
+        const result = spawnSync('bash', ['-c', 'source helios/host/display-resolution.sh; printf "%s:%s" "$HELIOS_DISPLAY_WIDTH" "$HELIOS_DISPLAY_HEIGHT"'],
+            {env:{...process.env,HELIOS_DISPLAY_WIDTH:String(mode.width),HELIOS_DISPLAY_HEIGHT:String(mode.height)},encoding:'utf8'});
+        assert.equal(result.status, 0, result.stderr);
+        assert.equal(result.stdout, `${mode.width}:${mode.height}`);
+    }
+    assert.throws(() => configureHeliosResolution(original, '1920x1080 -device evil'));
+    assert.throws(() => configureHeliosResolution(service(), '1920x1080'));
+    for (const width of ['1920 -device evil','0','8192','1920\n']) {
+        const result = spawnSync('bash',['-c','source helios/host/display-resolution.sh'],
+            {env:{...process.env,HELIOS_DISPLAY_WIDTH:width,HELIOS_DISPLAY_HEIGHT:'1080'}});
+        assert.notEqual(result.status, 0);
+    }
 });
 
 test('installation and settings accept Vue proxies without retaining mutable source references', () => {
