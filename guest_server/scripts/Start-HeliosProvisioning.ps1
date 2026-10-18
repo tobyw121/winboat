@@ -56,12 +56,21 @@ function Restart-HeliosProvisioning($Guard,[DateTime]$Boot,[string]$State) {
     & shutdown.exe /r /t 15 /d p:2:4 /c 'WinBoat: completing the selected Helios driver installation'
     if ($LASTEXITCODE -ne 0) {throw 'Windows refused the Helios provisioning restart.'}
 }
+function Invoke-HeliosPackageVerification([string]$Verify) {
+    & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $Verify | Out-Null
+    return $LASTEXITCODE -eq 0
+}
 function Assert-HeliosInstalled {
     if (-not (Test-Path -LiteralPath (Join-Path $env:ProgramData 'Helios\install-state.json') -PathType Leaf)) {
         throw 'Helios reported completion without an installed driver state.'
     }
     $manifest = Get-Content -LiteralPath (Join-Path $env:ProgramData 'Helios\manifest.json') -Raw | ConvertFrom-Json
     if ($manifest.source.helios -ne $expectedRevision) {throw 'Installed Helios source identity does not match the selected stack.'}
+    # A state file is written before registry setup finishes. It is not a
+    # completion receipt: re-run the installed package's full read-only verifier.
+    $verify=Join-Path $env:ProgramData 'Helios\Verify-Helios.ps1'
+    if (-not (Test-Path -LiteralPath $verify -PathType Leaf)) {throw 'The completed Helios package verifier is missing.'}
+    if (-not (Invoke-HeliosPackageVerification $verify)) {throw 'Helios package, API registration or driver verification failed; installation is not complete.'}
 }
 function Complete-HeliosRestart([DateTime]$Boot) {
     # Recover only a restart receipt from an earlier boot. A loaded miniport
@@ -210,6 +219,10 @@ function Invoke-HeliosEnsure([string]$Install) {
     # Service startup recovers a missed OEM registration. Atlas owns its handoff
     # until OOBE is complete; never restart Windows in the middle of AME.
     if (-not (Test-HeliosSelected $Install)) {return}
+    if (Test-Path -LiteralPath $statusPath) {
+        $prior=Get-Content -LiteralPath $statusPath -Raw | ConvertFrom-Json
+        if ($prior.status -eq 'failed') {return} # Explicit recovery owns retries.
+    }
     # Verify before the legacy Atlas handoff branch: an already installed
     # driver with no resume task otherwise never reaches this completion check.
     if (Invoke-HeliosRestartVerification $Install) {return}

@@ -71,6 +71,21 @@ Unbekannte oder mehrdeutige Geräte werden nicht als funktionsfähig ausgegeben.
 Die Abfrage des angemeldeten Desktops bleibt ein separater nativer Worker;
 die tatsächliche CPU-Entlastung muss im betroffenen Gast gemessen werden.
 
+## Abschluss der Einrichtung
+
+Ein vorhandener `install-state.json` ist kein Erfolgsnachweis: Er wird bereits
+während der Installation geschrieben. Vor dem bestätigten Abschluss nach dem
+Neustart führt der WinBoat-Gastdienst den vollständigen mitinstallierten
+`Verify-Helios.ps1` erneut aus. Fehlende Laufzeitdateien oder API-Registrierungen
+verhindern dadurch die Abschlussmeldung. Fehlgeschlagene Einrichtungen werden
+bei einem Dienstneustart nicht automatisch erneut gestartet; Wiederholungen
+bleiben ausdrückliche Aktionen. Atlas behält seinen eigenen Abschlussbeleg und
+den bereits vorhandenen Neustart vor der ersten Helios-Installation.
+
+Die Paketprüfung läuft ohne GUI-Smoke-Tests als SYSTEM. Sie beweist Dateien,
+Registrierungen und Gerätezustand, aber keine sichtbaren Frames. Vulkan-WSI,
+D3D-Ausgabe, Anmeldung und Wiederherstellung sind zusätzliche Hardwareprüfungen.
+
 ## Grenzen der Prüfung
 
 Der Rettungs-Displaypfad wird ohne GPU ausgeführt getestet; die tatsächliche

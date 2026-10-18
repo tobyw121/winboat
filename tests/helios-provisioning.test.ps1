@@ -19,6 +19,11 @@ try {
     $global:heliosLaunches=0; $global:heliosRestarts=0; $global:heliosStarts=@(); $global:heliosRemoved=0; $global:heliosEnabled=0
     function Assert-HeliosAdministrator {}
     function Test-HeliosBootTestSigning {return $global:heliosTestSigning}
+    $global:heliosPackageValid=$true
+    function Invoke-HeliosPackageVerification([string]$Verify) {
+        if($Verify -ne (Join-Path $env:ProgramData 'Helios\Verify-Helios.ps1')){throw 'Unexpected verifier path'}
+        return $global:heliosPackageValid
+    }
     function bcdedit.exe {
         if (($args -join ' ') -ne '/set {current} testsigning on') {throw 'Wrong boot entry or test-signing operation.'}
         $global:heliosBcdCalls++; $global:LASTEXITCODE=$global:heliosBcdExit
@@ -88,7 +93,13 @@ try {
     $starts=$global:heliosStarts.Count
     $installed=Join-Path $temporary 'Helios'
     '{}' | Set-Content (Join-Path $installed 'install-state.json')
+    'verifier fixture' | Set-Content (Join-Path $installed 'Verify-Helios.ps1')
     @{source=@{helios=$expectedRevision}} | ConvertTo-Json | Set-Content (Join-Path $installed 'manifest.json')
+    $global:heliosPackageValid=$false
+    $blocked=$false
+    try {Assert-HeliosInstalled} catch {if($_.Exception.Message -notmatch 'verification failed'){throw};$blocked=$true}
+    if(-not $blocked){throw 'Incomplete API/runtime registration completed provisioning'}
+    $global:heliosPackageValid=$true
     Invoke-HeliosProvisioning '' $true
     if($global:heliosRemoved -ne 1 -or $global:heliosRestarts -ne 2 -or $global:heliosStarts.Count -ne ($starts+1) -or $global:heliosEnabled -ne 1){throw 'An active installer was duplicated or completion did not require the final boot.'}
     $savedGuard=Get-Content -LiteralPath $guardPath -Raw
@@ -191,6 +202,11 @@ try {
     '{"revision":"unrelated"}' | Set-Content (Join-Path $root 'helios-build.json')
     if(Test-HeliosSelected $selectedInstall){throw 'Unrelated receipt selected Helios'}
     $savedReceipt | Set-Content (Join-Path $root 'helios-build.json')
+    Write-HeliosProgress 'failed' 'recorded install failure'
+    $beforeStarts=$global:heliosStarts.Count
+    Invoke-HeliosEnsure $selectedInstall
+    if($global:heliosStarts.Count -ne $beforeStarts -or $global:heliosLaunches -ne $beforeLaunches -or
+        $global:heliosRestarts -ne $beforeRestarts){throw 'Service restart retried a failed graphics install'}
     Write-Host 'Provisioning, reboot bounds, false-completion rejection and verified stale restart recovery passed with Windows API fixtures.'
 } finally {
     $env:ProgramData=$previousData; $env:SystemRoot=$previousSystem

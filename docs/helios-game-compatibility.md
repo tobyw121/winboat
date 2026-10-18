@@ -12,9 +12,10 @@ Windows zunächst neu starten und anschließend das korrigierte Paket installier
 
 ## Vulkan und native D3D-Abfragen ab Quellversion 22.22.292.0
 
-Die Quelländerungen benötigen einen neuen Windows-Installer. Der bisher
-mitgelieferte Installer enthält diese Änderungen noch nicht; ein reiner
-AppImage-Neubau reicht nicht aus.
+Der mitgelieferte, in Windows-CI gebaute Installer 22.22.293.0 enthält diese
+Änderungen und die Erstinstallationskorrektur. Ein AppImage-Neubau übernimmt
+dieses Paket; eine vorhandene Windows-Installation benötigt anschließend die
+Aktualisierung des Gasttreibers. Der Paketbuild ist kein Hardware-Erfolgsnachweis.
 
 - Gastseitige Vulkan-WSI-/Speicher-Features werden vor dem Linux-Renderer aus
   dessen Gerätekette entfernt. Die vom Programm aktivierten Gast-Features
