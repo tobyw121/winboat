@@ -35,6 +35,12 @@ type graphicsMonitor struct {
 	viewerUnavailableUntil time.Time
 }
 
+func needsVGARecovery(pnp displayAdapters, mirror, unavailable bool) bool {
+	return (pnp.Helios.InstanceID != "" || mirror) &&
+		(mirror || unavailable || (pnp.Helios.State != "running" && pnp.Helios.State != "unknown")) &&
+		(pnp.Basic.State == "disabled" || pnp.Basic.State == "failed")
+}
+
 func newGraphicsMonitor() *graphicsMonitor {
 	return &graphicsMonitor{snapshot: displayAdapters{Helios: displayAdapter{State: "unknown"}, Basic: displayAdapter{State: "unknown"}, Recovery: "none"}}
 }

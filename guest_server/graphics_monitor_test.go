@@ -77,3 +77,24 @@ func TestViewerRecoveryHint(t *testing.T) {
 		t.Fatal("Recovered Helios did not clear its hint")
 	}
 }
+
+func TestNativePollingOnlySpawnsRecoveryWhenNeeded(t *testing.T) {
+	pnp := displayAdapters{Helios: displayAdapter{State: "running", InstanceID: "helios"}, Basic: displayAdapter{State: "running"}}
+	if needsVGARecovery(pnp, true, true) {
+		t.Fatal("Healthy VGA spawned PowerShell")
+	}
+	pnp.Basic.State = "disabled"
+	if needsVGARecovery(pnp, false, false) {
+		t.Fatal("Intentional VGA disable changed")
+	}
+	if !needsVGARecovery(pnp, false, true) {
+		t.Fatal("Viewer failure did not restore VGA")
+	}
+	pnp.Helios = displayAdapter{State: "unknown"}
+	if needsVGARecovery(pnp, false, false) {
+		t.Fatal("Unknown state triggered repair")
+	}
+	if !needsVGARecovery(pnp, true, false) {
+		t.Fatal("Selected mirror lost VGA recovery")
+	}
+}

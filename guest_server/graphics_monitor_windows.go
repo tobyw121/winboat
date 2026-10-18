@@ -47,13 +47,18 @@ func collectDisplayAdapters(ctx context.Context, viewerUnavailable bool) ([]byte
 	if enabled {
 		args = append(args, "-MirrorDesired")
 	}
-	data, err := exec.CommandContext(ctx, "powershell.exe", args...).Output()
+	pnp, err := collectNativeDisplayAdapters(ctx)
 	if err != nil {
 		return nil, err
 	}
-	var pnp displayAdapters
-	if err = json.Unmarshal(data, &pnp); err != nil {
-		return nil, err
+	if needsVGARecovery(pnp, enabled, viewerUnavailable || desktopRequiresFallback(desktop, probeErr)) {
+		data, recoveryErr := exec.CommandContext(ctx, "powershell.exe", args...).Output()
+		if recoveryErr != nil {
+			return nil, recoveryErr
+		}
+		if err = json.Unmarshal(data, &pnp); err != nil {
+			return nil, err
+		}
 	}
 	desktop, policy := displayTopology.reconcile(time.Now(), enabled, pnp, desktop, probeErr, viewerUnavailable, func(action string) (desktopSnapshot, error) {
 		applyCtx, cancel := context.WithTimeout(ctx, 7*time.Second)
@@ -68,7 +73,7 @@ func collectDisplayAdapters(ctx context.Context, viewerUnavailable bool) ([]byte
 	if rescue {
 		pnp.Policy = &topologyStatus{Goal: "vga-rescue", State: "held"}
 	}
-	data, err = json.Marshal(pnp)
+	data, err := json.Marshal(pnp)
 	if err != nil {
 		return nil, err
 	}

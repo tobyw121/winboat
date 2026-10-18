@@ -61,6 +61,16 @@ python3 scripts/helios/rescue-graphics.py --enable-helios
 Das bestätigt die Geräteaktivierung, nicht die fehlerfreie Grafikdarstellung.
 Falls der Dienst fehlt oder nicht antwortet, den Host-Rettungsstart verwenden.
 
+## Hintergrundabfragen
+
+Der Gastdienst liest den normalen PnP-Status über Windows SetupAPI und
+Configuration Manager. Im gesunden Zustand startet der Fünf-Sekunden-Monitor
+dafür keine PowerShell-/WMI-Prozesse mehr. Eine notwendige VGA-Wiederherstellung
+bleibt eine feste, serialisierte PowerShell-Aktion mit vorhandener Wartezeit.
+Unbekannte oder mehrdeutige Geräte werden nicht als funktionsfähig ausgegeben.
+Die Abfrage des angemeldeten Desktops bleibt ein separater nativer Worker;
+die tatsächliche CPU-Entlastung muss im betroffenen Gast gemessen werden.
+
 ## Grenzen der Prüfung
 
 Der Rettungs-Displaypfad wird ohne GPU ausgeführt getestet; die tatsächliche
