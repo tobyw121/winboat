@@ -22,7 +22,7 @@ function Convert-HeliosCrashEvent($Event) {
     $data = @{}
     foreach ($entry in @($xml.Event.EventData.Data)) { $data[$entry.GetAttribute('Name')] = [string]$entry.InnerText }
     $app = [string]$data['AppName']; $module = [string]$data['ModuleName']
-    if ($app -notmatch '(?i)(furmark|icarus|^client\.exe$)' -and
+    if ($app -notmatch '(?i)(furmark|icarus|^(client|dwm)\.exe$)' -and
         $module -notmatch '(?i)^(helios_umd.*|vulkan_virtio|plugin_gxc_vulkan.*)\.dll$') { return $null }
     $result = [ordered]@{ timeUtc=$Event.TimeCreated.ToUniversalTime().ToString('o') }
     foreach ($name in @('AppName','ModuleName','ExceptionCode','FaultingOffset','ProcessId')) {
@@ -63,7 +63,7 @@ function Get-HeliosApplicationDiagnostics {
         if ($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*') { $errors += 'Application crash events unavailable' }
     }
     try {
-        foreach ($appProcess in @(Get-Process -Name 'furmark','icarus*','client' -ErrorAction SilentlyContinue | Select-Object -First 4)) {
+        foreach ($appProcess in @(Get-Process -Name 'furmark','icarus*','client','dwm' -ErrorAction SilentlyContinue | Select-Object -First 4)) {
             $modules = @($appProcess.Modules | Where-Object { $_.ModuleName -match '^(helios_umd.*|vulkan_virtio|vulkan-1|libgallium_wgl|d3d9|d3d11|d3d12|dxgi)\.dll$' } | Select-Object -First 6 | ForEach-Object {
                 $path = [string]$_.FileName; $version = [string]$_.FileVersionInfo.FileVersion
                 [ordered]@{ name=[string]$_.ModuleName; path=$path.Substring(0,[Math]::Min(384,$path.Length)); version=$version.Substring(0,[Math]::Min(64,$version.Length)) }

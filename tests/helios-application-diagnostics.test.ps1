@@ -11,6 +11,9 @@ try {
     $entry | Add-Member ScriptMethod ToXml { '<Event><EventData><Data Name="AppName">furmark.exe</Data><Data Name="ModuleName">plugin_gxc_vulkan2_x64.dll</Data><Data Name="ExceptionCode">c0000005</Data><Data Name="FaultingOffset">11444</Data><Data Name="AppPath">secret-command-line</Data><Data Name="PackageFullName" /></EventData></Event>' }
     $crash = Convert-HeliosCrashEvent $entry
     if ($crash.AppName -ne 'furmark.exe' -or $crash.ExceptionCode -ne 'c0000005' -or ($crash | ConvertTo-Json) -match 'secret') { throw 'Crash field filtering failed' }
+    $entry | Add-Member ScriptMethod ToXml { '<Event><EventData><Data Name="AppName">dwm.exe</Data><Data Name="ModuleName">d3d11.dll</Data><Data Name="ExceptionCode">c0000005</Data><Data Name="AppPath">secret-desktop-path</Data></EventData></Event>' } -Force
+    $desktopCrash = Convert-HeliosCrashEvent $entry
+    if ($desktopCrash.AppName -ne 'dwm.exe' -or $desktopCrash.ModuleName -ne 'd3d11.dll' -or ($desktopCrash | ConvertTo-Json) -match 'secret') { throw 'Desktop crash filtering failed' }
     $entry | Add-Member ScriptMethod ToXml { '<Event><EventData><Data Name="AppName">unrelated.exe</Data><Data Name="ModuleName">unrelated.dll</Data></EventData></Event>' } -Force
     if ($null -ne (Convert-HeliosCrashEvent $entry)) { throw 'Unrelated app captured' }
     # Failed/missing Windows facilities must not erase the other diagnostics.
