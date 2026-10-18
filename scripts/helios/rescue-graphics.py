@@ -14,6 +14,11 @@ import urllib.request
 ROOT = Path(__file__).resolve().parents[2]
 
 
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, response, code, message, headers, new_url):
+        raise urllib.error.URLError('The local guest API unexpectedly redirected')
+
+
 def docker_json(*args):
     return json.loads(subprocess.check_output(['docker', *args], text=True))
 
@@ -25,7 +30,7 @@ def guest_action(container, action):
         raise RuntimeError('Invalid guest API port')
     request = urllib.request.Request(f'http://127.0.0.1:{port}/graphics/rescue', data=b'', method='POST',
         headers={'X-WinBoat-Recovery': action})
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
     try:
         with opener.open(request, timeout=60) as response:
             return json.load(response)

@@ -92,3 +92,41 @@ Der Rettungs-Displaypfad wird ohne GPU ausgeführt getestet; die tatsächliche
 Compose-Zusammenführung wird gegen unveränderte Datenträger, Ports und Geräte
 geprüft. Anmeldung, Treiberdeaktivierung und Wiederanlauf auf der betroffenen
 RTX 2070 müssen im echten Gast bestätigt werden.
+
+## Grafikbericht und Hardware-Abnahme
+
+```bash
+python3 scripts/helios/diagnose-graphics.py
+```
+
+Der Bericht enthält den aktiven Container/Image-Identifier, den lokalen
+Installer-Beleg, Gast-/Treiberzustände und strukturierte Transportfehler aus
+den letzten 300 Container-Logzeilen. Aus den Logs werden ausschließlich feste
+numerische Fehlerfelder übernommen, keine beliebigen Meldungen oder Zugangsdaten.
+Auch Fehlerantworten der Guest API bleiben erhalten. Die Terminal-Ausgabe zeigt
+den vollständigen Bericht; die private JSON-Datei bleibt die Grundlage zum Teilen.
+
+Ein DMA-BUF-Größenkonflikt ist weiterhin ein abgewiesener Import. Die Änderung
+interpretiert einen unbekannten Modifier nicht als LINEAR und erfindet keine
+passende Speichergröße. Vor einer Transportkorrektur muss auf der betroffenen
+GPU geklärt werden, welcher Produzent welchen Buffer tatsächlich exportiert.
+
+Folgende Prüfungen sind getrennte Abnahmeschritte auf einem entbehrlichen
+Windows-Testgast mit gesicherter Festplatte; sie werden nicht automatisch in
+einer produktiven Benutzer-VM ausgeführt:
+
+| Prüfung | Erfolgskriterium |
+| --- | --- |
+| Erstinstallation nach Atlas | AME abgeschlossen, anschließend Helios-Paketprüfung und bestätigter Neustart |
+| Upgrade/Reparatur | Originale Registry-Restorepunkte erhalten, keine fremden Werte gelöscht |
+| Abbruch während Einrichtung | Kein falscher Abschluss, keine automatische endlose Wiederholung |
+| Anmeldung/DWM | Stabile VGA-Anmeldung, Helios-Ausgabe sichtbar, keine neuen DWM-Abstürze |
+| Grafik-APIs | `Verify-Helios.ps1 -RunSmokeTests` aus einer angemeldeten Windows-Konsole, einschließlich x64/x86 und Vulkan-WSI |
+| Deaktivierung/Neustart | VGA bleibt bedienbar, automatische Einrichtung respektiert den Sperrzustand |
+| Gastdienst ausgefallen | Host-Rettungsstart bootet dieselbe Windows-Festplatte ohne Helios-Gerät |
+| Rückkehr | Ursprüngliche Host-Konfiguration wiederhergestellt, Reaktivierung nur ausdrücklich |
+
+Die Windows-CI führt die kontrollierten Zustands-/Registry-Tests unter
+PowerShell 5.1 und 7 aus, testet die echte native PnP-Abfrage und kompiliert
+den Gastdienst. WARP-Tests bleiben Softwarekontrollen. Diese Prüfungen sind
+kein Ersatz für die obige Hardware-Abnahme oder FurMark-/Icarus-Spieltests.

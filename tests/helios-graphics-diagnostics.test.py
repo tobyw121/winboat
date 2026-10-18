@@ -4,6 +4,7 @@ import io
 import json
 import pathlib
 import unittest
+import urllib.error
 from unittest.mock import patch
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -22,6 +23,27 @@ class Opener:
         return contextlib.closing(io.BytesIO(b'x' * 131073))
 
 class TestGraphicsCollector(unittest.TestCase):
+    def test_transport_contract_errors_are_numeric_and_bounded(self):
+        log = ('password=secret command=private\n'
+               'qemu: OPTIMAL DMA-BUF shape mismatch required=4587520 fd_size=4096000\n'
+               'qemu: glEGLImageTargetTexture2DOES failed: 0x502\n'
+               'qemu: EGL DMA-BUF import failed for fourcc=0x34325241 modifier=0x00ffffffffffffff\n'
+               'vkr: invalid device-local memory accounting: release=2048 used=0\n')
+        events = graphics.parse_transport_errors(log)
+        self.assertEqual(events[0], {'kind': 'buffer-size-mismatch', 'requiredBytes': 4587520, 'bufferBytes': 4096000})
+        self.assertEqual(len(events), 4)
+        self.assertNotIn('secret', json.dumps(events))
+        self.assertEqual(len(graphics.parse_transport_errors(log * 100)), 32)
+
+    def test_failed_api_keeps_its_structured_reason(self):
+        class Failed:
+            def open(self, url, timeout):
+                raise urllib.error.HTTPError(url, 503, 'Unavailable', {}, io.BytesIO(b'{"message":"Missing installed manifest"}'))
+        with patch.object(graphics.subprocess, 'check_output', return_value='127.0.0.1:41000\n'):
+            result = graphics.collect('WinBoat', Failed())
+        self.assertEqual(result['graphics/helios']['response']['message'], 'Missing installed manifest')
+        self.assertEqual(result['graphics/helios']['httpStatus'], 503)
+
     def test_only_reads_local_api_and_retains_partial_failures(self):
         opener = Opener()
         with patch.object(graphics.subprocess, 'check_output', return_value='[::]:41000\n') as docker:

@@ -5,9 +5,54 @@ import datetime
 import json
 import os
 import pathlib
+import re
 import subprocess
 import urllib.error
 import urllib.request
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, response, code, message, headers, new_url):
+        raise urllib.error.URLError('The local guest API unexpectedly redirected')
+
+
+def parse_transport_errors(text):
+    events = []
+    patterns = (
+        ('buffer-size-mismatch', r'OPTIMAL DMA-BUF shape mismatch required=(\d+) fd_size=(\d+)', ('requiredBytes', 'bufferBytes')),
+        ('egl-image-error', r'glEGLImageTargetTexture2DOES failed: (0x[0-9a-fA-F]+)', ('glError',)),
+        ('egl-import-error', r'EGL DMA-BUF import failed for fourcc=(0x[0-9a-fA-F]+) modifier=(0x[0-9a-fA-F]+)', ('fourcc', 'modifier')),
+        ('memory-accounting-error', r'invalid device-local memory accounting: release=(\d+) used=(\d+)', ('releasedBytes', 'usedBytes')),
+    )
+    # Capture fixed numeric fields only, never arbitrary container log messages.
+    for line in text.splitlines():
+        for kind, pattern, names in patterns:
+            match = re.search(pattern, line)
+            if match:
+                event = {'kind': kind}
+                event.update({name: value if value.startswith('0x') else int(value)
+                              for name, value in zip(names, match.groups())})
+                events.append(event)
+    return events[-32:]
+
+
+def collect_host(container):
+    result = {}
+    try:
+        template = '{{json .Config.Image}}\n{{json .Image}}\n{{json .State.Status}}'
+        fields = subprocess.check_output(['docker', 'inspect', '--format', template, container], text=True, timeout=10).splitlines()
+        result.update(zip(('image', 'imageId', 'containerState'), map(json.loads, fields)))
+        logs = subprocess.run(['docker', 'logs', '--tail', '300', container], capture_output=True, text=True, timeout=10, check=True)
+        result['transportErrors'] = parse_transport_errors((logs.stdout + '\n' + logs.stderr)[-262144:])
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        result['error'] = type(error).__name__ + ': host graphics details unavailable'
+    root = pathlib.Path(__file__).resolve().parents[2]
+    try:
+        receipt = json.loads((root / 'resources/helios/helios-build.json').read_text())
+        result['bundledInstaller'] = {key: receipt.get(key) for key in ('sha256', 'winboatCommit', 'sourceLockSha256')}
+    except (OSError, ValueError):
+        result['bundleError'] = 'Local installer receipt unavailable'
+    return result
 
 
 def collect(container, opener=None):
@@ -17,7 +62,7 @@ def collect(container, opener=None):
     number = int(port[0].rsplit(':', 1)[1])
     if not 1 <= number <= 65535:
         raise RuntimeError('Invalid guest API port')
-    opener = opener or urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    opener = opener or urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
     result = {'collectedAtUtc': datetime.datetime.now(datetime.timezone.utc).isoformat()}
     for endpoint in ('version', 'graphics/diagnostics', 'graphics/helios'):
         try:
@@ -29,6 +74,15 @@ def collect(container, opener=None):
                 if not isinstance(data, dict):
                     raise ValueError('Expected a JSON object')
                 result[endpoint] = data
+        except urllib.error.HTTPError as error:
+            detail = {'error': str(error), 'httpStatus': error.code}
+            try:
+                raw = error.read(131073)
+                if len(raw) <= 131072:
+                    detail['response'] = json.loads(raw)
+            except (OSError, ValueError):
+                pass
+            result[endpoint] = detail
         except (urllib.error.URLError, TimeoutError, ValueError) as error:
             result[endpoint] = {'error': str(error)}
     return result
@@ -41,6 +95,7 @@ def main():
     args = parser.parse_args()
     try:
         result = collect(args.container)
+        result['host'] = collect_host(args.container)
         path = args.output or pathlib.Path.home() / '.winboat/diagnostics' / (
             'graphics-' + datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d-%H%M%S-%f') + '.json')
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -52,8 +107,7 @@ def main():
         application = result.get('graphics/diagnostics', {}).get('driver', {}).get('application')
         if application is None:
             print('Application diagnostics unavailable; update the WinBoat guest service for feature/crash details.')
-        else:
-            print(json.dumps(application, indent=2, ensure_ascii=False))
+        print(json.dumps(result, indent=2, ensure_ascii=False))
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
         parser.exit(1, str(error) + '\n')
 
