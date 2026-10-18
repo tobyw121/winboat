@@ -38,6 +38,12 @@ if ($lines.Count -ne 2 -or $lines[0] -ne '23:13:12.3456: Worker Start' -or $line
 Write-Host 'Read-only diagnostic script parsing and startup-log allowlist passed.'
 # Exercise the entire collector with OS-query fixtures; the real Windows state
 # still needs to be collected on the affected VM.
+# Windows PowerShell 5.1 uses the external CodeDOM compiler. Compile the
+# native helper before replacing SystemRoot and Windows query functions with
+# fixtures; the collector's process list below cannot invoke its native APIs.
+if ($env:OS -eq 'Windows_NT' -and -not ('WinBoat.AtlasProcessDiagnostics' -as [type])) {
+    Add-Type -Path (Join-Path $RepoRoot 'guest_server/scripts/AtlasProcessDiagnostics.cs')
+}
 function Get-CimInstance {
     param($ClassName, $Filter)
     if ($ClassName -eq 'Win32_UserAccount') { return [pscustomobject]@{SID='S-1-5-21-1-2-3-1000'; Disabled=$false} }
