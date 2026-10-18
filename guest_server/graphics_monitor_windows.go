@@ -14,6 +14,7 @@ import (
 )
 
 var displayTopology topologyController // collectDisplayAdapters is serialized by the monitor
+var restartVerificationAt time.Time
 
 func collectDisplayAdapters(ctx context.Context, viewerUnavailable bool) ([]byte, error) {
 	executable, err := os.Executable()
@@ -21,6 +22,19 @@ func collectDisplayAdapters(ctx context.Context, viewerUnavailable bool) ([]byte
 		return nil, err
 	}
 	script := filepath.Join(filepath.Dir(executable), "scripts", "Get-DisplayAdapters.ps1")
+	// Service startup can race the installer continuation. Retry verification
+	// while its receipt remains pending, without relaunching setup or restarting
+	// Windows. Only the serialized monitor owns this cooldown.
+	now := time.Now()
+	if !now.Before(restartVerificationAt) && heliosRestartPending(filepath.Dir(executable), os.Getenv("ProgramData")) {
+		restartVerificationAt = now.Add(30 * time.Second)
+		verifyCtx, verifyCancel := context.WithTimeout(ctx, 8*time.Second)
+		verifyScript := filepath.Join(filepath.Dir(executable), "scripts", "Start-HeliosProvisioning.ps1")
+		if _, verifyErr := exec.CommandContext(verifyCtx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", verifyScript, "-VerifyRestart").Output(); verifyErr != nil {
+			log.Printf("Helios restart verification: %v", verifyErr)
+		}
+		verifyCancel()
+	}
 	enabled := mirrorEnabled(filepath.Dir(executable), os.Getenv("ProgramData"))
 	desktopCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	desktop, probeErr := collectConsoleDesktop(desktopCtx)

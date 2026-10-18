@@ -233,6 +233,9 @@ func TestMirrorOnlyAfterSelectedInstallation(t *testing.T) {
 	state := filepath.Join(data, "Helios", "provisioning-status.json")
 	for _, status := range []string{`{"status":"waiting"}`, `{"status":"driver-restart-required"}`, `{"status":"failed"}`, `broken`} {
 		os.WriteFile(state, []byte(status), 0600)
+		if heliosRestartPending(install, data) != (status == `{"status":"driver-restart-required"}`) {
+			t.Fatal("restart verification must only inspect a selected pending restart", status)
+		}
 		if mirrorEnabled(install, data) {
 			t.Fatal("installation/OOBE was interrupted", status)
 		}
@@ -241,8 +244,32 @@ func TestMirrorOnlyAfterSelectedInstallation(t *testing.T) {
 	if !mirrorEnabled(install, data) {
 		t.Fatal("selected installed Helios was ignored")
 	}
+	if heliosRestartPending(install, data) {
+		t.Fatal("finished driver kept rechecking restart completion")
+	}
+	// Finishing a stale receipt must immediately activate the existing clone
+	// policy, including after Windows restores an extended layout on next boot.
+	for _, boot := range []int64{1000, 2000} {
+		controller := topologyController{}
+		calls := 0
+		pnp := displayAdapters{Helios: displayAdapter{State: "running"}, Basic: displayAdapter{State: "running"}}
+		desktop, policy := controller.reconcile(time.Unix(boot, 0), mirrorEnabled(install, data), pnp, topologyFixture("extend"), nil, false,
+			func(action string) (desktopSnapshot, error) {
+				calls++
+				if action != "clone" {
+					t.Fatal("healthy Helios did not request mirroring", action)
+				}
+				return topologyFixture("clone"), nil
+			})
+		if !clonedDesktop(desktop) || calls != 1 || policy.Goal != "mirror-helios-preferred" {
+			t.Fatal("extended Windows desktop was not automatically cloned", desktop, policy)
+		}
+	}
 	os.Remove(filepath.Join(install, "helios-enabled"))
 	if mirrorEnabled(install, data) {
 		t.Fatal("unselected machine was modified")
+	}
+	if heliosRestartPending(install, data) {
+		t.Fatal("unselected machine requested restart verification")
 	}
 }

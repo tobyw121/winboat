@@ -1,5 +1,5 @@
 # OEM-only orchestrator. The pinned official installer owns driver installation.
-param([string]$BundlePath, [switch]$Resume, [switch]$LibraryOnly, [switch]$Ensure)
+param([string]$BundlePath, [switch]$Resume, [switch]$LibraryOnly, [switch]$Ensure, [switch]$VerifyRestart)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Get-WinBoatFileSha256.ps1')
@@ -84,6 +84,37 @@ function Complete-HeliosRestart([DateTime]$Boot) {
     Write-HeliosProgress 'finished' 'Helios restart verified: selected driver and display function are running in the new Windows boot.'
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
     return $true
+}
+function Test-HeliosAtlasReady([string]$Install) {
+    $atlas = Join-Path $env:ProgramData 'WinBoat\Atlas'
+    if (-not (Test-Path -LiteralPath (Join-Path $Install 'atlas-enabled')) -and
+        -not (Test-Path -LiteralPath (Join-Path $atlas 'oobe-mode.json'))) {return $true}
+    try {
+        $state = Get-Content -LiteralPath (Join-Path $atlas 'status.json') -Raw | ConvertFrom-Json
+        return $state.status -eq 'finished'
+    } catch {return $false}
+}
+function Invoke-HeliosRestartVerification([string]$Install) {
+    # This operation can finish a stale receipt, never install or reboot.
+    # An AME marker may remain forever; its presence alone must not suppress
+    # verification after the playbook has actually completed.
+    if (-not (Test-Path -LiteralPath (Join-Path $Install 'helios-enabled')) -or
+        -not (Test-HeliosAtlasReady $Install)) {return $false}
+    $verificationLock = New-Object Threading.Mutex($false,'Global\WinBoatHeliosProvisioning')
+    $verificationOwned = $false
+    try {
+        try {$verificationOwned=$verificationLock.WaitOne(0)} catch [Threading.AbandonedMutexException] {$verificationOwned=$true}
+        if (-not $verificationOwned) {return $false}
+        foreach ($name in @($taskName, 'HeliosGraphicsProvisioning')) {
+            $task = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+            if ($null -ne $task -and $task.State.ToString() -eq 'Running') {return $false}
+        }
+        $boot = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime()
+        return Complete-HeliosRestart $boot
+    } finally {
+        if ($verificationOwned) {$verificationLock.ReleaseMutex()}
+        $verificationLock.Dispose()
+    }
 }
 function Invoke-HeliosProvisioning([string]$Source,[bool]$Continue) {
     Assert-HeliosAdministrator
@@ -172,6 +203,9 @@ function Invoke-HeliosEnsure([string]$Install) {
     # Service startup recovers a missed OEM registration. Atlas owns its handoff
     # until OOBE is complete; never restart Windows in the middle of AME.
     if (-not (Test-Path -LiteralPath (Join-Path $install 'helios-enabled'))) {return}
+    # Verify before the legacy Atlas handoff branch: an already installed
+    # driver with no resume task otherwise never reaches this completion check.
+    if (Invoke-HeliosRestartVerification $Install) {return}
     $existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
     if (Test-Path -LiteralPath (Join-Path $env:ProgramData 'WinBoat\Atlas\oobe-mode.json')) {
         # Only an already registered handoff worker proves Atlas authorized the
@@ -185,8 +219,6 @@ function Invoke-HeliosEnsure([string]$Install) {
         }
     }
     if ($null -ne $existing -and $existing.State.ToString() -eq 'Running') {return}
-    $boot=(Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime()
-    if (Complete-HeliosRestart $boot) {return}
     # Re-stage an idle legacy worker from the updated API scripts before starting
     # it, so an old protected copy does not keep the previous boot logic.
 
@@ -205,6 +237,7 @@ function Invoke-HeliosEnsure([string]$Install) {
 if ($LibraryOnly) {return}
 $lock = $null; $owned = $false
 try {
+    if ($VerifyRestart) {Invoke-HeliosRestartVerification (Split-Path -Parent $PSScriptRoot) | Out-Null;return}
     if ($Ensure) {Invoke-HeliosEnsure (Split-Path -Parent $PSScriptRoot);return}
     # Registration must not hold the worker lock while starting that worker.
     if ($Resume) {
@@ -214,8 +247,10 @@ try {
     }
     Invoke-HeliosProvisioning $BundlePath ([bool]$Resume)
 } catch {
-    Write-HeliosProgress 'failed' $_.Exception.Message
-    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+    if (-not $VerifyRestart) {
+        Write-HeliosProgress 'failed' $_.Exception.Message
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+    }
     Write-Error $_
     exit 1
 } finally {

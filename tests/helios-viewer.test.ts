@@ -117,6 +117,7 @@ test('same-version legacy guest APIs update display recovery and automatic runti
     assert.equal(guestNeedsUpdate({version:'0.8.7',graphics_protocol:'old'},'0.8.7'),true);
     assert.equal(guestNeedsUpdate({version:'0.8.7',graphics_protocol:'helios-watchdog-v2'},'0.8.7'),true);
     assert.equal(guestNeedsUpdate({version:'0.8.7',graphics_protocol:'helios-watchdog-v3'},'0.8.7'),true);
+    assert.equal(guestNeedsUpdate({version:'0.8.7',graphics_protocol:'helios-watchdog-v5',runtime_protocol:GUEST_RUNTIME_PROTOCOL},'0.8.7'),true);
     assert.equal(guestNeedsUpdate({version:'0.8.7',graphics_protocol:GUEST_GRAPHICS_PROTOCOL},'0.8.7'),true);
     assert.equal(guestNeedsUpdate({version:'0.8.7',graphics_protocol:GUEST_GRAPHICS_PROTOCOL,runtime_protocol:'old'},'0.8.7'),true);
     assert.equal(guestNeedsUpdate({version:'0.8.7',graphics_protocol:GUEST_GRAPHICS_PROTOCOL,runtime_protocol:GUEST_RUNTIME_PROTOCOL},'0.8.7'),false);

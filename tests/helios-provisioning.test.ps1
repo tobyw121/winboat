@@ -155,6 +155,33 @@ try {
     Invoke-HeliosEnsure $selectedInstall
     $completed=Get-Content -LiteralPath $statusPath -Raw | ConvertFrom-Json
     if($completed.status -ne 'finished' -or $global:heliosLaunches -ne $beforeLaunches -or $global:heliosRestarts -ne $beforeRestarts){throw 'Missed restart receipt recovery reinstalled or rebooted Windows'}
+    # Regression: a permanent AME OOBE marker plus a missing resume task used
+    # to send an installed driver back to Atlas handoff before checking health.
+    $atlas=Join-Path $env:ProgramData 'WinBoat/Atlas'
+    New-Item -ItemType Directory -Force $atlas | Out-Null
+    '{}' | Set-Content (Join-Path $atlas 'oobe-mode.json')
+    '{"status":"applying"}' | Set-Content (Join-Path $atlas 'status.json')
+    Pending-PreviousBoot
+    if(Invoke-HeliosRestartVerification $selectedInstall){throw 'Restart verification bypassed active AME'}
+    '{"status":"finished"}' | Set-Content (Join-Path $atlas 'status.json')
+    $global:heliosResume=$null
+    function Get-ScheduledTask {
+        [CmdletBinding()]param($TaskName)
+        if($TaskName -eq 'HeliosGraphicsProvisioning'){return $global:heliosOfficial}
+        if($TaskName -eq 'WinBoatHeliosReboots'){return $global:heliosResume}
+    }
+    $global:heliosResume=[pscustomobject]@{State='Running'}
+    if(Invoke-HeliosRestartVerification $selectedInstall){throw 'Restart verification raced its resume worker'}
+    $global:heliosResume=$null
+    Invoke-HeliosEnsure $selectedInstall
+    $completed=Get-Content -LiteralPath $statusPath -Raw | ConvertFrom-Json
+    if($completed.status -ne 'finished' -or $global:heliosLaunches -ne $beforeLaunches -or $global:heliosRestarts -ne $beforeRestarts){throw 'Finished Atlas with a stale restart receipt did not unlock mirroring'}
+    # A periodic verification is safe even after the startup check missed a
+    # busy worker. It never invokes the installer or schedules another reboot.
+    Pending-PreviousBoot
+    if(-not (Invoke-HeliosRestartVerification $selectedInstall)){throw 'Idle post-boot verification did not recover a missed continuation'}
+    if(Invoke-HeliosRestartVerification $selectedInstall){throw 'Completed receipt was rewritten again'}
+    if($global:heliosLaunches -ne $beforeLaunches -or $global:heliosRestarts -ne $beforeRestarts){throw 'Verification installed or rebooted Windows'}
     Write-Host 'Provisioning, reboot bounds, false-completion rejection and verified stale restart recovery passed with Windows API fixtures.'
 } finally {
     $env:ProgramData=$previousData; $env:SystemRoot=$previousSystem

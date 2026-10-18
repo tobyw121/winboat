@@ -21,6 +21,17 @@ func mirrorEnabled(install, programData string) bool {
 	return err == nil && state["status"] == "finished"
 }
 
+func heliosRestartPending(install, programData string) bool {
+	if programData == "" {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(install, "helios-enabled")); err != nil {
+		return false
+	}
+	state, err := readHeliosJSON(filepath.Join(programData, "Helios", "provisioning-status.json"))
+	return err == nil && state["status"] == "driver-restart-required"
+}
+
 // One serial monitor owns this controller. No HTTP handler changes displays.
 // During a viewer failure, periodically retry cloning even if an old failure
 // hint is renewed: an inactive Helios cannot produce the frame clearing it.

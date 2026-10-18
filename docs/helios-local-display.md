@@ -676,6 +676,32 @@ Helios-Bild hebt `display-ready` diesen zeitlich begrenzten Hinweis wieder auf.
 Die API akzeptiert dabei keine Geräte-IDs oder Befehle aus der Anfrage; der
 Watchdog bearbeitet ausschließlich den erkannten Bootstrap-VGA-Adapter.
 
+### Veralteter Neustartstatus verhindert automatische Spiegelung
+
+Ein alter Beleg `driver-restart-required` hielt die Richtlinie bisher auf
+`installation-vga`, obwohl Helios nach einem späteren Boot bereits ein Bild
+ausgab. Insbesondere ein dauerhaft vorhandener AME-OOBE-Marker zusammen mit
+einer fehlenden Fortsetzungsaufgabe übersprang die Abschlussprüfung.
+
+Guest-Protokoll `helios-watchdog-v6` prüft diesen Beleg vor der alten
+Atlas-Übergabe und bei Bedarf alle 30 Sekunden erneut. Nur nach abgeschlossenem
+Atlas, bei untätigen Installer-Aufgaben, aktivem Testmodus, passender
+Treiberidentität, fehlerfreiem Helios-Gerät mit Display-Funktion und einem
+tatsächlich späteren Windows-Boot wird der Beleg auf `finished` gesetzt.
+Die Prüfung verwendet dieselbe Sperre wie der Installer; sie installiert nichts
+und fordert keinen Neustart an. Ein Fehler dieser periodischen Prüfung darf
+keinen Installer-Fehlerstatus schreiben oder seine Fortsetzungsaufgabe löschen.
+
+Anschließend aktiviert die vorhandene Anzeigesteuerung automatisch die
+Spiegelung, wenn Windows noch `extend` meldet. Local Desktop bevorzugt dabei
+den gesunden Helios-Ausgang; die vollständige VGA-Wiederherstellung bleibt für
+Ausfälle erhalten. Das gilt auch nach erneutem Start. Ein laufender Treiber
+allein überspringt weder Windows Setup noch AME und ersetzt keinen geforderten
+Treiberneustart.
+
+Die neue AppImage aktualisiert bestehende Gastdienste automatisch über die
+Protokollkennung. Für diese Änderung ist kein neues QEMU-Host-Image nötig.
+
 ### Freigabe des vorigen Bildpuffers deaktiviert die neue Ausgabe
 
 Beim Wechsel eines nativen DMA-BUF bindet Virtio-GPU zuerst den neuen Puffer
