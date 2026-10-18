@@ -40,7 +40,7 @@ Rettungsweg wieder aktivieren. Eine Windows-/Atlas-Neuinstallation ist unnötig.
 
 ## Gezielte Deaktivierung über die Guest API
 
-Mit Gast-Protokoll `helios-watchdog-v8` ist keine Windows-Anmeldung nötig:
+Mit Gast-Protokoll `helios-watchdog-v9` ist keine Windows-Anmeldung nötig:
 
 ```bash
 python3 scripts/helios/rescue-graphics.py --disable-helios
@@ -62,6 +62,13 @@ python3 scripts/helios/rescue-graphics.py --enable-helios
 
 Das bestätigt die Geräteaktivierung, nicht die fehlerfreie Grafikdarstellung.
 Falls der Dienst fehlt oder nicht antwortet, den Host-Rettungsstart verwenden.
+
+Ab `v9` deaktiviert der Rettungsaufruf außerdem die bekannten untätigen
+Installationsaufgaben, einschließlich `HeliosGraphicsProvisioning` des offiziellen
+Installers. Dieser liest WinBoats HKLM-Sperrwert selbst nicht. Laufende
+Installationen werden weiterhin nicht unterbrochen. Die Geräte-Reaktivierung
+startet diese alten Aufgaben nicht automatisch; eine nötige Paket-Reparatur
+bleibt eine separate ausdrückliche Aktion.
 
 ## Hintergrundabfragen
 

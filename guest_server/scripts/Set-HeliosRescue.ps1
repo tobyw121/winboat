@@ -16,11 +16,13 @@ function Get-HeliosRescueDevices {
 }
 function Invoke-HeliosRescue([string]$Operation) {
     if ($Operation -notin @('helios-disable','helios-enable')) { throw 'Unknown graphics recovery operation.' }
+    $idleTasks=@()
     foreach ($name in @('WinBoatHeliosReboots','WinBoatHeliosAfterAtlas','HeliosGraphicsProvisioning')) {
         $task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
         if ($null -ne $task -and $task.State.ToString() -eq 'Running') {
             return @{status='blocked';message='A graphics installation task is running. Wait for it to finish before rescue.'}
         }
+        if ($null -ne $task -and $task.State.ToString() -ne 'Disabled') { $idleTasks+=$name }
     }
     $devices=Get-HeliosRescueDevices
     if ($devices.basic.Count -ne 1 -or $devices.helios.Count -gt 1) {
@@ -32,6 +34,15 @@ function Invoke-HeliosRescue([string]$Operation) {
     # Persist the hold before any device change; failures leave automatic setup
     # and topology changes suppressed across service and Windows restarts.
     Set-HeliosRescueHold $true
+    if ($Operation -eq 'helios-disable') {
+        # The official installer has its own startup task and does not read
+        # WinBoat's hold. Pause all known idle continuations before changing PnP.
+        foreach ($name in $idleTasks) {
+            Disable-ScheduledTask -TaskName $name -ErrorAction Stop | Out-Null
+            $paused=Get-ScheduledTask -TaskName $name -ErrorAction Stop
+            if ($null -eq $paused -or $paused.State.ToString() -ne 'Disabled') { throw 'Installer continuation could not be paused.' }
+        }
+    }
     if ($devices.basic[0].ConfigManagerErrorCode -eq 22) {
         & pnputil.exe /enable-device $devices.basic[0].PNPDeviceID | Out-Null
         if ($LASTEXITCODE -eq 3010) { return @{status='restart-required';message='VGA needs a Windows restart; Helios was not changed.'} }
