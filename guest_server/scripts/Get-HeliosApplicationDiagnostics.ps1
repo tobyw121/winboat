@@ -20,7 +20,7 @@ function Read-HeliosFeatureFailures([string]$Path) {
 function Convert-HeliosCrashEvent($Event) {
     $xml = [xml]$Event.ToXml()
     $data = @{}
-    foreach ($entry in @($xml.Event.EventData.Data)) { $data[[string]$entry.Name] = [string]$entry.'#text' }
+    foreach ($entry in @($xml.Event.EventData.Data)) { $data[$entry.GetAttribute('Name')] = [string]$entry.InnerText }
     $app = [string]$data['AppName']; $module = [string]$data['ModuleName']
     if ($app -notmatch '(?i)(furmark|icarus|^client\.exe$)' -and
         $module -notmatch '(?i)^(helios_umd.*|vulkan_virtio|plugin_gxc_vulkan.*)\.dll$') { return $null }

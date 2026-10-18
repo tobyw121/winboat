@@ -8,7 +8,7 @@ try {
     $failures = @(Read-HeliosFeatureFailures $temporary)
     if ($failures.Count -ne 1 -or $failures[0].processId -ne 12 -or $failures[0].feature -ne 'VkPhysicalDeviceVulkan12Features.timelineSemaphore') { throw 'Bounded feature parsing failed' }
     $entry = [pscustomobject]@{ TimeCreated=[DateTime]::UtcNow }
-    $entry | Add-Member ScriptMethod ToXml { '<Event><EventData><Data Name="AppName">furmark.exe</Data><Data Name="ModuleName">plugin_gxc_vulkan2_x64.dll</Data><Data Name="ExceptionCode">c0000005</Data><Data Name="FaultingOffset">11444</Data><Data Name="AppPath">secret-command-line</Data></EventData></Event>' }
+    $entry | Add-Member ScriptMethod ToXml { '<Event><EventData><Data Name="AppName">furmark.exe</Data><Data Name="ModuleName">plugin_gxc_vulkan2_x64.dll</Data><Data Name="ExceptionCode">c0000005</Data><Data Name="FaultingOffset">11444</Data><Data Name="AppPath">secret-command-line</Data><Data Name="PackageFullName" /></EventData></Event>' }
     $crash = Convert-HeliosCrashEvent $entry
     if ($crash.AppName -ne 'furmark.exe' -or $crash.ExceptionCode -ne 'c0000005' -or ($crash | ConvertTo-Json) -match 'secret') { throw 'Crash field filtering failed' }
     $entry | Add-Member ScriptMethod ToXml { '<Event><EventData><Data Name="AppName">unrelated.exe</Data><Data Name="ModuleName">unrelated.dll</Data></EventData></Event>' } -Force
