@@ -138,6 +138,7 @@ Copy-Required (Join-Path $LoadersArtifact "OpenCL.dll") (Join-Path $loadersOut "
 Copy-Required (Join-Path $LoadersArtifact "x86\vulkan-1.dll") (Join-Path $loadersOut "x86\vulkan-1.dll")
 foreach ($probe in @(
     "vulkan-smoke.exe",
+    "vulkan-features.exe",
     "vulkan-wsi-probe.exe",
     "d3d11-smoke.exe",
     "d3d12-smoke.exe",
@@ -148,7 +149,7 @@ foreach ($probe in @(
 )) {
     Copy-Required (Join-Path $LoadersArtifact "smoke\$probe") (Join-Path $payload "smoke\$probe")
 }
-foreach ($probe in @("vulkan-smoke.exe", "vulkan-wsi-probe.exe", "opengl-smoke.exe", "d3d11-smoke.exe", "d3d12-smoke.exe", "d3d12-clear.exe")) {
+foreach ($probe in @("vulkan-features.exe", "vulkan-smoke.exe", "vulkan-wsi-probe.exe", "opengl-smoke.exe", "d3d11-smoke.exe", "d3d12-smoke.exe", "d3d12-clear.exe")) {
     Copy-Required (Join-Path $LoadersArtifact "smoke\x86\$probe") (Join-Path $payload "smoke\x86\$probe")
 }
 

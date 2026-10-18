@@ -39,6 +39,9 @@ if (Test-Path -LiteralPath $openClRegistry) {
 }
 
 $classKey = [string]$state.classKey
+if ($state.PSObject.Properties['adapterVulkan']) {
+    Restore-HeliosAdapterVulkanRegistration @($state.adapterVulkan)
+}
 if ($classKey -and (Test-Path -LiteralPath $classKey)) {
     Restore-HeliosRegistrySnapshot $classKey "OpenGLDriverName" $state.previousOpenGL.OpenGLDriverName
     Restore-HeliosRegistrySnapshot $classKey "OpenGLVersion" $state.previousOpenGL.OpenGLVersion

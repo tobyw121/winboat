@@ -187,6 +187,30 @@ function Get-HeliosRegistrySnapshot([Parameter(Mandatory)][string]$Path, [Parame
     }
 }
 
+function Get-HeliosAdapterVulkanRegistration([string]$ClassKey, [string]$Manifest, [string]$ManifestX86, [array]$Previous) {
+    # Return the durable rollback record BEFORE modifying registry values.
+    $records = @($Previous | Where-Object { $_.classKey -ine $ClassKey })
+    foreach ($item in @(@{ name = 'VulkanDriverName'; path = $Manifest }, @{ name = 'VulkanDriverNameWow'; path = $ManifestX86 })) {
+        $old = @($Previous | Where-Object { $_.classKey -ieq $ClassKey -and $_.name -eq $item.name })
+        if ($old.Count -gt 1) { throw 'Duplicate adapter Vulkan restore point.' }
+        $snapshot = if ($old.Count -eq 1) { $old[0].previous } else { Get-HeliosRegistrySnapshot $ClassKey $item.name }
+        $records += [ordered]@{ classKey = $ClassKey; name = $item.name; previous = $snapshot; installed = $item.path }
+    }
+    return $records
+}
+
+function Restore-HeliosAdapterVulkanRegistration([array]$Records) {
+    foreach ($entry in $Records) {
+        if (-not (Test-Path -LiteralPath $entry.classKey)) { continue }
+        $current = Get-HeliosRegistrySnapshot $entry.classKey $entry.name
+        # A manually installed/newer driver owns its own values. Never erase it.
+        if ($current.exists -and @($current.value).Count -eq 1 -and
+            [string]@($current.value)[0] -ieq [string]$entry.installed) {
+            Restore-HeliosRegistrySnapshot $entry.classKey $entry.name $entry.previous
+        }
+    }
+}
+
 function Ensure-HeliosRegistryKey([Parameter(Mandatory)][string]$Path) {
     # Registry New-Item -Force REPLACES existing keys and all their contents.
     # Build missing parents individually without Force; a racing creator must

@@ -19,6 +19,9 @@ $source = Join-Path $RepoRoot "packaging\windows\probes"
 
 & cl.exe /nologo /O2 /W4 /MT (Join-Path $source "vulkan-smoke.c") "/I$VulkanInclude" "/Fe:$(Join-Path $OutputDir 'vulkan-smoke.exe')" /link $VulkanLibrary
 if ($LASTEXITCODE -ne 0) { throw "Vulkan smoke probe compilation failed." }
+& cl.exe /nologo /O2 /W4 /MT /std:c11 (Join-Path $RepoRoot "tools/vulkan_features_probe.c") "/I$VulkanInclude" "/Fe:$(Join-Path $OutputDir 'vulkan-features.exe')" /link $VulkanLibrary
+if ($LASTEXITCODE -ne 0) { throw "Vulkan feature probe compilation failed." }
+
 & cl.exe /nologo /O2 /W4 /MT /EHsc `
     (Join-Path $RepoRoot "tools\vk_surface_recreate_probe.cpp") `
     "/I$VulkanInclude" `

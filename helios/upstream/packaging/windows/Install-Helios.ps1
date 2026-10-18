@@ -449,6 +449,15 @@ Write-HeliosJson $vulkanX86Json $vulkanManifestX86Path -Encoding ASCII
 Ensure-HeliosRegistryKey $vulkanRegistryX86
 New-ItemProperty -LiteralPath $vulkanRegistryX86 -Name $vulkanManifestX86Path -Value 0 -PropertyType DWord -Force | Out-Null
 
+# Associate both ICDs with this PnP adapter as well as the legacy global list.
+# Keep per-class-key restore points across repairs and PCI address changes.
+$adapterVulkan = if ($previousState -and $previousState.PSObject.Properties['adapterVulkan']) { @($previousState.adapterVulkan) } else { @() }
+$state.adapterVulkan = @(Get-HeliosAdapterVulkanRegistration $classKey $vulkanManifestPath $vulkanManifestX86Path $adapterVulkan)
+Write-HeliosJson $state $statePath
+foreach ($entry in $state.adapterVulkan | Where-Object { $_.classKey -ieq $classKey }) {
+    New-ItemProperty -LiteralPath $classKey -Name $entry.name -Value @($entry.installed) -PropertyType MultiString -Force | Out-Null
+}
+
 New-ItemProperty -LiteralPath $classKey -Name "OpenGLDriverName" -Value $wglPath -PropertyType String -Force | Out-Null
 New-ItemProperty -LiteralPath $classKey -Name "OpenGLVersion" -Value 2 -PropertyType DWord -Force | Out-Null
 New-ItemProperty -LiteralPath $classKey -Name "OpenGLFlags" -Value 1 -PropertyType DWord -Force | Out-Null

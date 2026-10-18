@@ -17,6 +17,8 @@ on:
       - 'tests/game-compatibility.test.ps1'
       - 'guest_server/scripts/Test-WinBoatOpenGL.ps1'
       - 'tests/opengl-game-probe.test.ps1'
+      - 'tests/helios-adapter-vulkan.test.ps1'
+      - 'helios/upstream/packaging/windows/Helios-PackageCommon.ps1'
   pull_request:
     paths:
       - 'tests/helios-clear-view/**'
@@ -31,6 +33,8 @@ on:
       - 'tests/game-compatibility.test.ps1'
       - 'guest_server/scripts/Test-WinBoatOpenGL.ps1'
       - 'tests/opengl-game-probe.test.ps1'
+      - 'tests/helios-adapter-vulkan.test.ps1'
+      - 'helios/upstream/packaging/windows/Helios-PackageCommon.ps1'
 permissions:
   contents: read
 jobs:
@@ -64,11 +68,13 @@ jobs:
         run: |
           ./tests/game-compatibility.test.ps1
           ./tests/opengl-game-probe.test.ps1
+          ./tests/helios-adapter-vulkan.test.ps1
       - name: Check profiles and OpenGL probe on Windows PowerShell
         shell: powershell
         run: |
           ./tests/game-compatibility.test.ps1
           ./tests/opengl-game-probe.test.ps1
+          ./tests/helios-adapter-vulkan.test.ps1
       - name: Check 32-bit OpenGL probe
         shell: pwsh
         run: |

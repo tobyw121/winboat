@@ -136,6 +136,14 @@ if ($null -eq $vulkanX86Value -or [int]$vulkanX86Value -ne 0) {
     $failures.Add("The x86 Vulkan ICD manifest is not enabled in the WoW64 registry.")
 } else { Write-Host "Vulkan x86: registered $($state.vulkanManifestX86)" }
 
+foreach ($entry in @(@{ name = 'VulkanDriverName'; path = $state.vulkanManifest }, @{ name = 'VulkanDriverNameWow'; path = $state.vulkanManifestX86 })) {
+    $registration = if ($classKey -and (Test-Path -LiteralPath $classKey)) { Get-HeliosRegistrySnapshot $classKey $entry.name } else { $null }
+    if (-not $registration -or -not $registration.exists -or @($registration.value).Count -ne 1 -or
+        [string]@($registration.value)[0] -ine [string]$entry.path) {
+        $failures.Add("Adapter-specific Vulkan registration is missing or incorrect: $($entry.name). Repair Helios.")
+    }
+}
+
 $openGlDriver = if ($classKey -and (Test-Path -LiteralPath $classKey)) { (Get-Item -LiteralPath $classKey).GetValue("OpenGLDriverName", $null) } else { $null }
 if (-not $openGlDriver -or ([string]$openGlDriver -ine (Join-Path ([string]$state.installRoot) "runtime\mesa\libgallium_wgl.dll"))) {
     $failures.Add("The Helios OpenGL ICD is not registered on the display adapter.")
@@ -159,6 +167,8 @@ if ($RunSmokeTests) {
     $smokeRoot = Join-Path ([string]$state.installRoot) "runtime\smoke"
     $tests = @(
         [ordered]@{ name = "Vulkan"; exe = "vulkan-smoke.exe"; arguments = @() },
+        [ordered]@{ name = "Vulkan feature roundtrip"; exe = "vulkan-features.exe"; arguments = @() },
+        [ordered]@{ name = "Vulkan WSI"; exe = "vulkan-wsi-probe.exe"; arguments = @("3") },
         [ordered]@{ name = "Direct3D 11"; exe = "d3d11-smoke.exe"; arguments = @() },
         [ordered]@{ name = "OpenGL"; exe = "opengl-smoke.exe"; arguments = @() },
         [ordered]@{ name = "OpenCL"; exe = "opencl-smoke.exe"; arguments = @() },
@@ -174,6 +184,7 @@ if ($RunSmokeTests) {
         },
         [ordered]@{ name = "Direct3D 11 x86"; exe = "x86\d3d11-smoke.exe"; arguments = @() },
         [ordered]@{ name = "Vulkan x86"; exe = "x86\vulkan-smoke.exe"; arguments = @() },
+        [ordered]@{ name = "Vulkan feature roundtrip x86"; exe = "x86\vulkan-features.exe"; arguments = @() },
         [ordered]@{ name = "Vulkan WSI x86"; exe = "x86\vulkan-wsi-probe.exe"; arguments = @() },
         [ordered]@{ name = "OpenGL x86"; exe = "x86\opengl-smoke.exe"; arguments = @() }
     )
