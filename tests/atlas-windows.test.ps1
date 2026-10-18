@@ -74,10 +74,20 @@ try {
     $json = & $diagnosticsScript
     $result = $json | ConvertFrom-Json
     if ($result.service[0].ProcessId -ne 42 -or $result.windowsSetup.OOBEInProgress -ne 1 -or $result.startup.Count -ne 1 -or $json -match 'private') { throw 'Full diagnostic collection failed or leaked log contents.' }
-    if ($result.errors.Count -or $result.logon.shell -ne 'ame-oobe' -or -not $result.shim.originalAME -or
-        -not $result.setupAccount.exists -or -not $result.logon.setupCredentialPresent -or $result.logon.consoleAccount -ne 'setup-account' -or
-        $result.amePermissions[0].rules[2].principal -ne 'setup-account' -or $result.logon.AutoAdminLogon -ne 1 -or
-        $result.logon.AutoLogonCount -ne 0 -or $json -match 'S-1-5-21|PRIVATE-PC|private') { throw 'Shell/permissions diagnostics failed or exposed machine identifiers.' }
+    $checks=[ordered]@{
+        errorsAbsent=($result.errors.Count -eq 0)
+        ameShell=($result.logon.shell -eq 'ame-oobe')
+        originalShim=[bool]$result.shim.originalAME
+        setupAccount=[bool]$result.setupAccount.exists
+        credentialPresence=[bool]$result.logon.setupCredentialPresent
+        consoleAccount=($result.logon.consoleAccount -eq 'setup-account')
+        permissionPrincipal=($result.amePermissions[0].rules[2].principal -eq 'setup-account')
+        autoLogon=($result.logon.AutoAdminLogon -eq 1)
+        logonCount=($result.logon.AutoLogonCount -eq 0)
+        redaction=($json -notmatch 'S-1-5-21|PRIVATE-PC|private')
+    }
+    $failedChecks=@($checks.Keys | Where-Object {-not $checks[$_]})
+    if($failedChecks.Count){throw ('Shell/permissions diagnostic checks failed: '+($failedChecks -join ', '))}
     if ($result.diagnosticsVersion -ne 2 -or $result.collectorHash.Length -ne 64) { throw 'Collector identity missing.' }
     function Get-ScheduledTask { param($TaskName) Write-Error -ErrorId 'NoMatchingMSFT_ScheduledTaskObjectsFound_TaskName' -Message 'private task detail' -ErrorAction Stop }
     $missingTask = & $diagnosticsScript | ConvertFrom-Json
@@ -140,3 +150,5 @@ $folder=Join-Path ([IO.Path]::GetTempPath()) 'AME/OOBE'
 if ((Get-AtlasServiceExecutable ('"{0}" --service' -f (Join-Path $folder 'AME.Client.exe')) $folder) -ne 'shared-client' -or
     (Get-AtlasServiceExecutable ('"{0}" --service' -f (Join-Path $folder 'OOBE.exe')) $folder) -ne 'legacy-oobe' -or
     (Get-AtlasServiceExecutable 'private-executable --service' $folder) -ne 'other') {throw 'Service executable classification failed or exposed unknown commands.'}
+
+if ((Get-AtlasShellKind '"C:/ProgramData/AME/OOBE/AME.Client.exe" --oobe' 'C:\ProgramData\AME\OOBE\AME.Client.exe') -ne 'ame-oobe') { throw 'Windows slash-separated AME path was not recognized.' }

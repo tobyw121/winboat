@@ -40,7 +40,7 @@ function Get-AtlasHandoffPhase([string[]]$Lines) {
 }
 function Get-AtlasShellKind([string]$Shell, [string]$Client) {
     # The pinned shim embeds repeated separators; Windows accepts those paths.
-    if (($Shell -replace '\\{2,}', '\') -eq ('"{0}" --oobe' -f ($Client -replace '\\{2,}', '\'))) { return 'ame-oobe' }
+    if (($Shell -replace '[\\/]+', '\') -eq ('"{0}" --oobe' -f ($Client -replace '[\\/]+', '\'))) { return 'ame-oobe' }
     if ($Shell -ieq 'explorer.exe') { return 'windows-explorer' }
     if ([string]::IsNullOrWhiteSpace($Shell)) { return 'missing' }
     return 'other'
