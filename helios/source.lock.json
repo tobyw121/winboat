@@ -226,7 +226,7 @@
     "kmd/src/wdf.rs": "93160af03e2c4f4371fc27ac11d84c96b2ead56baffa5d6c07ac55d1d13c4dc9",
     "kmd_logic/Cargo.lock": "53200ce5781acd769f57c1beba307e104d841bd9c84b795110ba153c69e275b8",
     "kmd_logic/Cargo.toml": "ab203f7524c87d47396cae9a9d8f2095ad4076f3824dd8478d755c2638a8159a",
-    "kmd_logic/src/display_modes.rs": "9e0cfa5b734acfb4801115d340868a3d2d9ac6e2b7c818afa888b2bde60c1b4c",
+    "kmd_logic/src/display_modes.rs": "eb2c2ef3e9e1c478de9050125aa734636d1de1dc94f3881ad2cb4e3652042d65",
     "kmd_logic/src/edid.rs": "3eb7b7d57349379a3a16b1f633816fc99d72f956c6073a1c8d281e7449d1631a",
     "kmd_logic/src/execution_completion.rs": "fb7a6a4325354b7dfee4ff2dd12901066ea681c79eb9b2ff0344fb43f3982064",
     "kmd_logic/src/external_memory.rs": "b9a47a648c5cd61f383bf018bee5749e6685ec71a77400a0d8f78a64486e70ec",
@@ -258,7 +258,7 @@
     "kmd_render/src/ddi/child.rs": "b36bb0c191d6db7d7266bf62eb65dd83b8271c35d6f8bf93653f0bf8f49778ad",
     "kmd_render/src/ddi/cpu_host_aperture.rs": "7f2628ba152ad112817f5ea416f13b9b3f94d81e01a61390c4cf08149de3cb8a",
     "kmd_render/src/ddi/create_allocation.rs": "2dbf785d9fe67e8e641139ab2fcb9e030696d8506dbcfba16f3db7220a4796b5",
-    "kmd_render/src/ddi/display.rs": "729088f00089db66e8de8cb8cace9121574496308ebc25de93d904829426c0b7",
+    "kmd_render/src/ddi/display.rs": "78310bda88dd209ac560c4c52591402fad458717d8b06900e119718ad62910fd",
     "kmd_render/src/ddi/escape.rs": "0e2e1d71da8520803bc53d74780b98d54ed86c505a60870bd0e5e5db8e7049ab",
     "kmd_render/src/ddi/gpummu.rs": "5dfe4065daa3158b3b16effb578648a7f4a5cfbce268a796b5b429d41d7412d7",
     "kmd_render/src/ddi/hpd.rs": "21d32dc66c73adffd348aa274919f501fe69c1c0fb5c89b1688f0f98ea37b094",
@@ -272,7 +272,7 @@
     "kmd_render/src/ddi/scheduler.rs": "3b0ee06e76b77db624dafdceba79f988ec045a5f0ecaacb685864e0a8440ce24",
     "kmd_render/src/ddi/segment_table.rs": "8e3b976b532c542b09e0eee6061e6f893f15d110b4dbfd58a1e48ed9eef3ec22",
     "kmd_render/src/ddi/submit_command.rs": "715ad8b47d43a5e70928d7d377538c52414c5064a52cccc4855b4b9448cef983",
-    "kmd_render/src/ddi/vidpn.rs": "b81c933652e3b75f6f6d4462cfdb3bdf94ced56cbf782d3b9309f9d0f2debc7a",
+    "kmd_render/src/ddi/vidpn.rs": "b88a825de9cc021c2cab74e369d116962efb2e3299232c43a579dd91c2717a52",
     "kmd_render/src/ddi/wddm_surface.rs": "4527582e42abc350a3fe231d16c9c1a0b715f5bfe24b9a5a1481f88015197c0c",
     "kmd_render/src/device.rs": "796185eb31b585c2546cddf0bdbb21061585f3f420f72cd573dba0e0ed22a74a",
     "kmd_render/src/diag.rs": "e46bf87d18f171d79f52e209e8773ea39dcc2a0850c318d2a6e379eb46527787",
@@ -663,7 +663,8 @@
       "kmd_logic/src/lib.rs": "b5e2291b0ab0f04759ca1df732d729c41044e06039a165577ae05ee315545c8d",
       "kmd_render/src/adapter/mod.rs": "2558f9d1eeb48b2c847ee949c257ca6a19b70a0747a5cf325bc14c781cab9bd4",
       "kmd_render/src/ddi/display.rs": "35ed160f5aacbc902fd8b12656ee8d82966fc04610e150da6fa75005c4e05b0f",
-      "kmd_render/src/ddi/vidpn.rs": "f2085eefbf9e9937579aef332a7c340fd44316f615790555092fd50ee9bfe420"
+      "kmd_render/src/ddi/vidpn.rs": "f2085eefbf9e9937579aef332a7c340fd44316f615790555092fd50ee9bfe420",
+      "kmd_logic/src/display_modes.rs": "9e0cfa5b734acfb4801115d340868a3d2d9ac6e2b7c818afa888b2bde60c1b4c"
     },
     "validationWorkflow": ".github/workflows/test-helios-game-compatibility.yml",
     "features": [

@@ -1607,10 +1607,10 @@ unsafe fn fast_bind_from_flip(
         },
     };
     // The STEADY-STATE test, and it is also the mode check. `active_scanout_wh`
-    // is only ever written by a bind that already proved its extent equals the
-    // advertised mode, so an extent equal to it is equal to the mode — while a
-    // first bind (0) and a mode change (a different extent) both fall through to
-    // the worker, which owns mode-set ordering and the LINEAR fallback.
+    // records the bound size, while display_mode() records the latest Windows
+    // commit. Both must match: after a commit an old-size flip must not use the
+    // previous binding. First binds and size changes go through the worker,
+    // which owns mode-set ordering and the LINEAR fallback.
     let wh = ((target.width() as u64) << 32) | target.height() as u64;
     if wh == 0 || adapter.active_scanout_wh.load(Ordering::Acquire) != wh
         || wh != helios_kmd_logic::display_modes::pack(adapter.display_mode()) {
