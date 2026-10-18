@@ -95,6 +95,17 @@ Compose-Zusammenführung wird gegen unveränderte Datenträger, Ports und Gerät
 geprüft. Anmeldung, Treiberdeaktivierung und Wiederanlauf auf der betroffenen
 RTX 2070 müssen im echten Gast bestätigt werden.
 
+Der zusätzliche Live-QEMU-Test startet das lokal gebaute Image mit TCG, ohne
+Windows-Festplatte, GPU, KVM und Netzwerk. Er prüft über QMP, dass Standard-VGA
+vorhanden und das Helios-PCI-Gerät abwesend ist. VNC muss dabei initialisieren:
+
+```bash
+python3 tests/helios-rescue-qemu.py --image winboat/helios:d82ce565ac79
+```
+
+Dieser Test wurde mit dem vorhandenen gebauten Image erfolgreich ausgeführt;
+er bestätigt keinen Windows-Anmelde- oder GPU-Rendering-Erfolg.
+
 ## Grafikbericht und Hardware-Abnahme
 
 ```bash
