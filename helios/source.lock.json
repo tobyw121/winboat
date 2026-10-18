@@ -60,7 +60,7 @@
     "INVESTIGATIONS/exit8-exclusive-fullscreen-rgb10.md": "9c308aa2ff35670d5739f085e2d690175cc8be30fbc5f7ad8f6e259ca3f0979f",
     "NTOSEYE.md": "555acd226f7298aea224a372070e783289a64615663913d82393cccdff612558",
     "README.md": "2119fe6213c753e6115886169c2a51acc4349260a03254729e430c6795e3dcb3",
-    "ROADMAP.md": "3504a95124ac1c259ac8743d62de6e7495d03eb61ec74c06f6e24ff828cb79e1",
+    "ROADMAP.md": "37c29529dcc5c5a4da78f8e45980815edcccedd83351c185d30ca54999e73de1",
     "TOOLCHAIN.md": "6c1d99c8ebffb025cb8e581fcba3dabd70d01f353c0c28d251c0f9923d45b7d9",
     "TRANSPORT.md": "7cbb4f91b03d5e9125b8740444aa15e1d7803b629d0a248d7bbd3f9b56259362",
     "WINDOWS_CI_PACKAGE.md": "30df88e236add10db73c361c1e16987d1e16958e8dc58e247136f9781201bfe2",
@@ -237,7 +237,7 @@
     "kmd_render/Cargo.toml": "02c97c032e886b6ade362d676526657e76741d03e4b387725994c64afe2b308b",
     "kmd_render/README.md": "4575286062689db2debd86ff0af71a0cef864dc8f9129114ad6abc298e3c8824",
     "kmd_render/build.rs": "f13dad099657100ed284c34a5e417718bb1c1b507bc2df7cbc7f3fa03b43b618",
-    "kmd_render/driver-version.env": "8f9d4f91a4a5061392370e554a89fa935dd6d35c75bbda8fb580c6c8c275b6c8",
+    "kmd_render/driver-version.env": "17a8693c94f8319191b44ea9b1c6ff90da68b4a2a7e7d4e853fa755e247ff4b8",
     "kmd_render/helios_kmd_render.inx": "96e329ad2cbe0e4723cdc54b5f4c136bec6ca949d694fc1d21fdd9ef617e65b4",
     "kmd_render/rust-toolchain.toml": "ac257e2301dcb6cea3bf0bbe4e7ffe4c586b58a9916b1597020455ee27285764",
     "kmd_render/src/adapter/backing.rs": "177b2651b690dfe87bf270ca4685b056d8ef26f74c87c2438698c4081630b73b",
@@ -592,10 +592,10 @@
     "umd/src/forward/state_objects.rs": "855fc17ecddd773288b240219c51f6fa57e91fa557408b69ac8d69ff6576f99b",
     "umd/src/forward/tables.rs": "983204254198b81a8b41f69c84871bb2be8a0be976b504089cc7fd98377e6b72",
     "umd/src/forward/tiles.rs": "e26bd97d95fb406c0ce75eec15a1403e8bc0a6082b2207ffdab97797e28ed215",
-    "umd/src/forward/transfer.rs": "2a69d1b929da2aa0ead6048f81db50ee1cc30a55bff6b68108abd2b5d4b34a3d",
+    "umd/src/forward/transfer.rs": "df27a824e016d74a19b3d12d086717bb59be80205acbb260033c7d7bc9416e3f",
     "umd/src/forward/vehicle.rs": "93c3af4f28904a118fb3e15a170d00adc09ff89331d36dc68c36c4b4140211bc",
     "umd/src/forward/views.rs": "4f8a338cc6ccac77d85b249a2e2266aeaac17736f3b9d2ca4d0d6490037a3873",
-    "umd/src/forward.rs": "7c6b7b742452b94c484e3a1fb1971c5ed873af6762aa5b9004e6862fe98d6fa5",
+    "umd/src/forward.rs": "c4c56847cf8f1bf747fd81e2dcf936f25db188e2ebde1d9f46acb5e1cdad0b14",
     "umd/src/knobs.rs": "2e66052c5d5d6b803c2937aba468e83364427605bfdfe1cf2e4f5c20fd8d5ab5",
     "umd/src/lib.rs": "a22163dee04b974c0270075940d9e1e7d6bf1936c7337b327510cb3b1f71d2a4",
     "umd/src/scanout_acquire.rs": "e2f3e8e8393fba41346acb91202b0bbb3454b079422661a2239aa4cd99aa245a",
@@ -651,5 +651,14 @@
     "umd_common/src/slot.rs": "ce935c3ab5a1fe2d7e148ed3d6f94084ee227536342b2728b2be29a62d935090",
     "umd_common/src/throttle.rs": "5d56f746e5fa2c322c0625eadfe17b8ad6dd79b26e5da83ecb9ee50579237fb4",
     "umd_common/src/window.rs": "fb926bc87c4ca2258f507f957aaba88883a9fe2fcdac060304d23a2b79bd6626"
+  },
+  "localChanges": {
+    "description": "WinBoat D3D11.1 UAV ClearView support; immutable upstream revision/tree identify the baseline, files identify the effective sources.",
+    "baseFileSha256": {
+      "umd/src/forward/transfer.rs": "2a69d1b929da2aa0ead6048f81db50ee1cc30a55bff6b68108abd2b5d4b34a3d",
+      "umd/src/forward.rs": "7c6b7b742452b94c484e3a1fb1971c5ed873af6762aa5b9004e6862fe98d6fa5",
+      "ROADMAP.md": "3504a95124ac1c259ac8743d62de6e7495d03eb61ec74c06f6e24ff828cb79e1",
+      "kmd_render/driver-version.env": "8f9d4f91a4a5061392370e554a89fa935dd6d35c75bbda8fb580c6c8c275b6c8"
+    }
   }
 }

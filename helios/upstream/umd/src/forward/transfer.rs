@@ -392,22 +392,30 @@ pub(crate) unsafe extern "system" fn clear_view_11_1(
     if D3D11_1_LOG_COUNT.first_n(64).is_some() {
         trace_line!("DDI D3D11.1 ClearView: type={view_type} rects={num_rects}");
     }
-    if view_type != ddi::D3D11DDI_HANDLETYPE_D3D10DDI_HT_RENDERTARGETVIEW {
-        // Already loud -- this arm logs. `bump()` instead of
-        // `note_ddi_refusal`, which would add a SECOND line for the same event.
-        // R911 is explicit about not doing that here, and `bump` is the named
-        // form of exactly that intent (stage S2).
-        DDI_REFUSALS.clear_view_unsupported.bump();
-        log_error!("DDI D3D11.1 ClearView UNSUPPORTED view type {view_type} — clear dropped");
+    // ClearView is required for RTVs AND UAVs (D3D11.1). These handle
+    // payloads differ: RTV owns a boxed RtvState, UAV a bare COM slot.
+    // Match the runtime tag before choosing a loader; treating an RTV slot
+    // as a COM slot would call a Rust allocation as a COM vtable (R803).
+    let view = match view_type {
+        ddi::D3D11DDI_HANDLETYPE_D3D10DDI_HT_RENDERTARGETVIEW => {
+            load_rtv_at(view).and_then(|v| (*v).cast::<ID3D11View>().ok())
+        }
+        ddi::D3D11DDI_HANDLETYPE_D3D11DDI_HT_UNORDEREDACCESSVIEW => {
+            load_com_at::<ID3D11UnorderedAccessView>(view)
+                .and_then(|v| (*v).cast::<ID3D11View>().ok())
+        }
+        _ => {
+            DDI_REFUSALS.clear_view_unsupported.bump();
+            log_error!("DDI D3D11.1 ClearView UNSUPPORTED view type {view_type} — clear dropped");
+            return;
+        }
+    };
+    let Some(view) = view else {
+        note_ddi_refusal(&DDI_REFUSALS.clear_view_unsupported);
+        log_error!("DDI D3D11.1 ClearView missing view type {view_type}");
         return;
-    }
+    };
     let Some(context) = d3d11_context1(h) else {
-        return;
-    };
-    let Some(rtv) = load_rtv_at(view) else {
-        return;
-    };
-    let Ok(view) = (*rtv).cast::<ID3D11View>() else {
         return;
     };
     let rgba = if color.is_null() {

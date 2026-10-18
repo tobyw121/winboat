@@ -311,7 +311,7 @@ struct DdiRefusals {
     /// backbuffer), but it was uncounted AND unlogged once the 64-line budget
     /// was spent.
     discard_partial: RefusalCounter,
-    /// `pfnClearView` for a non-RTV view type — the clear is dropped. This one
+    /// `pfnClearView` for an unsupported/missing view (RTV/UAV are supported). This one
     /// already logs its refusal, so it was uncounted but never silent; no
     /// second log line is added.
     clear_view_unsupported: RefusalCounter,

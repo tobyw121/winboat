@@ -1,0 +1,48 @@
+name: Test Helios game compatibility
+on:
+  workflow_dispatch:
+  push:
+    branches: [work]
+    paths:
+      - '.github/workflows/test-helios-game-compatibility.yml'
+      - 'tests/helios-clear-view/**'
+      - 'helios/upstream/umd/src/forward/transfer.rs'
+      - 'guest_server/scripts/Set-WinBoatGameCompatibility.ps1'
+      - 'tests/game-compatibility.test.ps1'
+  pull_request:
+    paths:
+      - 'tests/helios-clear-view/**'
+      - 'helios/upstream/umd/src/forward/transfer.rs'
+      - 'guest_server/scripts/Set-WinBoatGameCompatibility.ps1'
+      - 'tests/game-compatibility.test.ps1'
+permissions:
+  contents: read
+jobs:
+  clear-view:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        target: [x86_64-pc-windows-msvc, i686-pc-windows-msvc]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install test target
+        shell: pwsh
+        run: rustup target add ${{ matrix.target }}
+      - name: Run actual DDI handler against native WARP
+        shell: pwsh
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/helios-clear-view
+        run: cargo test --locked --manifest-path tests/helios-clear-view/Cargo.toml --target ${{ matrix.target }} -- --nocapture
+  legacy-profile:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check app-local Direct3D 9 profiles and restoration
+        shell: pwsh
+        run: ./tests/game-compatibility.test.ps1

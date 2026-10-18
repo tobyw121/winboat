@@ -1,5 +1,18 @@
 # ROADMAP — Stage: Correctness and D3D12
 
+## WinBoat downstream: D3D11 ClearView UAV dispatch (2026-10-18)
+
+`umd/src/forward/transfer.rs::clear_view_11_1` now accepts UAV handles as
+required by the D3D11.1 DDI, using the bare COM loader for UAVs and preserving
+the boxed-state loader for RTVs. Full clears and rectangle-limited clears both
+forward to `ID3D11DeviceContext1::ClearView`. Unsupported video views remain
+counted refusals. No feature-level, WDDM-version or performance claim changes.
+The downstream source-lock receipt records the exact divergence. Native x86/x64
+WARP regression tests live in WinBoat's `tests/helios-clear-view/`; they exercise
+the actual handler with a software backend, not a loaded Helios UMD or a game.
+Game/GPU acceptance and a rebuilt complete installer remain separate gates.
+
+
 *The desktop first rendered end-to-end on 2026-07-05. The active architecture changed on
 2026-07-09: Helios is a WDDM render+display adapter and owns the virtio-gpu scanout;
 IddCx/Looking Glass is no longer the active display path.*

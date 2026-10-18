@@ -1,11 +1,13 @@
 # Helios sources in WinBoat
 
-`upstream/` is the complete, unmodified Helios root-source snapshot from
+`upstream/` contains the complete Helios root-source snapshot from
 `https://github.com/winboat-org/helios` at the host revision in `stack.lock.json`.
 It is ordinary source in this Git repository, not a submodule or a separate
-checkout. Cloning WinBoat also obtains these Helios sources.
+checkout. Reviewed WinBoat changes are recorded under `localChanges` in
+`source.lock.json`; its file hashes identify the effective build inputs.
+The revision/tree still identify the original upstream baseline. Cloning WinBoat also obtains these Helios sources.
 
-`source.lock.json` records the original Git tree, every source-file SHA-256 and
+`source.lock.json` records the original Git tree, every effective source-file SHA-256 and
 all seven upstream dependency gitlinks. The dependency directories in the
 snapshot are empty, as in an upstream Git archive. Mesa, QEMU, virglrenderer and
 Venus protocol are downloaded at those exact revisions during the Linux host
@@ -18,8 +20,8 @@ patch under `host/patches/` after checking out its recorded gitlink. Its optiona
 reverse-listener method returns a QEMU-created socket FD to the desktop viewer;
 the viewer authenticates its kernel UID against the QEMU display-bus owner.
 The original registration method also binds its peer to the authenticated
-display-bus caller. This local divergence is separate from the unchanged
-upstream snapshot. See [the native display notes](../docs/helios-local-display.md).
+display-bus caller. Host patches remain separate from the Windows source
+divergence described above. See [the native display notes](../docs/helios-local-display.md).
 
 Check the snapshot with `python3 scripts/helios/verify-source.py`. To update it,
 import a reviewed upstream Git archive, regenerate `source.lock.json` from that
