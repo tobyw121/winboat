@@ -32,7 +32,10 @@ fn msaa_matches_real_backend_including_invalid_formats_and_counts() {
         assert_eq!(helios_multisample_quality_levels(&device, 87, 4, 1), expected);
         crate::caps::SINGLE.set(true);
         assert_eq!(helios_multisample_quality_levels(&device, 87, 4, 0), 0);
-        assert_eq!(helios_multisample_quality_levels(&device, 0, 1, 0), 0);
+        // WARP may report the trivial single-sample level even for UNKNOWN.
+        // SingleSampleOnly constrains counts, not the backend's format oracle.
+        assert_eq!(helios_multisample_quality_levels(&device, 0, 1, 0),
+            device.CheckMultisampleQualityLevels(DXGI_FORMAT_UNKNOWN, 1).unwrap_or(0));
         crate::caps::SINGLE.set(false);
     }
 }

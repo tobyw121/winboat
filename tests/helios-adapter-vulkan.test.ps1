@@ -28,7 +28,8 @@ $records = @(Get-HeliosAdapterVulkanRegistration 'adapter-B' 'new64.json' 'new32
 if ($records.Count -ne 4) { throw 'PCI move lost old class key' }
 Install-Records $records 'adapter-B'
 # JSON roundtrip is the installer/reboot/uninstaller boundary.
-$records = @($records | ConvertTo-Json -Depth 8 | ConvertFrom-Json)
+$storedState = @{adapterVulkan=$records} | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+$records = @($storedState.adapterVulkan)
 $script:registry['adapter-B/VulkanDriverNameWow'] = @{ exists=$true; kind='MultiString'; value=@('manual.json') }
 Restore-HeliosAdapterVulkanRegistration $records
 if ($script:registry['adapter-A/VulkanDriverName'].value -ne 'previous.json') { throw 'Original value not restored' }
