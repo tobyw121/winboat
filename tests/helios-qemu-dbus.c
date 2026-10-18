@@ -63,7 +63,6 @@ static GVariant *last_pixels;
 static GAsyncReadyCallback pending_callback;
 static gpointer pending_opaque;
 static void error_report(const char *format, ...) { diagnostics++; }
-static void error_report_err(GError *error) {diagnostics++;g_error_free(error);}
 static const char *qemu_egl_get_error_string(void) { return "fixture EGL error"; }
 static int qemu_egl_make_context_current(void *unused, EGLContext context) {
     if (bind_failure) return -1;
@@ -265,8 +264,9 @@ int main(void) {
     readback_failure=true;dbus_call_update_gl(&listener.dcl,0,0,4,4);readback_failure=false;
     assert(software_updates==1 && dma_updates==previous_updates && listener.vk_failed && !last_block);
     dbus_call_update_gl(&listener.dcl,0,0,4,4);
+    int previous_diagnostics=diagnostics;
     reply_failure=true;pending_callback(NULL,NULL,pending_opaque);reply_failure=false;
-    assert(!listener.vk_announced && !last_block);
+    assert(!listener.vk_announced && !last_block && diagnostics==previous_diagnostics+1);
     dbus_call_update_gl(&listener.dcl,0,0,4,4);assert(software_baselines==2);
     pending_callback(NULL,NULL,pending_opaque);
     QemuDmaBuf explicit_linear={.allocation=64,.optimal=true};

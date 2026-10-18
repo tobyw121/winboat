@@ -1,5 +1,5 @@
 diff --git a/ui/dbus-listener.c b/ui/dbus-listener.c
-index 702e0fa..6b59013 100644
+index 702e0fa..7fa0f4e 100644
 --- a/ui/dbus-listener.c
 +++ b/ui/dbus-listener.c
 @@ -41,6 +41,10 @@
@@ -99,7 +99,7 @@ index 702e0fa..6b59013 100644
 +        G_DBUS_PROXY(source), result, &err);
 +
 +    if (!reply) {
-+        error_report_err(g_steal_pointer(&err));
++        error_report("dbus: failed to send Helios frame: %s", err->message);
 +        ddl->vk_announced = false;
 +    }
 +    qemu_console_hw_gl_block(ddl->dcl.con, false);
