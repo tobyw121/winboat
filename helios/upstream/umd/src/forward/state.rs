@@ -532,6 +532,19 @@ pub(crate) fn create_error_hr(e: &windows::core::Error) -> i32 {
     }
 }
 
+/// Reject a null runtime descriptor before dereferencing it in a Create DDI.
+/// SAFETY: a non-null descriptor must be readable for the caller's chosen lifetime.
+pub(crate) unsafe fn checked_create_arg<'a, T>(h: Hdevice, arg: *const T) -> Option<&'a T> {
+    // SAFETY: the DDI caller owns valid non-null descriptor storage for this call.
+    let value = unsafe { arg.as_ref() };
+    if value.is_none() {
+        log_error!("DDI Create*: null descriptor rejected");
+        // SAFETY: the originating runtime device/context owns its callback table.
+        unsafe { set_runtime_error(h, E_INVALIDARG) };
+    }
+    value
+}
+
 /// The only way a VOID-returning `Create*` DDI may leave its handle slot:
 /// either `store` runs, or the runtime is told the invoking API call failed.
 ///

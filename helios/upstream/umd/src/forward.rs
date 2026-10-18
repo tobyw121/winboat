@@ -5,9 +5,9 @@
 //!
 //! DDI Usage/BindFlags/MiscFlags mirror the D3D11 API bit values (passthrough).
 //! Resource/view handles store the raw COM pointer (8 bytes) in pDrvPrivate;
-//! CalcPrivate*Size returns 8. Errors on VOID-returning Create* are dropped for
-//! now (TODO: report via the device error callback) — a failed create leaves a
-//! null handle.
+//! CalcPrivate*Size returns 8. Create failures are reported through the runtime
+//! error callback; invalid Create descriptors and failed
+//! shader/view creation must not return apparent success with an empty handle.
 
 // T8/R1107 commit 0: the child modules below need this file's import surface,
 // and a `use` statement is not an item -- `use super::*;` in a child cannot see

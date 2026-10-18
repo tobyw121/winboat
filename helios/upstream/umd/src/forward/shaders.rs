@@ -83,6 +83,7 @@ pub(crate) unsafe extern "system" fn create_vertex_shader(
     log_shader_code("create_vertex_shader", code, len);
     if len == 0 {
         log_error!("DDI create_vertex_shader failed: unknown shader length");
+        set_runtime_error(h, E_INVALIDARG);
         return;
     }
     let bytes = core::slice::from_raw_parts(code as *const u8, len);
@@ -101,6 +102,7 @@ pub(crate) unsafe extern "system" fn create_vertex_shader(
             .insert(raw, bytes.to_vec());
     } else {
         log_error!("DDI create_vertex_shader failed");
+        set_runtime_error(h, E_OUTOFMEMORY);
     }
 }
 
@@ -119,6 +121,7 @@ pub(crate) unsafe extern "system" fn create_pixel_shader(
     log_shader_code("create_pixel_shader", code, len);
     if len == 0 {
         log_error!("DDI create_pixel_shader failed: unknown shader length");
+        set_runtime_error(h, E_INVALIDARG);
         return;
     }
     let bytes = core::slice::from_raw_parts(code as *const u8, len);
@@ -131,6 +134,7 @@ pub(crate) unsafe extern "system" fn create_pixel_shader(
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_pixel_shader failed");
+        set_runtime_error(h, E_OUTOFMEMORY);
     }
 }
 
@@ -536,6 +540,7 @@ pub(crate) unsafe fn create_shader_11_1_common(
     log_shader_code(name, code, len);
     if len == 0 {
         log_error!("DDI {name} failed: unknown shader length");
+        set_runtime_error(h, E_INVALIDARG);
         return;
     }
     let bytes = core::slice::from_raw_parts(code as *const u8, len);
@@ -586,6 +591,7 @@ pub(crate) unsafe fn create_shader_11_1_common(
         }
     } else {
         log_error!("DDI {name} failed");
+        set_runtime_error(h, E_OUTOFMEMORY);
     }
 }
 
@@ -634,6 +640,7 @@ pub(crate) unsafe extern "system" fn create_geometry_shader(
     log_shader_code("create_geometry_shader", code, len);
     if len == 0 {
         log_error!("DDI create_geometry_shader failed: unknown shader length");
+        set_runtime_error(h, E_INVALIDARG);
         return;
     }
     let bytes = core::slice::from_raw_parts(code as *const u8, len);
@@ -643,6 +650,7 @@ pub(crate) unsafe extern "system" fn create_geometry_shader(
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_geometry_shader failed");
+        set_runtime_error(h, E_OUTOFMEMORY);
     }
 }
 
@@ -663,6 +671,7 @@ pub(crate) unsafe extern "system" fn create_geometry_shader_so(
 ) {
     clear_handle(h_shader);
     if arg.is_null() {
+        set_runtime_error(h, E_INVALIDARG);
         return;
     }
     let Some(dev) = helios_device(h) else {
@@ -673,6 +682,7 @@ pub(crate) unsafe extern "system" fn create_geometry_shader_so(
     log_shader_code("create_geometry_shader_so", a.pShaderCode, len);
     if len == 0 {
         log_error!("DDI create_geometry_shader_so failed: unknown shader length");
+        set_runtime_error(h, E_INVALIDARG);
         return;
     }
     let bytes = core::slice::from_raw_parts(a.pShaderCode as *const u8, len);
@@ -690,6 +700,7 @@ pub(crate) unsafe extern "system" fn create_geometry_shader_so(
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_geometry_shader_so failed");
+        set_runtime_error(h, E_OUTOFMEMORY);
     }
 }
 
@@ -724,6 +735,7 @@ pub(crate) unsafe extern "system" fn create_hull_shader(
     log_shader_code("create_hull_shader", code, len);
     if len == 0 {
         log_error!("DDI create_hull_shader failed: unknown shader length");
+        set_runtime_error(h, E_INVALIDARG);
         return;
     }
     let bytes = core::slice::from_raw_parts(code as *const u8, len);
@@ -746,6 +758,7 @@ pub(crate) unsafe extern "system" fn create_hull_shader(
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_hull_shader failed");
+        set_runtime_error(h, E_OUTOFMEMORY);
     }
 }
 
@@ -764,6 +777,7 @@ pub(crate) unsafe extern "system" fn create_hull_shader_11_1(
     log_shader_code("create_hull_shader_11_1", code, len);
     if len == 0 {
         log_error!("DDI create_hull_shader_11_1 failed: unknown shader length");
+        set_runtime_error(h, E_INVALIDARG);
         return;
     }
     let bytes = core::slice::from_raw_parts(code as *const u8, len);
@@ -788,6 +802,7 @@ pub(crate) unsafe extern "system" fn create_hull_shader_11_1(
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_hull_shader_11_1 failed");
+        set_runtime_error(h, E_OUTOFMEMORY);
     }
 }
 
@@ -806,6 +821,7 @@ pub(crate) unsafe extern "system" fn create_domain_shader(
     log_shader_code("create_domain_shader", code, len);
     if len == 0 {
         log_error!("DDI create_domain_shader failed: unknown shader length");
+        set_runtime_error(h, E_INVALIDARG);
         return;
     }
     let bytes = core::slice::from_raw_parts(code as *const u8, len);
@@ -828,6 +844,7 @@ pub(crate) unsafe extern "system" fn create_domain_shader(
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_domain_shader failed");
+        set_runtime_error(h, E_OUTOFMEMORY);
     }
 }
 
@@ -846,6 +863,7 @@ pub(crate) unsafe extern "system" fn create_domain_shader_11_1(
     log_shader_code("create_domain_shader_11_1", code, len);
     if len == 0 {
         log_error!("DDI create_domain_shader_11_1 failed: unknown shader length");
+        set_runtime_error(h, E_INVALIDARG);
         return;
     }
     let bytes = core::slice::from_raw_parts(code as *const u8, len);
@@ -870,6 +888,7 @@ pub(crate) unsafe extern "system" fn create_domain_shader_11_1(
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_domain_shader_11_1 failed");
+        set_runtime_error(h, E_OUTOFMEMORY);
     }
 }
 
@@ -887,6 +906,7 @@ pub(crate) unsafe extern "system" fn create_compute_shader(
     log_shader_code("create_compute_shader", code, len);
     if len == 0 {
         log_error!("DDI create_compute_shader failed: unknown shader length");
+        set_runtime_error(h, E_INVALIDARG);
         return;
     }
     let bytes = core::slice::from_raw_parts(code as *const u8, len);
@@ -896,6 +916,7 @@ pub(crate) unsafe extern "system" fn create_compute_shader(
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_compute_shader failed");
+        set_runtime_error(h, E_OUTOFMEMORY);
     }
 }
 

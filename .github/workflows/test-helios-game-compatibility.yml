@@ -8,6 +8,10 @@ on:
       - 'tests/helios-clear-view/**'
       - 'tests/helios-game-clearview.cpp'
       - 'helios/upstream/umd/src/forward/transfer.rs'
+      - 'helios/upstream/umd/src/forward/queries.rs'
+      - 'helios/upstream/umd/src/forward/state.rs'
+      - 'helios/upstream/umd/src/forward/views.rs'
+      - 'helios/upstream/umd/src/forward/shaders.rs'
       - 'guest_server/scripts/Set-WinBoatGameCompatibility.ps1'
       - 'tests/game-compatibility.test.ps1'
       - 'guest_server/scripts/Test-WinBoatOpenGL.ps1'
@@ -17,6 +21,10 @@ on:
       - 'tests/helios-clear-view/**'
       - 'tests/helios-game-clearview.cpp'
       - 'helios/upstream/umd/src/forward/transfer.rs'
+      - 'helios/upstream/umd/src/forward/queries.rs'
+      - 'helios/upstream/umd/src/forward/state.rs'
+      - 'helios/upstream/umd/src/forward/views.rs'
+      - 'helios/upstream/umd/src/forward/shaders.rs'
       - 'guest_server/scripts/Set-WinBoatGameCompatibility.ps1'
       - 'tests/game-compatibility.test.ps1'
       - 'guest_server/scripts/Test-WinBoatOpenGL.ps1'
@@ -37,7 +45,7 @@ jobs:
       - name: Install test target
         shell: pwsh
         run: rustup target add ${{ matrix.target }}
-      - name: Run actual DDI handler against native WARP
+      - name: Run production ClearView and MSAA helpers against native WARP
         shell: pwsh
         env:
           CARGO_TARGET_DIR: ${{ runner.temp }}/helios-clear-view

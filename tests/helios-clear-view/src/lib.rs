@@ -154,3 +154,17 @@ fn real_warp_typed_buffer_uav_whole_and_partial_clear() {
         }
     }
 }
+
+mod caps {
+    use std::cell::Cell;
+    #[derive(PartialEq)]
+    pub enum MsaaPolicy { SingleSampleOnly, Backend }
+    pub struct Profile { pub msaa: MsaaPolicy }
+    thread_local! { pub static SINGLE: Cell<bool> = const { Cell::new(false) }; }
+    pub fn feature_profile() -> Profile {
+        Profile { msaa: if SINGLE.get() { MsaaPolicy::SingleSampleOnly } else { MsaaPolicy::Backend } }
+    }
+}
+mod msaa;
+
+mod create_args;

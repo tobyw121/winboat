@@ -464,64 +464,38 @@ pub(crate) unsafe extern "system" fn set_predication(
 /// Shared rate cap for the three MSAA log sites (R829).
 pub(crate) static MSAA_LOG_COUNT: LogThrottle = LogThrottle::new();
 
-/// D3D11 multisample-quality caps, keyed off the active feature-level profile.
-///
-/// The Microsoft runtime validates `CheckFormatSupport` and
-/// `CheckMultisampleQualityLevels` as a coherent feature-level contract during
-/// `CDevice::LLOCompleteLayerConstruction`. The FL10.0 profile expresses a
-/// no-multisample device (1x only) coherently with `check_format_support`
-/// stripping the multisample bits. The FL11_0 profile advertises 1x, 4x, 8x and
-/// the optional standard patterns (2x/16x) for EVERY output-capable format. The
-/// runtime rejects arbitrary non-power-of-two sample counts.
-///
-/// R829 (OWNER DECISION): this doc previously claimed the D3D11.3 §19.2.5
-/// exception -- 8x only for output formats *below* 128 bits/sample -- which the
-/// code has never implemented. The decision was to correct the DOC, not the
-/// code. §19.2.5 is a FLOOR, not a ceiling: a driver may advertise above it,
-/// and the caps/quality pair stays internally coherent either way because
-/// `check_format_support` uses the SAME
-/// `dxgi_msaa_bits_per_sample(fmt, caps).is_some()` predicate.
-///
-/// What made this a decision rather than a cleanup, and worth knowing before
-/// revisiting it: `dxgi_msaa_bits_per_sample` resolves to a static format table
-/// plus the DXVK caps word. It never asks whether that SAMPLE COUNT is
-/// supported, so today's "8x on a 128-bit format" is a table assertion, not a
-/// capability probe. Implementing the floor would narrow the claim; probing
-/// DXVK would make it true. Neither is done here -- both are behaviour changes
-/// on the default-live FL11 caps path, which this tranche freezes.
+/// Query the backing DXVK device instead of inventing quality levels from a
+/// format table. Unsupported counts/formats must stay zero: games use this
+/// answer to select actual texture sample counts and quality indices.
 pub(crate) unsafe fn helios_multisample_quality_levels(
     h: Hdevice,
     fmt: ddi::DXGI_FORMAT,
     sample_count: u32,
+    flags: u32,
 ) -> u32 {
-    if crate::caps::feature_profile().msaa == crate::caps::MsaaPolicy::SingleSampleOnly {
-        return if sample_count == 1 { 1 } else { 0 };
-    }
-    if sample_count == 0 {
+    // D3D11 accepts powers of two up to 32; WDDM 1.3 defines only TILED_RESOURCE.
+    if sample_count == 0 || sample_count > 32 || !sample_count.is_power_of_two()
+        || flags & !1 != 0 {
         return 0;
     }
-    let Some(device) = d3d11_device(h) else {
-        // DXVK unreachable: fall back to the conservative single-sample answer.
-        return if sample_count == 1 { 1 } else { 0 };
+    if crate::caps::feature_profile().msaa == crate::caps::MsaaPolicy::SingleSampleOnly
+        && sample_count != 1 {
+        return 0;
+    }
+    // SAFETY: DDI lookup validates the live device handle before borrowing COM.
+    let Some(device) = (unsafe { d3d11_device(h) }) else { return 0; };
+    // SAFETY: the owned COM references stay live and only scalar inputs are used.
+    let result = unsafe {
+        if flags == 0 {
+            device.CheckMultisampleQualityLevels(DXGI_FORMAT(fmt as i32), sample_count)
+        } else {
+            device.cast::<ID3D11Device2>().and_then(|device2|
+                device2.CheckMultisampleQualityLevels1(DXGI_FORMAT(fmt as i32), sample_count, flags))
+        }
     };
-    let caps = device
-        .CheckFormatSupport(DXGI_FORMAT(fmt as i32))
-        .unwrap_or(0);
-    let output_bits = dxgi_msaa_bits_per_sample(fmt as u32, caps);
-    // The two arms were identical -- (1|2|4|16, Some(_)) and (8, Some(_)) both
-    // yielding true -- which is what made the doc's 128-bit exception look
-    // implemented. Collapsed; `output_bits` is still bound for the log, which
-    // is the only thing that ever consumed it.
-    let required = matches!((sample_count, output_bits), (1 | 2 | 4 | 8 | 16, Some(_)));
-    let val = if required { 1 } else { 0 };
-    // DECLARED diagnostic-volume change (R829): this site fired whenever
-    // `required || sample_count <= 8`, i.e. on essentially every query, and the
-    // two public wrappers below logged unconditionally with no cap at all. All
-    // three now share one throttle.
-    if (required || sample_count <= 8) && MSAA_LOG_COUNT.first_n_then_every(256, 4096).is_some() {
-        trace_line!(
-            "MSAA q fmt={fmt} c={sample_count} output_bits={output_bits:?} required={required} -> {val}"
-        );
+    let val = result.unwrap_or(0);
+    if MSAA_LOG_COUNT.first_n_then_every(256, 4096).is_some() {
+        trace_line!("MSAA backend fmt={fmt} c={sample_count} flags={flags:#x} -> {val}");
     }
     val
 }
@@ -533,7 +507,7 @@ pub(crate) unsafe extern "system" fn check_multisample_quality_levels(
     out: *mut u32,
 ) {
     if !out.is_null() {
-        let val = helios_multisample_quality_levels(h, fmt, sample_count);
+        let val = helios_multisample_quality_levels(h, fmt, sample_count, 0);
         *out = val;
         if MSAA_LOG_COUNT.first_n_then_every(256, 4096).is_some() {
             trace_line!("MSAA out fmt={fmt} c={sample_count} flags=legacy out={out:p} val={val}");
@@ -545,15 +519,15 @@ pub(crate) unsafe extern "system" fn check_multisample_quality_levels_wddm1_3(
     h: Hdevice,
     fmt: ddi::DXGI_FORMAT,
     sample_count: u32,
-    _flags: u32,
+    flags: u32,
     out: *mut u32,
 ) {
     if !out.is_null() {
-        let val = helios_multisample_quality_levels(h, fmt, sample_count);
+        let val = helios_multisample_quality_levels(h, fmt, sample_count, flags);
         *out = val;
         if MSAA_LOG_COUNT.first_n_then_every(256, 4096).is_some() {
             trace_line!(
-                "MSAA out fmt={fmt} c={sample_count} flags=0x{_flags:x} out={out:p} val={val}"
+                "MSAA out fmt={fmt} c={sample_count} flags=0x{flags:x} out={out:p} val={val}"
             );
         }
     }

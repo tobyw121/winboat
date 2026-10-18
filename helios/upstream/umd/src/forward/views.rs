@@ -15,11 +15,13 @@ pub(crate) unsafe extern "system" fn create_rtv(
 ) {
     clear_handle(h_rtv);
     let Some(device) = d3d11_device(h) else {
+        set_runtime_error(h, E_OUTOFMEMORY);
         return;
     };
-    let a = &*arg;
+    let Some(a) = checked_create_arg(h, arg) else { return; };
     let Some(res) = load_resource(a.hDrvResource) else {
         log_error!("DDI create_rtv: resource handle empty");
+        set_runtime_error(h, E_INVALIDARG);
         return;
     };
     let Some(desc) = rtv_desc(a, a.hDrvResource) else {
@@ -28,6 +30,7 @@ pub(crate) unsafe extern "system" fn create_rtv(
             a.ResourceDimension,
             a.Format
         );
+        set_runtime_error(h, E_INVALIDARG);
         return;
     };
     let mut rtv: Option<ID3D11RenderTargetView> = None;
@@ -218,11 +221,13 @@ pub(crate) unsafe extern "system" fn create_dsv(
 ) {
     clear_handle(h_dsv);
     let Some(device) = d3d11_device(h) else {
+        set_runtime_error(h, E_OUTOFMEMORY);
         return;
     };
-    let a = &*arg;
+    let Some(a) = checked_create_arg(h, arg) else { return; };
     let Some(res) = load_resource(a.hDrvResource) else {
         log_error!("DDI create_dsv: resource handle empty");
+        set_runtime_error(h, E_INVALIDARG);
         return;
     };
     let Some(desc) = dsv_desc(a, a.hDrvResource) else {
@@ -231,6 +236,7 @@ pub(crate) unsafe extern "system" fn create_dsv(
             a.ResourceDimension,
             a.Format
         );
+        set_runtime_error(h, E_INVALIDARG);
         return;
     };
     let mut dsv: Option<ID3D11DepthStencilView> = None;
@@ -438,9 +444,10 @@ pub(crate) unsafe extern "system" fn create_srv(
 ) {
     clear_handle(h_srv);
     let Some(device) = d3d11_device(h) else {
+        set_runtime_error(h, E_OUTOFMEMORY);
         return;
     };
-    let a = &*arg;
+    let Some(a) = checked_create_arg(h, arg) else { return; };
     let Some(res) = load_resource(a.hDrvResource) else {
         log_error!(
             "DDI create_srv: resource handle empty dim={} fmt={} hpriv={:p}",
@@ -448,6 +455,7 @@ pub(crate) unsafe extern "system" fn create_srv(
             a.Format,
             a.hDrvResource.pDrvPrivate
         );
+        set_runtime_error(h, E_INVALIDARG);
         return;
     };
     let Some(desc) = srv_desc(a, a.hDrvResource) else {
@@ -456,6 +464,7 @@ pub(crate) unsafe extern "system" fn create_srv(
             a.ResourceDimension,
             a.Format
         );
+        set_runtime_error(h, E_INVALIDARG);
         return;
     };
     let mut srv: Option<ID3D11ShaderResourceView> = None;
@@ -678,10 +687,12 @@ pub(crate) unsafe extern "system" fn create_uav(
 ) {
     clear_handle(h_uav);
     let Some(device) = d3d11_device(h) else {
+        set_runtime_error(h, E_OUTOFMEMORY);
         return;
     };
-    let a = &*arg;
+    let Some(a) = checked_create_arg(h, arg) else { return; };
     let Some(res) = load_resource(a.hDrvResource) else {
+        set_runtime_error(h, E_INVALIDARG);
         return;
     };
     let Some(desc) = uav_desc(a) else {
@@ -690,6 +701,7 @@ pub(crate) unsafe extern "system" fn create_uav(
             a.ResourceDimension,
             a.Format
         );
+        set_runtime_error(h, E_INVALIDARG);
         return;
     };
     let mut uav: Option<ID3D11UnorderedAccessView> = None;
@@ -972,9 +984,10 @@ pub(crate) unsafe extern "system" fn create_sampler(
 ) {
     clear_handle(h_sampler);
     let Some(device) = d3d11_device(h) else {
+        set_runtime_error(h, E_OUTOFMEMORY);
         return;
     };
-    let d = &*desc;
+    let Some(d) = checked_create_arg(h, desc) else { return; };
     let sd = D3D11_SAMPLER_DESC {
         Filter: D3D11_FILTER(d.Filter),
         AddressU: D3D11_TEXTURE_ADDRESS_MODE(d.AddressU),
