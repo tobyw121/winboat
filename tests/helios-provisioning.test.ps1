@@ -14,6 +14,7 @@ try {
     @{revision='fecffde64fd32399a877b452332681ef0db7993e';sha256=(Get-WinBoatFileSha256 (Join-Path $source 'HeliosSetup.exe'))} |
         ConvertTo-Json | Set-Content (Join-Path $source 'helios-build.json')
     $global:heliosBoot=[DateTime]::UtcNow.AddMinutes(-30)
+    $global:heliosDeviceCode=0
     $global:heliosOfficial=$null; $global:heliosPhase='driver-restart-required'
     $global:heliosTestSigning=$false; $global:heliosBcdCalls=0; $global:heliosBcdExit=0
     $global:heliosLaunches=0; $global:heliosRestarts=0; $global:heliosStarts=@(); $global:heliosRemoved=0; $global:heliosEnabled=0
@@ -28,7 +29,11 @@ try {
         if (($args -join ' ') -ne '/set {current} testsigning on') {throw 'Wrong boot entry or test-signing operation.'}
         $global:heliosBcdCalls++; $global:LASTEXITCODE=$global:heliosBcdExit
     }
-    function Get-CimInstance {param($ClassName) [pscustomobject]@{LastBootUpTime=$global:heliosBoot}}
+    function Get-CimInstance {
+        param($ClassName,$Filter)
+        if($ClassName -eq 'Win32_OperatingSystem'){return [pscustomobject]@{LastBootUpTime=$global:heliosBoot}}
+        [pscustomobject]@{PNPDeviceID='PCI\VEN_1AF4&DEV_1050';Service='helios_kmd_render';ConfigManagerErrorCode=$global:heliosDeviceCode}
+    }
     function Get-Acl {
         param($LiteralPath)
         $acl=[pscustomobject]@{}
@@ -207,6 +212,10 @@ try {
     Invoke-HeliosEnsure $selectedInstall
     if($global:heliosStarts.Count -ne $beforeStarts -or $global:heliosLaunches -ne $beforeLaunches -or
         $global:heliosRestarts -ne $beforeRestarts){throw 'Service restart retried a failed graphics install'}
+    $global:heliosDeviceCode=22
+    Invoke-HeliosProvisioning $source $false
+    Invoke-HeliosEnsure $selectedInstall
+    if($global:heliosStarts.Count -ne $beforeStarts -or $global:heliosLaunches -ne $beforeLaunches){throw 'Manual Device Manager disable was overridden'}
     Write-Host 'Provisioning, reboot bounds, false-completion rejection and verified stale restart recovery passed with Windows API fixtures.'
 } finally {
     $env:ProgramData=$previousData; $env:SystemRoot=$previousSystem

@@ -132,7 +132,14 @@ function Invoke-HeliosRestartVerification([string]$Install) {
         $verificationLock.Dispose()
     }
 }
+function Test-HeliosDeviceDisabled {
+    $disabled=@(Get-CimInstance Win32_PnPEntity -Filter "PNPClass = 'Display'" | Where-Object {
+        $_.PNPDeviceID -like 'PCI\VEN_1AF4&DEV_1050*' -and $_.Service -eq 'helios_kmd_render' -and $_.ConfigManagerErrorCode -eq 22
+    })
+    return $disabled.Count -gt 0
+}
 function Invoke-HeliosProvisioning([string]$Source,[bool]$Continue) {
+    if (Test-HeliosDeviceDisabled) {return} # Preserve a Device Manager disable.
     Assert-HeliosAdministrator
     New-Item -ItemType Directory -Force -Path $root | Out-Null
     if (-not $Continue) {
@@ -219,6 +226,7 @@ function Invoke-HeliosEnsure([string]$Install) {
     # Service startup recovers a missed OEM registration. Atlas owns its handoff
     # until OOBE is complete; never restart Windows in the middle of AME.
     if (-not (Test-HeliosSelected $Install)) {return}
+    if (Test-HeliosDeviceDisabled) {return}
     if (Test-Path -LiteralPath $statusPath) {
         $prior=Get-Content -LiteralPath $statusPath -Raw | ConvertFrom-Json
         if ($prior.status -eq 'failed') {return} # Explicit recovery owns retries.
