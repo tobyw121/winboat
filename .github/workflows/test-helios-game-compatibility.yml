@@ -52,6 +52,8 @@ jobs:
         run: |
           ./tests/game-compatibility.test.ps1
           ./tests/opengl-game-probe.test.ps1
-      - name: Check OpenGL probe on Windows PowerShell
+      - name: Check profiles and OpenGL probe on Windows PowerShell
         shell: powershell
-        run: ./tests/opengl-game-probe.test.ps1
+        run: |
+          ./tests/game-compatibility.test.ps1
+          ./tests/opengl-game-probe.test.ps1

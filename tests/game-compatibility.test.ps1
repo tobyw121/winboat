@@ -46,6 +46,9 @@ try {
         $badArchive=Join-Path $temporary 'bad.tar.gz';'not DXVK' | Set-Content -LiteralPath $badArchive
         Assert-Fails {& $script -GameExe $exe -Action D3D9 -DxvkArchive $badArchive} 'checksum mismatch'
         if(Test-Path -LiteralPath $dll){throw 'Unverified DLL installed.'}
+        $java=Join-Path $directory 'javaw.exe';Copy-Item -LiteralPath $exe -Destination $java
+        Assert-Fails {& $script -GameExe $java -Action D3D9 -DxvkArchive $DxvkArchive} 'Minecraft Java uses OpenGL'
+        if(Test-Path -LiteralPath $dll){throw 'D3D9 DLL was installed for Java.'}
     }
     Write-Host 'Real pinned DXVK x86/x64 selection, repeat activation, ownership protection, restoration and checksum rejection passed. No game was executed.'
 } finally {if(Test-Path -LiteralPath $temporary){Remove-Item -LiteralPath $temporary -Recurse -Force}}
