@@ -5,6 +5,17 @@ set -Eeuo pipefail
 : "${HELIOS_REVISION:?Missing paired Helios source revision}"
 : "${RENDERNODE:=/dev/dri/renderD128}"
 [[ "$HELIOS" == 1 ]] || { echo 'Use the standard Windows image when Helios is disabled.' >&2; exit 1; }
+# Explicit rescue boot needs neither a working guest service nor a GPU runtime.
+# Keep the same disk/firmware and expose only standard VGA through Browser Display.
+case "${HELIOS_RESCUE:-0}" in
+    1)
+        DISPLAY=web
+        DISPLAY_OPTS="-display none -vga std -vnc :$((VNC_PORT - 5900)),websocket=$WSS_PORT"
+        echo 'Helios rescue: VGA only; the Helios PCI device is absent for this boot.'
+        return 0 ;;
+    0) ;;
+    *) echo 'Invalid HELIOS_RESCUE (use 0 or 1).' >&2; exit 1 ;;
+esac
 [[ "$RENDERNODE" =~ ^/dev/dri/renderD[0-9]+$ ]] || { echo 'Invalid DRM render node.' >&2; exit 1; }
 [[ -c "$RENDERNODE" && -r "$RENDERNODE" && -w "$RENDERNODE" ]] || { echo "Helios cannot access $RENDERNODE" >&2; exit 1; }
 source /opt/helios/display-resolution.sh
