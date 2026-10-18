@@ -659,6 +659,10 @@
       "umd/src/forward.rs": "7c6b7b742452b94c484e3a1fb1971c5ed873af6762aa5b9004e6862fe98d6fa5",
       "ROADMAP.md": "3504a95124ac1c259ac8743d62de6e7495d03eb61ec74c06f6e24ff828cb79e1",
       "kmd_render/driver-version.env": "8f9d4f91a4a5061392370e554a89fa935dd6d35c75bbda8fb580c6c8c275b6c8"
-    }
+    },
+    "validationWorkflow": ".github/workflows/test-helios-game-compatibility.yml",
+    "features": [
+      "d3d11-uav-clear-view"
+    ]
   }
 }

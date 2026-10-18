@@ -43,7 +43,10 @@ if($Action -eq 'Inspect') {
 # One writer per game directory. Never replace an existing wrapper from a client/mod.
 $lock=$null; $temporary=$null
 try {
-    $lock=[IO.File]::Open((Join-Path $directory '.winboat-d3d9.lock'),[IO.FileMode]::CreateNew,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+    # Delete-on-close also releases the file after process termination. Reopen
+    # an unlocked leftover from an older tool version, while rejecting a live writer.
+    $lock=[IO.FileStream]::new((Join-Path $directory '.winboat-d3d9.lock'),[IO.FileMode]::OpenOrCreate,
+        [IO.FileAccess]::ReadWrite,[IO.FileShare]::None,4096,[IO.FileOptions]::DeleteOnClose)
     $state=$null
     if(Test-Path -LiteralPath $stateFile){
         $state=Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json
@@ -87,5 +90,5 @@ try {
         note='Restart the game. This profile requires a functioning Vulkan driver and does not guarantee client or anti-cheat compatibility.'} | ConvertTo-Json
 } finally {
     if($temporary -and (Test-Path -LiteralPath $temporary)){Remove-Item -LiteralPath $temporary -Recurse -Force}
-    if($lock){$lock.Dispose();Remove-Item -LiteralPath (Join-Path $directory '.winboat-d3d9.lock') -Force}
+    if($lock){$lock.Dispose()}
 }

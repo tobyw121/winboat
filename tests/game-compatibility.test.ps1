@@ -25,6 +25,8 @@ try {
         [BitConverter]::GetBytes($machine).CopyTo($bytes,68);[IO.File]::WriteAllBytes($exe,$bytes)
         $inspection=& $script -GameExe $exe | ConvertFrom-Json
         if($inspection.architecture -ne $architecture){throw 'Wrong executable architecture.'}
+        # An old process may have left an unlocked lock file after a crash.
+        [IO.File]::WriteAllText((Join-Path $directory '.winboat-d3d9.lock'),'')
         $result=& $script -GameExe $exe -Action D3D9 -DxvkArchive $DxvkArchive | ConvertFrom-Json
         if($result.status -ne 'enabled' -or $result.architecture -ne $architecture){throw 'Profile was not installed.'}
         $dll=Join-Path $directory 'd3d9.dll'
