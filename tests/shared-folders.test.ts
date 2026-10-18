@@ -8,12 +8,45 @@ import {configureHeliosDisplay} from '../src/shared/helios-display';
 import {configureHelios,LEGACY_WINDOWS_IMAGE} from '../src/shared/helios';
 import {ATLAS_IMAGE} from '../src/shared/atlas';
 import {spawnSync} from 'node:child_process';
+import {changedResourceErrors} from '../src/shared/configuration-resources';
+import {createRequire} from 'node:module';
+import ts from 'typescript';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 const service = (): SharedFolderService & {devices:string[];ports:string[]} => ({image:LEGACY_WINDOWS_IMAGE,
     environment:{USERNAME:'Windows User',PASSWORD:'null-fixture-password',HELIOS:'1',ARGUMENTS:'keep'},
     volumes:['disk:/storage','/home/null-user:/shared','/dev/bus/usb:/dev/bus/usb', {type:'bind',source:'/tmp/cache',target:'/cache',read_only:true}],devices:['/dev/kvm'],ports:['3389:3389']});
 const selected = [{name:'Projects',hostPath:'/home/null-user/Work $cash: files',enabled:true,readOnly:false},
     {name:'Archive',hostPath:'/media/disk/Archive',enabled:true,readOnly:true},
     {name:'Offline',hostPath:'/media/unplugged',enabled:false,readOnly:true}];
+test('saved SMT CPU allocations and changed host limits do not block unrelated folder edits', () => {
+    assert.deepEqual(changedResourceErrors({cpu:16,ram:24},{cpu:16,ram:24},{cpu:8,ram:16}),[]);
+    assert(changedResourceErrors({cpu:17,ram:24},{cpu:16,ram:24},{cpu:16,ram:32}).length);
+    assert(changedResourceErrors({cpu:16,ram:40},{cpu:16,ram:24},{cpu:16,ram:32}).length);
+    assert(changedResourceErrors({cpu:1,ram:24},{cpu:16,ram:24},{cpu:16,ram:32}).length);
+});
+test('updated Samba helpers persist outside the AppImage and replace only managed runtime mounts', () => {
+    // The Electron renderer supplies CommonJS require; execute this actual
+    // module with the same Node APIs rather than mocking filesystem behavior.
+    const filename=path.resolve('src/shared/shared-folder-runtime.ts');
+    const runtime={} as typeof import('../src/shared/shared-folder-runtime');
+    const compiled=ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}});
+    new Function('require','exports',compiled.outputText)(createRequire(filename),runtime);
+    const {sharedFolderRuntimeMounts,removeSharedFolderRuntimeMounts}=runtime;
+    const base=fs.mkdtempSync(path.join(os.tmpdir(),'winboat-share-$-'));
+    try {
+        const mounts=sharedFolderRuntimeMounts(base,path.resolve('resources/shared-folders'));
+        assert.deepEqual(sharedFolderRuntimeMounts(base,path.resolve('resources/shared-folders')),mounts);
+        const script=volumeSource(mounts[1])!.replace(/\$\$/g,'$');
+        assert(fs.readFileSync(script).equals(fs.readFileSync('resources/shared-folders/samba.sh')));
+        assert(mounts.every(m=>typeof m!=='string' && m.read_only && m.bind?.create_host_path===false));
+        const custom={type:'bind' as const,source:'/custom/samba.sh',target:'/run/samba.sh'};
+        assert.deepEqual(removeSharedFolderRuntimeMounts([...mounts,custom,'disk:/storage'],base),[custom,'disk:/storage']);
+        fs.writeFileSync(script,'damaged');
+        assert.throws(()=>sharedFolderRuntimeMounts(base,path.resolve('resources/shared-folders')),/damaged/);
+    } finally {fs.rmSync(base,{recursive:true,force:true});}
+});
 test('migrates real and HOME-based legacy mounts without depending on Network discovery', () => {
     const original=service();original.volumes.push('${HOME}:/shared2:ro');
     assert.deepEqual(readSharedFolders(original,'/home/current user','/tmp'),[

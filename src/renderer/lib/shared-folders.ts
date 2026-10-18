@@ -1,6 +1,8 @@
 import type { ComposeConfig } from '../../types';
 import { configureSharedFolders, readSharedFolders, SHARE_CAPABILITY, SHARE_VERSION, sharedFolderErrors, type SharedFolder } from '../../shared/shared-folders';
 import { WINBOAT_DIR } from './constants';
+import {sharedFolderRuntimeMounts, removeSharedFolderRuntimeMounts} from '../../shared/shared-folder-runtime';
+import {volumeTarget} from '../../shared/compose-volumes';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
@@ -22,10 +24,18 @@ export async function prepareSharedFolders(service: ComposeConfig['services']['w
         return {...folder,hostPath};
     });
     const next = configureSharedFolders(service, checked, process.getuid!(), process.getgid!());
+    if (service['x-winboat-shared-folders']) next.volumes = removeSharedFolderRuntimeMounts(next.volumes, WINBOAT_DIR);
     if (checked.some(folder => folder.enabled)) {
         const {stdout} = await execFile('docker', ['image','inspect','--format',`{{ index .Config.Labels "${SHARE_CAPABILITY}" }}`,next.image], {timeout:5000});
         if (stdout.trim() !== SHARE_VERSION) throw new Error('Rebuild the host images with ./scripts/build-helios.sh to enable authenticated shared folders.');
         if (/^[Nn]/.test(next.environment.NETWORK || '')) throw new Error('Shared folders require the VM network to be enabled.');
+        if (next.volumes.some(mount => ['/opt/winboat-shares','/run/samba.sh'].includes(volumeTarget(mount)))) {
+            throw new Error('The shared-folder runtime paths are already mounted by a custom configuration.');
+        }
+        const {app}:typeof import('@electron/remote') = require('@electron/remote');
+        const bundle = app.isPackaged ? path.join(process.resourcesPath,'shared-folders')
+            : path.resolve(app.getAppPath(),'..','..','resources','shared-folders');
+        next.volumes.push(...sharedFolderRuntimeMounts(WINBOAT_DIR,bundle));
     }
     return next;
 }

@@ -675,3 +675,20 @@ VGA auch bei fehlerfreiem PnP-Status wieder aktivieren. Nach einem gültigen
 Helios-Bild hebt `display-ready` diesen zeitlich begrenzten Hinweis wieder auf.
 Die API akzeptiert dabei keine Geräte-IDs oder Befehle aus der Anfrage; der
 Watchdog bearbeitet ausschließlich den erkannten Bootstrap-VGA-Adapter.
+
+Bei einem verzerrten Bild kann ein direkter QEMU-Export den Viewer als
+Fehlerquelle eingrenzen. Im Checkout bei laufender VM ausführen:
+
+```bash
+python3 scripts/helios/capture-displays.py
+```
+
+Das Werkzeug legt `vga.png`, `helios.png` und `results.json` in einem neuen
+lokalen Verzeichnis ab. Ein nicht vorhandener oder nicht exportierbarer
+Ausgang steht als Fehler in `results.json`; die andere Aufnahme bleibt
+erhalten. Es ändert weder Windows-Treiber noch die Anzeigetopologie.
+Ist auch `helios.png` verzerrt, liegt der Fehler vor der GTK-Darstellung,
+im Gast-/Host-Scanout- oder QEMU-Auslesepfad. Ist der Export korrekt,
+muss der DMA-BUF-Import beziehungsweise die Darstellung im Viewer untersucht
+werden. Für den Export muss der veröffentlichte QMP-Port frei sein; eine
+andere dauerhaft verbundene QMP-Anwendung kann ihn belegen.

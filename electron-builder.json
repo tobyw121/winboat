@@ -50,6 +50,11 @@
   ],
   "extraResources": [
     {
+      "from": "./resources/shared-folders",
+      "to": "shared-folders",
+      "filter": ["manage.py", "samba.sh"]
+    },
+    {
       "from": "./resources/atlas-tools",
       "to": "atlas-tools",
       "filter": ["entry.sh", "inject.sh", "*.py"]

@@ -13,7 +13,7 @@ else
     share_network="${NETWORK:-bridge}"
     case "${share_network,,}" in
         passt|slirp) share_address=127.0.0.1; share_interfaces=lo ;;
-        *) share_address="$VM_NET_IP"; share_interfaces="$VM_NET_BRIDGE" ;;
+        *) share_address=$(python3 /opt/winboat-shares/manage.py address "$VM_NET_BRIDGE"); share_interfaces="$VM_NET_BRIDGE" ;;
     esac
     if [[ -n "${SAMBA_INTERFACE:-}" ]]; then share_interfaces+=",$SAMBA_INTERFACE"; fi
 fi

@@ -18,6 +18,7 @@ source = Path(__file__).resolve().parents[1]
 runtime = Path('/opt/winboat-shares')
 if not runtime.exists():
     runtime.symlink_to(source / 'resources/shared-folders', target_is_directory=True)
+assert (runtime / 'manage.py').read_bytes() == (source / 'resources/shared-folders/manage.py').read_bytes(), 'Mount the current shared-folder helpers at /opt/winboat-shares'
 identity = Path('/winboat-shares/Projects').stat()
 uid, gid = identity.st_uid, identity.st_gid
 address = socket.gethostbyname(socket.gethostname())
@@ -25,7 +26,8 @@ entries = [{'name':'Projects','path':'/winboat-shares/Projects','readOnly':False
            {'name':'Archive','path':'/winboat-shares/Archive','readOnly':True}]
 environment = {**os.environ, 'WINBOAT_SHARED_FOLDERS':json.dumps(entries), 'PASSWORD':'fixture-only null $ password',
                'WINBOAT_SHARE_UID':str(uid),'WINBOAT_SHARE_GID':str(gid),'SAMBA':'Y','NETWORK':'bridge','DHCP':'N',
-               'VM_NET_IP':address,'VM_NET_BRIDGE':'eth0'}
+               # Dockur's VM_NET_IP belongs to Windows, not the SMB server.
+               'VM_NET_IP':'192.0.2.123','VM_NET_BRIDGE':'eth0'}
 original_modes = [stat.S_IMODE(Path(entry['path']).stat().st_mode) for entry in entries]
 subprocess.run(['bash','-c','source "$1"','fixture',str(source/'resources/shared-folders/samba.sh')], env=environment, check=True)
 try:

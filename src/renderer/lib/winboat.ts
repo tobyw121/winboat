@@ -583,40 +583,42 @@ export class Winboat {
         await validateConfiguredShares(composeConfig.services.windows);
         logger.info("Going to replace compose config");
         this.containerActionLoading.value = true;
+        try {
+            const composeFilePath = path.join(WINBOAT_DIR, 'docker-compose.yml');
 
-        const composeFilePath = path.join(WINBOAT_DIR, 'docker-compose.yml');
+            // 0. Stop the current container if it's online
+            if (this.containerStatus.value === ContainerStatus.Running) {
+                await this.stopContainer();
+            }
 
-        // 0. Stop the current container if it's online
-        if (this.containerStatus.value === ContainerStatus.Running) {
-            await this.stopContainer();
+            // 1. Compose down the current container
+            await execFileAsync('docker', ['compose', '-f', composeFilePath, 'down']);
+
+            // 2. Create a backup directory if it doesn't exist
+            const backupDir = path.join(WINBOAT_DIR, 'backup');
+            if (!fs.existsSync(backupDir)) {
+                fs.mkdirSync(backupDir);
+                logger.info(`Created compose backup dir: ${backupDir}`)
+            }
+
+            // 3. Move the current compose file to backup
+            const backupFile = `${Date.now()}-docker-compose.yml`;
+            fs.renameSync(composeFilePath, path.join(backupDir, backupFile));
+            logger.info(`Backed up current compose at: ${path.join(backupDir, backupFile)}`);
+
+            // 4. Write new compose file
+            const newComposeYAML = PrettyYAML.stringify(composeConfig);
+            fs.writeFileSync(composeFilePath, newComposeYAML, { encoding: 'utf8' });
+            logger.info(`Wrote new compose file to: ${composeFilePath}`);
+
+            // 5. Deploy the container with the new compose file
+            await execFileAsync('docker', ['compose', '-f', composeFilePath, 'up', '-d']);
+
+            logger.info("Replace compose config completed, successfully deployed new container");
+
+        } finally {
+            this.containerActionLoading.value = false;
         }
-
-        // 1. Compose down the current container
-        await execFileAsync('docker', ['compose', '-f', composeFilePath, 'down']);
-
-        // 2. Create a backup directory if it doesn't exist
-        const backupDir = path.join(WINBOAT_DIR, 'backup');
-        if (!fs.existsSync(backupDir)) {
-            fs.mkdirSync(backupDir);
-            logger.info(`Created compose backup dir: ${backupDir}`)
-        }
-
-        // 3. Move the current compose file to backup
-        const backupFile = `${Date.now()}-docker-compose.yml`;
-        fs.renameSync(composeFilePath, path.join(backupDir, backupFile));
-        logger.info(`Backed up current compose at: ${path.join(backupDir, backupFile)}`);
-
-        // 4. Write new compose file
-        const newComposeYAML = PrettyYAML.stringify(composeConfig);
-        fs.writeFileSync(composeFilePath, newComposeYAML, { encoding: 'utf8' });
-        logger.info(`Wrote new compose file to: ${composeFilePath}`);
-
-        // 5. Deploy the container with the new compose file
-        await execFileAsync('docker', ['compose', '-f', composeFilePath, 'up', '-d']);
-
-        logger.info("Replace compose config completed, successfully deployed new container");
-
-        this.containerActionLoading.value = false;
     }
 
     async resetWinboat() {

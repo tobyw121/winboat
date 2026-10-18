@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Authenticated SMB exports for explicitly configured WinBoat bind mounts."""
 import ipaddress
+import fcntl
 import json
 import os
 from pathlib import Path
 import pwd
 import grp
 import re
+import socket
+import struct
 import subprocess
 import sys
 import tempfile
@@ -14,6 +17,16 @@ import tempfile
 ROOT = '/winboat-shares/'
 META = Path('/run/winboat-shares.json')
 USER = 'winboat'
+
+
+def interface_address(interface):
+    # VM_NET_IP is the Windows guest's IP. Query the local bridge instead;
+    # it also supplies the reachable direct path used by diagnostics.
+    if not re.fullmatch(r'[a-zA-Z0-9_.-]{1,15}', interface):
+        raise ValueError('Invalid SMB network interface')
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+        response = fcntl.ioctl(probe.fileno(), 0x8915, struct.pack('256s', interface.encode('ascii')))
+    return socket.inet_ntoa(response[20:24])
 
 
 def folders():
@@ -124,6 +137,8 @@ if __name__ == '__main__':
             configure(sys.argv[2], sys.argv[3])
         elif sys.argv[1] == 'check':
             check()
+        elif sys.argv[1] == 'address':
+            print(interface_address(sys.argv[2]))
         else:
             raise ValueError('Unknown SMB operation')
     except Exception as error:

@@ -108,6 +108,11 @@
                 <x-card class="p-4 my-0 w-full bg-neutral-800/20">
                     <h1 class="text-lg font-semibold mb-3">Shared Folders</h1>
                     <SharedFolders v-model="sharedFolders" :disabled="isApplyingChanges" />
+                    <div class="mt-4 flex gap-3 items-center">
+                        <x-button :disabled="isApplyingChanges || !sharesNeedSaving || !!sharedFolderErrors(sharedFolders).length" @click="saveShares">Save shared folders</x-button>
+                        <span class="text-sm text-neutral-400">Applies these folders and restarts the VM.</span>
+                    </div>
+                    <p v-if="shareSaveMessage" class="text-sm mt-2" role="status">{{ shareSaveMessage }}</p>
                     <div class="mt-4 flex gap-3 items-center"><x-button :disabled="isApplyingChanges || checkingShares || !sharedFolders.some(folder => folder.enabled) || winboat.containerStatus.value !== ContainerStatus.Running || JSON.stringify(sharedFolders) !== origSharedFolders || !compose?.services.windows['x-winboat-shared-folders']" @click="testShares">Test saved shares</x-button><span class="text-sm text-neutral-400">Save changes and start the VM before testing.</span></div>
                     <div v-for="result in shareResults" :key="result.name" class="text-sm mt-2" :class="result.ok ? 'text-green-300' : 'text-red-300'">
                         <p>{{ result.name }}: {{ result.message }}</p><div v-if="result.windowsPath" class="flex gap-2 items-center"><code>{{ result.windowsPath }}</code><x-button @click="copyWindowsPath(result.windowsPath)">Copy direct path</x-button></div>
@@ -176,6 +181,7 @@
                     <span v-if="!isApplyingChanges || isUpdatingUSBPrerequisites">Save</span>
                     <x-throbber v-else class="w-10"></x-throbber>
                 </x-button>
+                <p v-if="saveButtonDisabled && !isApplyingChanges && errors.length" class="text-sm text-red-300">{{ errors.join(' ') }} Shared folders can be saved separately above.</p>
             </div>
         </div>
         <div v-show="wbConfig.config.experimentalFeatures" :key="rerenderExperimental">
@@ -490,6 +496,7 @@
 <script setup lang="ts">
 import SharedFolders from '../components/SharedFolders.vue';
 import {sharedFolderErrors, type SharedFolder} from '../../shared/shared-folders';
+import {changedResourceErrors} from '../../shared/configuration-resources';
 import {configuredSharedFolders, prepareSharedFolders, checkSharedFolders, type ShareCheck} from '../lib/shared-folders';
 import { configureHelios, HELIOS_IMAGE } from '../../shared/helios';
 import { requireHelios } from '../lib/helios';
@@ -542,6 +549,27 @@ const origSharedFolders = ref('[]');
 const checkingShares = ref(false);
 const shareResults = ref<ShareCheck[]>([]);
 const shareTestError = ref('');
+const shareSaveMessage = ref('');
+const sharesNeedSaving = computed(() => JSON.stringify(sharedFolders.value) !== origSharedFolders.value ||
+    (!compose.value?.services.windows['x-winboat-shared-folders'] && sharedFolders.value.some(folder => folder.enabled)));
+async function saveShares() {
+    if (isApplyingChanges.value) return;
+    isApplyingChanges.value = true;
+    shareSaveMessage.value = '';shareResults.value = [];shareTestError.value = '';
+    try {
+        // Read the saved service, preserving graphics, CPU, RAM and pending
+        // unrelated form edits. Do not reconfigure the graphics adapter here.
+        const next = winboat.parseCompose();
+        next.services.windows = await prepareSharedFolders(next.services.windows, sharedFolders.value);
+        await winboat.replaceCompose(next);
+        compose.value = winboat.parseCompose();
+        sharedFolders.value = configuredSharedFolders(compose.value.services.windows);
+        origSharedFolders.value = JSON.stringify(sharedFolders.value);
+        shareSaveMessage.value = 'Shared folders saved. The VM has been restarted; use Test saved shares when it is running.';
+    } catch (error) {
+        shareSaveMessage.value = error instanceof Error ? error.message : String(error);
+    } finally {isApplyingChanges.value = false;}
+}
 function copyWindowsPath(value:string) {const {clipboard}:typeof import('electron')=require('electron');clipboard.writeText(value);}
 async function testShares() {
     checkingShares.value=true;shareTestError.value='';shareResults.value=[];
@@ -650,7 +678,7 @@ async function assignValues() {
 
     const specs = await getSpecs();
     maxRamGB.value = specs.ramGB;
-    maxNumCores.value = specs.cpuCores;
+    maxNumCores.value = Math.max(specs.cpuCores, require('os').cpus().length);
 
     refreshAvailableDevices();
 }
@@ -660,6 +688,8 @@ async function assignValues() {
  * and then re-assigns the initial values to the reactive refs
  */
 async function saveDockerCompose() {
+    if (isApplyingChanges.value) return;
+    isApplyingChanges.value = true;
     try {
         const previousCompose = JSON.stringify(winboat.parseCompose());
         compose.value!.services.windows.environment.RAM_SIZE = `${ramGB.value}G`;
@@ -701,19 +731,14 @@ async function saveDockerCompose() {
         qmpPortManager.value!.setPortMapping(GUEST_RDP_PORT, freerdpPort.value);
         compose.value!.services.windows.ports = qmpPortManager.value!.composeFormat;
 
-        isApplyingChanges.value = true;
-        try {
-            wbConfig.config.localDisplayPreferred = local;
-            localDisplayMessage.value = display.unavailableReason ? `Local Desktop selection saved; Browser Display is active. ${display.unavailableReason}` : '';
-            if (JSON.stringify(compose.value!) !== previousCompose) await winboat.replaceCompose(compose.value!);
-            await assignValues();
-        } finally {
-            isApplyingChanges.value = false;
-        }
+        wbConfig.config.localDisplayPreferred = local;
+        localDisplayMessage.value = display.unavailableReason ? `Local Desktop selection saved; Browser Display is active. ${display.unavailableReason}` : '';
+        if (JSON.stringify(compose.value!) !== previousCompose) await winboat.replaceCompose(compose.value!);
+        await assignValues();
     } catch (error) {
         const { dialog } = require('@electron/remote');
         await dialog.showMessageBox({ type: 'error', title: 'WinBoat configuration', message: error instanceof Error ? error.message : String(error) });
-    }
+    } finally {isApplyingChanges.value = false;}
 
 }
 
@@ -756,27 +781,9 @@ async function addRequiredComposeFieldsUSB() {
     isUpdatingUSBPrerequisites.value = false;
 }
 
-const errors = computed(() => {
-    let errCollection: string[] = [];
-
-    if (!numCores.value || numCores.value < 2) {
-        errCollection.push("You must allocate at least two CPU cores for Windows to run properly")
-    }
-
-    if (numCores.value > maxNumCores.value) {
-        errCollection.push("You cannot allocate more CPU cores to Windows than you have available")
-    }
-
-    if (!ramGB.value || ramGB.value < 4) {
-        errCollection.push("You must allocate at least 4 GB of RAM for Windows to run properly")
-    }
-
-    if (ramGB.value > maxRamGB.value) {
-        errCollection.push("You cannot allocate more RAM to Windows than you have available")
-    }
-
-    return errCollection;
-})
+const errors = computed(() => changedResourceErrors(
+    {cpu:numCores.value, ram:ramGB.value}, {cpu:origNumCores.value, ram:origRamGB.value},
+    {cpu:maxNumCores.value, ram:maxRamGB.value}));
 
 const hasUsbVolume = (_compose: typeof compose) => _compose.value?.services.windows.volumes?.includes(USB_BUS_PATH);
 const hasQmpArgument = (_compose: typeof compose) => _compose.value?.services.windows.environment.ARGUMENTS?.includes(QMP_ARGUMENT);
