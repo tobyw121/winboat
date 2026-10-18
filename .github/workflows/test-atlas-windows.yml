@@ -25,9 +25,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Test isolated Atlas scripts and native helpers
-        shell: ${{ matrix.shell }}
+        shell: pwsh
         run: |
           foreach ($test in @('atlas-windows','atlas-recovery','atlas-observer','atlas-helios-handoff','atlas-acl','atlas-ui','atlas-session-launcher')) {
-            ${{ matrix.shell }} -NoProfile -File "./tests/$test.test.ps1"
+            & '${{ matrix.shell }}' -NoProfile -File "./tests/$test.test.ps1"
             if ($LASTEXITCODE -ne 0) { throw "Atlas test failed: $test ($LASTEXITCODE)" }
           }
