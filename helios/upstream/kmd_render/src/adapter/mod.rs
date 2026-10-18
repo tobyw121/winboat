@@ -1319,12 +1319,15 @@ impl AdapterContext {
     /// at DIRQL. Before the first commit, use the boot/EDID preference.
     pub fn display_mode(&self) -> (u32, u32) {
         let wh = self.committed_mode_wh.load(Ordering::Acquire);
-        if wh == 0 { self.preferred_display_mode() }
-        else { ((wh >> 32) as u32, wh as u32) }
+        if wh == 0 {
+            self.preferred_display_mode()
+        } else {
+            ((wh >> 32) as u32, wh as u32)
+        }
     }
 
     pub(crate) fn display_mode_packed(&self) -> u32 {
-        let (w,h) = self.display_mode();
+        let (w, h) = self.display_mode();
         (w << 16) | h
     }
 

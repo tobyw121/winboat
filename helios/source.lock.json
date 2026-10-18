@@ -244,7 +244,7 @@
     "kmd_render/src/adapter/backing.rs": "177b2651b690dfe87bf270ca4685b056d8ef26f74c87c2438698c4081630b73b",
     "kmd_render/src/adapter/kobj.rs": "1af97219ed655a9e9305abd1bea501d176cecbc3e2af150559993b94a63448b0",
     "kmd_render/src/adapter/locks.rs": "92f27a4443701f45ceb105275315ade64b733050d3b4a5579607a4125428553c",
-    "kmd_render/src/adapter/mod.rs": "4ee1ff31eed599257c9cfc6d3c58035101f6549f7a601de4da6ec595982619ed",
+    "kmd_render/src/adapter/mod.rs": "82e3fca960c25036949cf8e876f2180814b050ff31bd2645ee8a9cbc63b11011",
     "kmd_render/src/adapter/producer.rs": "db6a04632f702faecb838b68fd0fa7085e0ec0abb45dea35cfb07a4c969428b6",
     "kmd_render/src/adapter/read_ledger.rs": "17f4a8a5ad444840c2d141efeafcfb19f555c51004112afe5c2c78ce43dfe398",
     "kmd_render/src/adapter/scanout.rs": "4a6db5f0b125defa56d392d04a99f90c6fb26ac117669a716c63766d711e904f",
@@ -258,7 +258,7 @@
     "kmd_render/src/ddi/child.rs": "b36bb0c191d6db7d7266bf62eb65dd83b8271c35d6f8bf93653f0bf8f49778ad",
     "kmd_render/src/ddi/cpu_host_aperture.rs": "7f2628ba152ad112817f5ea416f13b9b3f94d81e01a61390c4cf08149de3cb8a",
     "kmd_render/src/ddi/create_allocation.rs": "2dbf785d9fe67e8e641139ab2fcb9e030696d8506dbcfba16f3db7220a4796b5",
-    "kmd_render/src/ddi/display.rs": "78310bda88dd209ac560c4c52591402fad458717d8b06900e119718ad62910fd",
+    "kmd_render/src/ddi/display.rs": "33609bc67d0b8770c1d2b608c8356344371e5d7be518d49ab70d4abd0874a277",
     "kmd_render/src/ddi/escape.rs": "0e2e1d71da8520803bc53d74780b98d54ed86c505a60870bd0e5e5db8e7049ab",
     "kmd_render/src/ddi/gpummu.rs": "5dfe4065daa3158b3b16effb578648a7f4a5cfbce268a796b5b429d41d7412d7",
     "kmd_render/src/ddi/hpd.rs": "21d32dc66c73adffd348aa274919f501fe69c1c0fb5c89b1688f0f98ea37b094",
@@ -663,16 +663,18 @@
       "kmd_logic/src/lib.rs": "b5e2291b0ab0f04759ca1df732d729c41044e06039a165577ae05ee315545c8d",
       "kmd_render/src/adapter/mod.rs": "2558f9d1eeb48b2c847ee949c257ca6a19b70a0747a5cf325bc14c781cab9bd4",
       "kmd_render/src/ddi/display.rs": "35ed160f5aacbc902fd8b12656ee8d82966fc04610e150da6fa75005c4e05b0f",
-      "kmd_render/src/ddi/vidpn.rs": "f2085eefbf9e9937579aef332a7c340fd44316f615790555092fd50ee9bfe420",
-      "kmd_logic/src/display_modes.rs": "9e0cfa5b734acfb4801115d340868a3d2d9ac6e2b7c818afa888b2bde60c1b4c"
+      "kmd_render/src/ddi/vidpn.rs": "f2085eefbf9e9937579aef332a7c340fd44316f615790555092fd50ee9bfe420"
     },
-    "validationWorkflow": ".github/workflows/test-helios-game-compatibility.yml",
     "features": [
       "d3d11-uav-clear-view",
       "live-vidpn-display-modes"
     ],
     "addedFiles": [
       "kmd_logic/src/display_modes.rs"
+    ],
+    "validationWorkflows": [
+      ".github/workflows/test-helios-game-compatibility.yml",
+      ".github/workflows/test-helios-display-modes.yml"
     ]
   }
 }
