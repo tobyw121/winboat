@@ -8,6 +8,7 @@ on:
       - 'tests/helios-clear-view/**'
       - 'tests/helios-game-clearview.cpp'
       - 'helios/upstream/umd/src/forward/transfer.rs'
+      - 'helios/upstream/packaging/windows/probes/**'
       - 'helios/upstream/umd/src/forward/queries.rs'
       - 'helios/upstream/umd/src/forward/state.rs'
       - 'helios/upstream/umd/src/forward/views.rs'
@@ -21,6 +22,7 @@ on:
       - 'tests/helios-clear-view/**'
       - 'tests/helios-game-clearview.cpp'
       - 'helios/upstream/umd/src/forward/transfer.rs'
+      - 'helios/upstream/packaging/windows/probes/**'
       - 'helios/upstream/umd/src/forward/queries.rs'
       - 'helios/upstream/umd/src/forward/state.rs'
       - 'helios/upstream/umd/src/forward/views.rs'
@@ -93,11 +95,17 @@ jobs:
             "call `"$vs/Common7/Tools/VsDevCmd.bat`" -arch=${{ matrix.arch }} -host_arch=x64"
             'if errorlevel 1 exit /b 1'
             'cl /nologo /W4 /EHsc /std:c++17 /MT tests/helios-game-clearview.cpp /Fe:helios-clearview-${{ matrix.arch }}.exe /link d3d11.lib dxgi.lib'
+            'if errorlevel 1 exit /b 1'
+            'cl /nologo /W4 /EHsc /std:c++17 /MT helios/upstream/packaging/windows/probes/d3d11-smoke.cpp /Fe:helios-render-${{ matrix.arch }}.exe /link d3d11.lib dxgi.lib d3dcompiler.lib'
           ) | Set-Content -LiteralPath $script -Encoding ascii
           & $env:ComSpec /d /c $script
           if ($LASTEXITCODE -ne 0) { throw 'Helios acceptance probe compilation failed.' }
+          & ./helios-render-${{ matrix.arch }}.exe --warp
+          if ($LASTEXITCODE -ne 0) { throw 'WARP control: compute/draw/depth/MSAA readback failed.' }
       - uses: actions/upload-artifact@v4
         with:
           name: helios-clearview-probe-${{ matrix.arch }}
-          path: helios-clearview-${{ matrix.arch }}.exe
+          path: |
+            helios-clearview-${{ matrix.arch }}.exe
+            helios-render-${{ matrix.arch }}.exe
           if-no-files-found: error

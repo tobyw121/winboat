@@ -73,7 +73,7 @@
     "ci/windows/Build-Installer.ps1": "bab6b04210c72d7372d72a3f7755cc969859e9d006956fcdc2e0fc7afb61958c",
     "ci/windows/Build-KhronosLoaders.ps1": "1efa0a42f8dc8d8d493d5a033a3406a314a529f026604a144a7e364f730b2aa0",
     "ci/windows/Build-OpenCL.ps1": "a6f698e803dd30b9b510df40a41847ad8608e3079be56d6e0384cb9ac60942f7",
-    "ci/windows/Build-SmokeTests.ps1": "6476c2c035d6f5f3bedff1a019050cd2a64438ff3d191f3d035f61790eab10a9",
+    "ci/windows/Build-SmokeTests.ps1": "b440eeaab96af6c0027f3e30546e55a5887210088f9aba9f1387c630627dc199",
     "ci/windows/Build-Umd.ps1": "9578769e92e4d54cf6d7bd75cae0ebd5e932dcfb6ca90c9a1f32b16dea5a19aa",
     "ci/windows/Initialize-HeliosBuild.ps1": "4e6e5632eafcd7b45bbc5f3bbfb0378f07c76bca430a743f9b2c7a85204b1853",
     "ci/windows/Install-VulkanSdk.ps1": "f5e2e8ac50b38ac6421f4c920fe36b85b413651c60f535b4587e5a94665aaebb",
@@ -326,7 +326,8 @@
     "packaging/windows/compat/resolve-compatibility/Resolve-CompatibilityCommon.ps1": "eb418675aa7eb6ed34c81f034f53a1ecf8f03f6d6321df1794a99f699f42b899",
     "packaging/windows/compat/resolve-compatibility/Test-Resolve-CompatibilityLifecycle.ps1": "e575dabadf6e1718b1f1ab1bc3b33a83ad9c9f90ec359c78e43149297e4d21db",
     "packaging/windows/compat/resolve-compatibility/Uninstall-Resolve-Compatibility.ps1": "b04a01f92674e582f1bb494e6f53317109157b490e304e2aa6051c1ad05c08a7",
-    "packaging/windows/probes/d3d11-smoke.cpp": "ac1a7a4d18c427ff87497396789d14247dfd28d8662fa6cb69b934bccfcc4b3e",
+    "packaging/windows/probes/d3d11-render-checks.h": "796543781b0485b1221236d9b2985874c703825627266a73fc859b35168c8d6a",
+    "packaging/windows/probes/d3d11-smoke.cpp": "8f5ed780017dd650c2c4fb6fe80ee1a5e5d836995c524e1a07fb2bf0feeec4ab",
     "packaging/windows/probes/opencl-gl-sharing-smoke.cpp": "f5578e7074ab5c8775b723cad3b2504dbbea628d7e6a4e59440d969876323f28",
     "packaging/windows/probes/opencl-smoke.c": "3c05cc319d69938fd17b923e145ef5715d1255f5c4a508680c5727ff3baa7a08",
     "packaging/windows/probes/opengl-smoke.c": "7cd9f2d5196cc6af7ca8c0ec88ea84d36d7b45861c382cd18dce88cab825826a",
@@ -669,7 +670,9 @@
       "umd/src/forward/queries.rs": "0616108aab51f69cb60ae9fa20285233387bcd717dd910dacced76b4598b4332",
       "umd/src/forward/shaders.rs": "1a1638803546f3319c9e6fba1c7b699c72bf22c965f8ce46652c25dd8a627b58",
       "umd/src/forward/state.rs": "66819ca5d54bc134fca04f51d410e95fb88c25788539f91791e0e672df0e2a8a",
-      "umd/src/forward/views.rs": "4f8a338cc6ccac77d85b249a2e2266aeaac17736f3b9d2ca4d0d6490037a3873"
+      "umd/src/forward/views.rs": "4f8a338cc6ccac77d85b249a2e2266aeaac17736f3b9d2ca4d0d6490037a3873",
+      "ci/windows/Build-SmokeTests.ps1": "6476c2c035d6f5f3bedff1a019050cd2a64438ff3d191f3d035f61790eab10a9",
+      "packaging/windows/probes/d3d11-smoke.cpp": "ac1a7a4d18c427ff87497396789d14247dfd28d8662fa6cb69b934bccfcc4b3e"
     },
     "features": [
       "d3d11-uav-clear-view",
@@ -677,11 +680,13 @@
       "vulkan-guest-feature-handoff",
       "helios-vulkan-device-name",
       "backend-msaa-quality",
-      "d3d11-create-error-propagation"
+      "d3d11-create-error-propagation",
+      "d3d11-compute-depth-msaa-readback"
     ],
     "addedFiles": [
       "kmd_logic/src/display_modes.rs",
-      "ci/patches/mesa/0001-guest-device-features-and-branding.patch"
+      "ci/patches/mesa/0001-guest-device-features-and-branding.patch",
+      "packaging/windows/probes/d3d11-render-checks.h"
     ],
     "validationWorkflows": [
       ".github/workflows/test-helios-game-compatibility.yml",

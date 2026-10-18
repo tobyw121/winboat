@@ -3,6 +3,8 @@
 #include <dxgi1_2.h>
 #include <cstdio>
 #include <cwchar>
+#include <cstring>
+#include "d3d11-render-checks.h"
 
 // Exercise real resource creation, GPU clear, copy and CPU readback as well as
 // loading the architecture-matched UMD. Odd dimensions exercise RowPitch.
@@ -58,7 +60,44 @@ static bool check_readback(ID3D11Device *device, ID3D11DeviceContext *context) {
     return valid;
 }
 
-int wmain() {
+static bool check_msaa(ID3D11Device *device, ID3D11DeviceContext *context) {
+    const DXGI_FORMAT formats[] = { DXGI_FORMAT_B8G8R8A8_UNORM,
+        DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R32G32B32A32_FLOAT, DXGI_FORMAT_D32_FLOAT };
+    const UINT counts[] = { 0, 1, 2, 3, 4, 8, 16, 32, 33 };
+    for (auto format : formats) for (auto samples : counts) {
+        UINT quality = 0;
+        HRESULT hr = device->CheckMultisampleQualityLevels(format, samples, &quality);
+        const bool legal = samples > 0 && samples <= 32 && (samples & (samples - 1)) == 0;
+        if (!legal) {
+            if (SUCCEEDED(hr) && quality != 0) return false;
+            continue;
+        }
+        if (FAILED(hr)) return false;
+        std::printf("MSAA format=%u samples=%u quality=%u\n", format, samples, quality);
+        if (!quality) continue;
+        D3D11_TEXTURE2D_DESC desc = {};
+        desc.Width = desc.Height = 16; desc.MipLevels = desc.ArraySize = 1;
+        desc.Format = format; desc.SampleDesc.Count = samples;
+        desc.SampleDesc.Quality = quality - 1;
+        desc.BindFlags = format == DXGI_FORMAT_D32_FLOAT ? D3D11_BIND_DEPTH_STENCIL : D3D11_BIND_RENDER_TARGET;
+        ID3D11Texture2D *texture = nullptr;
+        hr = device->CreateTexture2D(&desc, nullptr, &texture);
+        const bool resolveOk = SUCCEEDED(hr) && texture && format == DXGI_FORMAT_B8G8R8A8_UNORM && samples > 1
+            ? check_msaa_resolve(device, context, texture, desc) : true;
+        if (texture) texture->Release();
+        if (!resolveOk) return false;
+        if (FAILED(hr)) {
+            std::fprintf(stderr, "Advertised MSAA texture rejected: fmt=%u count=%u quality=%u hr=0x%08lx\n",
+                format, samples, quality - 1, static_cast<unsigned long>(hr));
+            return false;
+        }
+    }
+    return true;
+}
+
+int wmain(int argc, wchar_t **argv) {
+    const bool warp = argc == 2 && std::wcscmp(argv[1], L"--warp") == 0;
+    std::printf("Adapter mode: %s\n", warp ? "WARP software control" : "Helios hardware required");
     std::printf("Direct3D 11 smoke: %zu-bit process.\n", sizeof(void *) * 8);
     IDXGIFactory1 *factory = nullptr;
     HRESULT hr = CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void **>(&factory));
@@ -67,7 +106,7 @@ int wmain() {
         return 1;
     }
     IDXGIAdapter1 *helios = nullptr;
-    for (UINT index = 0; ; ++index) {
+    for (UINT index = 0; !warp; ++index) {
         IDXGIAdapter1 *adapter = nullptr;
         hr = factory->EnumAdapters1(index, &adapter);
         if (hr == DXGI_ERROR_NOT_FOUND) break;
@@ -91,7 +130,7 @@ int wmain() {
         }
         adapter->Release();
     }
-    if (!helios) {
+    if (!helios && !warp) {
         factory->Release();
         std::fprintf(stderr, "Helios DXGI adapter was not found.\n");
         return 2;
@@ -100,21 +139,25 @@ int wmain() {
     ID3D11DeviceContext *context = nullptr;
     D3D_FEATURE_LEVEL level = D3D_FEATURE_LEVEL_9_1;
     const D3D_FEATURE_LEVEL requested[] = {D3D_FEATURE_LEVEL_11_0};
-    hr = D3D11CreateDevice(helios, D3D_DRIVER_TYPE_UNKNOWN, nullptr, 0, requested, 1,
+    hr = D3D11CreateDevice(helios, warp ? D3D_DRIVER_TYPE_WARP : D3D_DRIVER_TYPE_UNKNOWN, nullptr, 0, requested, 1,
                            D3D11_SDK_VERSION, &device, &level, &context);
     if (FAILED(hr) || !device || !context || level < D3D_FEATURE_LEVEL_11_0) {
         if (context) context->Release();
         if (device) device->Release();
         std::fprintf(stderr, "D3D11CreateDevice on Helios failed: 0x%08lx\n", static_cast<unsigned long>(hr));
-        helios->Release();
+        if (helios) helios->Release();
         factory->Release();
         return 3;
     }
-    std::printf("Direct3D 11 device created on Helios; feature level 0x%x.\n", level);
+    std::printf("Direct3D 11 device created on selected adapter; feature level 0x%x.\n", level);
     const bool readbackOk = check_readback(device, context);
+    const bool msaaOk = check_msaa(device, context);
+    const bool computeOk = check_compute(device, context);
+    const bool drawOk = check_depth_draw(device, context);
+    context->ClearState();
     context->Release();
     device->Release();
-    helios->Release();
+    if (helios) helios->Release();
     factory->Release();
-    return readbackOk ? 0 : 4;
+    return readbackOk && msaaOk && computeOk && drawOk ? 0 : 4;
 }
