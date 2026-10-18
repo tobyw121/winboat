@@ -1,0 +1,167 @@
+--- a/src/virtio/vulkan/vn_device.c
++++ b/src/virtio/vulkan/vn_device.c
+@@ -562,18 +562,18 @@
+    const bool has_wsi = app_exts->KHR_swapchain ||
+                         app_exts->ANDROID_native_buffer ||
+                         app_exts->ANDROID_external_memory_android_hardware_buffer;
+-   if (has_wsi && dev->helios_host_timeline_procs &&
+-       physical_dev->base.vk.supported_features.timelineSemaphore &&
+-       !dev->base.vk.enabled_features.timelineSemaphore) {
+-      result = vn_device_features_enable_timeline(
+-         alloc, create_info->pNext, &host_features);
+-      if (result != VK_SUCCESS) {
+-         if (create_info == &local_create_info)
+-            vk_free(alloc, (void *)create_info->ppEnabledExtensionNames);
+-         return result;
+-      }
+-      final_create_info.pNext = host_features;
+-   }
++   const bool enable_host_timeline =
++      has_wsi && dev->helios_host_timeline_procs &&
++      physical_dev->base.vk.supported_features.timelineSemaphore &&
++      !dev->base.vk.enabled_features.timelineSemaphore;
++   result = vn_device_features_prepare(
++      alloc, create_info->pNext, enable_host_timeline, &host_features);
++   if (result != VK_SUCCESS) {
++      if (create_info == &local_create_info)
++         vk_free(alloc, (void *)create_info->ppEnabledExtensionNames);
++      return result;
++   }
++   final_create_info.pNext = host_features;
+    STACK_ARRAY(VkDeviceQueueCreateInfo, queue_infos,
+                create_info->queueCreateInfoCount);
+    for (uint32_t i = 0; i < create_info->queueCreateInfoCount; i++) {
+--- a/src/virtio/vulkan/vn_physical_device.c
++++ b/src/virtio/vulkan/vn_physical_device.c
+@@ -562,7 +562,11 @@
+ 
+    char device_name[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE];
+    int device_name_len = snprintf(device_name, sizeof(device_name),
++#if defined(_WIN32) && defined(HELIOS_PRODUCT_NAME)
++                                  HELIOS_PRODUCT_NAME " (%s)", props->deviceName);
++#else
+                                   "Virtio-GPU Venus (%s)", props->deviceName);
++#endif
+    if (device_name_len >= VK_MAX_PHYSICAL_DEVICE_NAME_SIZE) {
+       memcpy(device_name + VK_MAX_PHYSICAL_DEVICE_NAME_SIZE - 5, "...)", 4);
+       device_name_len = VK_MAX_PHYSICAL_DEVICE_NAME_SIZE - 1;
+--- a/src/virtio/vulkan/vn_device_features.h
++++ b/src/virtio/vulkan/vn_device_features.h
+@@ -23,8 +23,9 @@
+  * Nested arrays/pointers remain app-owned until synchronous CreateDevice ends.
+  */
+ static inline VkResult
+-vn_device_features_enable_timeline(const VkAllocationCallbacks *alloc,
++vn_device_features_prepare(const VkAllocationCallbacks *alloc,
+                                    const void *app_chain,
++                                   bool enable_timeline,
+                                    VkBaseOutStructure **out_chain)
+ {
+    VkBaseOutStructure *head = NULL;
+@@ -33,6 +34,23 @@
+    *out_chain = NULL;
+ 
+    for (const VkBaseInStructure *item = app_chain; item; item = item->pNext) {
++      /* These features belong to the guest frontend, just like their
++       * extension names filtered by vn_device_fix_create_info. Sending them
++       * to a headless host may reject a valid guest device with FEATURE_NOT_PRESENT.
++       * Do not change the application's enabled_features or pNext chain. */
++      switch (item->sType) {
++      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR:
++      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_2_FEATURES_KHR:
++      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR:
++      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_2_FEATURES_KHR:
++      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR:
++      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_MEMORY_REPORT_FEATURES_EXT:
++      case VK_STRUCTURE_TYPE_DEVICE_DEVICE_MEMORY_REPORT_CREATE_INFO_EXT:
++      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAP_MEMORY_PLACED_FEATURES_EXT:
++         continue;
++      default:
++         break;
++      }
+       const size_t size = vk_structure_type_size(item);
+       /* Vulkan ignores unknown pNext types, as does the wire encoder. */
+       if (!size)
+@@ -47,16 +65,16 @@
+       *tail = copy;
+       tail = &copy->pNext;
+ 
+-      if (copy->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES) {
++      if (enable_timeline && copy->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES) {
+          ((VkPhysicalDeviceVulkan12Features *)copy)->timelineSemaphore = VK_TRUE;
+          found = true;
+-      } else if (copy->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES) {
++      } else if (enable_timeline && copy->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES) {
+          ((VkPhysicalDeviceTimelineSemaphoreFeatures *)copy)->timelineSemaphore = VK_TRUE;
+          found = true;
+       }
+    }
+ 
+-   if (!found) {
++   if (enable_timeline && !found) {
+       VkPhysicalDeviceTimelineSemaphoreFeatures *timeline =
+          vk_zalloc(alloc, sizeof(*timeline), 8,
+                    VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+--- a/src/vulkan/util/vk_physical_device_features_gen.py
++++ b/src/vulkan/util/vk_physical_device_features_gen.py
+@@ -217,6 +217,34 @@
+ #include "vk_physical_device_features.h"
+ #include "vk_util.h"
+ 
++/* Keep the rejected field available to GUI applications without a console. */
++#include <stdio.h>
++#include <stdlib.h>
++#if defined(_WIN32) && defined(HELIOS_PRODUCT_NAME)
++#include <process.h>
++#endif
++
++static void
++helios_log_rejected_feature(struct vk_physical_device *physical_device,
++                           const char *structure, const char *field)
++{
++   vk_loge(VK_LOG_OBJS(physical_device), "%s.%s not supported", structure, field);
++#if defined(_WIN32) && defined(HELIOS_PRODUCT_NAME)
++   const char *root = getenv("LOCALAPPDATA");
++   char path[1024];
++   if (!root)
++      return;
++   int n = snprintf(path, sizeof(path), "%s/helios-vulkan-features.log", root);
++   if (n < 0 || (size_t)n >= sizeof(path))
++      return;
++   FILE *file = fopen(path, "a");
++   if (file) {
++      fprintf(file, "pid=%d %s.%s not supported\\n", _getpid(), structure, field);
++      fclose(file);
++   }
++#endif
++}
++
+ static VkResult
+ check_physical_device_features(struct vk_physical_device *physical_device,
+                                const VkPhysicalDeviceFeatures *supported,
+@@ -224,9 +252,11 @@
+                                const char *struct_name)
+ {
+ % for flag in pdev_features:
+-   if (enabled->${flag} && !supported->${flag})
++   if (enabled->${flag} && !supported->${flag}) {
++      helios_log_rejected_feature(physical_device, struct_name, "${flag}");
+       return vk_errorf(physical_device, VK_ERROR_FEATURE_NOT_PRESENT,
+                        "%s.%s not supported", struct_name, "${flag}");
++   }
+ % endfor
+ 
+    return VK_SUCCESS;
+@@ -336,9 +366,11 @@
+          const ${f.c_type} *a = &supported_${f.c_type};
+          const ${f.c_type} *b = (const void *) features;
+ % for flag in f.features:
+-         if (b->${flag} && !a->${flag})
++         if (b->${flag} && !a->${flag}) {
++            helios_log_rejected_feature(physical_device, "${f.c_type}", "${flag}");
+             return vk_errorf(physical_device, VK_ERROR_FEATURE_NOT_PRESENT,
+                              "%s.%s not supported", "${f.c_type}", "${flag}");
++         }
+ % endfor
+          break;
+       }

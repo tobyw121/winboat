@@ -6,3 +6,6 @@ resources/helios/HeliosSetup.exe binary
 resources/helios/helios-build.json text eol=lf
 resources/atlas/AtlasPlaybook.apbx binary
 tests/fixtures/hivex/minimal.hive binary
+
+# Unified diffs encode empty context lines as a single space.
+helios/upstream/ci/patches/mesa/*.patch whitespace=-blank-at-eol

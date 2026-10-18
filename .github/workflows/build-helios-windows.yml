@@ -11,6 +11,7 @@ on:
       - 'scripts/helios/windows/**'
       - 'helios/upstream/**'
       - 'helios/source.lock.json'
+      - 'tests/helios-device-features.*'
 
 permissions:
   contents: read

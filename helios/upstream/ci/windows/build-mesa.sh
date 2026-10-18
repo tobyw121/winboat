@@ -17,6 +17,20 @@ compat_header="${repo_root}/icd/win-build/helios_win_compat.h"
 
 python "${repo_root}/tools/sync-metadata.py" --check
 
+# Apply WinBoat's reviewed changes to the immutable dependency pin in the
+# separate build tree. A reused tree is accepted only if the patch is present.
+for patch in "${repo_root}"/ci/patches/mesa/*.patch; do
+  if git -C "${mesa_src}" apply --check "${patch}"; then
+    git -C "${mesa_src}" apply "${patch}"
+  elif ! git -C "${mesa_src}" apply --reverse --check "${patch}"; then
+    printf 'Mesa patch does not match the pinned source: %s\n' "${patch}" >&2
+    exit 1
+  fi
+done
+if [[ -n "${WINBOAT_ROOT:-}" ]]; then
+  python "${WINBOAT_ROOT}/tests/helios-device-features.py" "${mesa_src}" "${mesa_src}/include"
+fi
+
 setup_mode=()
 case "${build_mode}" in
   --clean)

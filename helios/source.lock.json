@@ -66,6 +66,7 @@
     "WINDOWS_CI_PACKAGE.md": "30df88e236add10db73c361c1e16987d1e16958e8dc58e247136f9781201bfe2",
     "ci/patches/clspv/0001-lower-pointer-array-alloca.patch": "2ef181b0ac0b95d51f0a88a4217520455d5b7af97b87fb3c653c3be09a212864",
     "ci/patches/clspv/0002-type-pointer-undefs-per-use.patch": "e75df15a6650700e8d858d288d35ae7ffdf8e236118d76726435138d6665c66e",
+    "ci/patches/mesa/0001-guest-device-features-and-branding.patch": "30fe79ffbaea3132c41f425dab276d813aa5825d9419cc35c6b49b8ff03086ed",
     "ci/windows/Assemble-Package.ps1": "e1b881b455f19ece291f487f33f978d505bba9050300234c71f0d00546b476bb",
     "ci/windows/Build-CompatibilityShims.ps1": "883fb3ac61c3b3ab39b385f842cef83b957eb4fd17bd41c380fa8068ab3a6199",
     "ci/windows/Build-Driver.ps1": "cf46d48dbad10544d1b45f8465d66dea13ce90e05b84728900349a46e5cdea4a",
@@ -77,7 +78,7 @@
     "ci/windows/Initialize-HeliosBuild.ps1": "4e6e5632eafcd7b45bbc5f3bbfb0378f07c76bca430a743f9b2c7a85204b1853",
     "ci/windows/Install-VulkanSdk.ps1": "f5e2e8ac50b38ac6421f4c920fe36b85b413651c60f535b4587e5a94665aaebb",
     "ci/windows/Install-WindowsDriverKit.ps1": "e3e179ee838b3b1e56757e984adf5121fed6c899f3055c8daccf83efdcecb3c9",
-    "ci/windows/build-mesa.sh": "82f65b9a3d235fe8cb68773e5ab68d3cf2aeaec282520dac8a4dfa1f6380be46",
+    "ci/windows/build-mesa.sh": "c7530c33375a2b2233125cffccfca2a900afec3c7a7bee9f38b8bd6d30253854",
     "ci/windows/clang-cl-native.ini": "20c4dda1060108ea21f513462c7dd5e4641c5bf751ef8d23b6d6870044c971d8",
     "ci/windows/clang-cl-x86-native.ini": "d2755a0c2ecac8132700158d86ae6fd359fefd5f21f0b6e134af199e9aca45c8",
     "ci/windows/mingw-native.ini": "c2cc41bd927cddbfdb3a27eb99d7a05009c333ba8d41c1e267722d70aaac6b0c",
@@ -238,7 +239,7 @@
     "kmd_render/Cargo.toml": "02c97c032e886b6ade362d676526657e76741d03e4b387725994c64afe2b308b",
     "kmd_render/README.md": "4575286062689db2debd86ff0af71a0cef864dc8f9129114ad6abc298e3c8824",
     "kmd_render/build.rs": "f13dad099657100ed284c34a5e417718bb1c1b507bc2df7cbc7f3fa03b43b618",
-    "kmd_render/driver-version.env": "1b3357e796032d230719b0259e72bb8357ec4c0e4c03786314e85a609c7754e9",
+    "kmd_render/driver-version.env": "9546967c941de0322d16aa2d1317f6d3057d0c9a5a174dc5153d703730e7f625",
     "kmd_render/helios_kmd_render.inx": "96e329ad2cbe0e4723cdc54b5f4c136bec6ca949d694fc1d21fdd9ef617e65b4",
     "kmd_render/rust-toolchain.toml": "ac257e2301dcb6cea3bf0bbe4e7ffe4c586b58a9916b1597020455ee27285764",
     "kmd_render/src/adapter/backing.rs": "177b2651b690dfe87bf270ca4685b056d8ef26f74c87c2438698c4081630b73b",
@@ -654,7 +655,7 @@
     "umd_common/src/window.rs": "fb926bc87c4ca2258f507f957aaba88883a9fe2fcdac060304d23a2b79bd6626"
   },
   "localChanges": {
-    "description": "WinBoat D3D11.1 UAV ClearView and live VidPn resolution switching; revision/tree identify the upstream baseline, files identify effective sources.",
+    "description": "WinBoat downstream driver correctness and graphics diagnostics; revision/tree identify the upstream baseline, files identify effective sources.",
     "baseFileSha256": {
       "umd/src/forward/transfer.rs": "2a69d1b929da2aa0ead6048f81db50ee1cc30a55bff6b68108abd2b5d4b34a3d",
       "umd/src/forward.rs": "7c6b7b742452b94c484e3a1fb1971c5ed873af6762aa5b9004e6862fe98d6fa5",
@@ -663,14 +664,18 @@
       "kmd_logic/src/lib.rs": "b5e2291b0ab0f04759ca1df732d729c41044e06039a165577ae05ee315545c8d",
       "kmd_render/src/adapter/mod.rs": "2558f9d1eeb48b2c847ee949c257ca6a19b70a0747a5cf325bc14c781cab9bd4",
       "kmd_render/src/ddi/display.rs": "35ed160f5aacbc902fd8b12656ee8d82966fc04610e150da6fa75005c4e05b0f",
-      "kmd_render/src/ddi/vidpn.rs": "f2085eefbf9e9937579aef332a7c340fd44316f615790555092fd50ee9bfe420"
+      "kmd_render/src/ddi/vidpn.rs": "f2085eefbf9e9937579aef332a7c340fd44316f615790555092fd50ee9bfe420",
+      "ci/windows/build-mesa.sh": "82f65b9a3d235fe8cb68773e5ab68d3cf2aeaec282520dac8a4dfa1f6380be46"
     },
     "features": [
       "d3d11-uav-clear-view",
-      "live-vidpn-display-modes"
+      "live-vidpn-display-modes",
+      "vulkan-guest-feature-handoff",
+      "helios-vulkan-device-name"
     ],
     "addedFiles": [
-      "kmd_logic/src/display_modes.rs"
+      "kmd_logic/src/display_modes.rs",
+      "ci/patches/mesa/0001-guest-device-features-and-branding.patch"
     ],
     "validationWorkflows": [
       ".github/workflows/test-helios-game-compatibility.yml",
