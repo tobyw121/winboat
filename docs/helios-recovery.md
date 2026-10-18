@@ -14,15 +14,17 @@ python3 scripts/helios/rescue-graphics.py --rescue-boot
 
 Das startet ausschließlich die vorhandene Compose-VM neu. Ein privates Override
 unter `~/.winboat/recovery/` verwendet dieselbe Windows-Festplatte, Firmware,
-Ports, Netzwerkkonfiguration und dasselbe Image, aber nur Standard-VGA und
+Ports, Netzwerkkonfiguration und dasselbe Image nach dessen Digest, aber nur Standard-VGA und
 Browser Display. Das Helios-PCI-Gerät fehlt für diesen Start vollständig;
 GTK, EGL, Vulkan, der Render-Node und der Gastdienst sind dafür nicht nötig.
 Die Original-Compose-Dateien werden nicht verändert. Der Helfer prüft vor dem
 Neustart, dass die konfigurierte Festplatte mit der aktuell eingebundenen
 Windows-Festplatte übereinstimmt. Er verwendet weder `down -v` noch Löschbefehle.
 
-Browser Display unter der bisherigen Adresse öffnen. In Windows Helios
-deaktivieren oder mit seinem Installer deinstallieren und regulär neu starten.
+Browser Display unter der bisherigen Adresse öffnen. In Windows Helios mit
+seinem Installer deinstallieren und regulär neu starten. Das im Rettungsstart
+fehlende Gerät kann im Geräte-Manager nur unter ausgeblendeten Geräten sichtbar
+sein. Ein API-Sperrwert allein deaktiviert kein gerade abwesendes PCI-Gerät.
 WinBoat während dieses Rettungsbetriebs geschlossen lassen: Sein eigener
 Container-Neustart kann wieder die ursprüngliche Konfiguration verwenden.
 

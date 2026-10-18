@@ -39,6 +39,12 @@ class HostRescue(unittest.TestCase):
         candidate['services']['windows']['environment'].update(HELIOS_RESCUE='1', HELIOS_DISPLAY='novnc')
         candidate['services']['windows']['volumes'].append({'target': '/run/display.sh', 'source': '/private/display.sh', 'read_only': True})
         rescue.validate_rescue_config(original, candidate, 'windows')
+        pinned = copy.deepcopy(candidate)
+        image_id = 'sha256:' + 'a' * 64
+        pinned['services']['windows']['image'] = image_id
+        rescue.validate_rescue_config(original, pinned, 'windows', image_id)
+        with self.assertRaisesRegex(RuntimeError, 'digest'):
+            rescue.validate_rescue_config(original, candidate, 'windows', image_id)
         for key, value in [('image', 'different'), ('ports', []), ('devices', []), ('volumes', [])]:
             changed = copy.deepcopy(candidate)
             changed['services']['windows'][key] = value

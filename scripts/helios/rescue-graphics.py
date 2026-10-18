@@ -55,7 +55,10 @@ def compose_context(container, recovery_root):
     command = ['docker', 'compose', '--project-name', project]
     for path in base:
         command += ['-f', str(path)]
-    return command, service, owned, info.get('Mounts', [])
+    image_id = info.get('Image', '')
+    if not re.fullmatch(r'sha256:[a-f0-9]{64}', image_id):
+        raise RuntimeError('Existing container image identity is unavailable')
+    return command, service, owned, info.get('Mounts', []), image_id
 
 
 def validate_running_storage(config, service, mounts):
@@ -74,9 +77,11 @@ def validate_running_storage(config, service, mounts):
         raise RuntimeError('Compose storage differs from the existing VM; no restart performed')
 
 
-def validate_rescue_config(original, candidate, service):
+def validate_rescue_config(original, candidate, service, image_id=None):
     before = original['services'][service]
     after = candidate['services'][service]
+    if image_id is not None and after.get('image') != image_id:
+        raise RuntimeError('Rescue must use the existing container image by digest')
     if before.get('environment', {}).get('HELIOS') != '1':
         raise RuntimeError('This is not a configured Helios VM')
     if not any(v.get('target') == '/storage' for v in before.get('volumes', [])):
@@ -84,6 +89,8 @@ def validate_rescue_config(original, candidate, service):
     allowed = {'/run/display.sh', '/usr/bin/qemu-system-x86_64', '/usr/local/bin/qemu-system-x86_64'}
     def unchanged(value):
         value = json.loads(json.dumps(value))
+        if image_id is not None:
+            value['image'] = image_id
         value['volumes'] = [v for v in value.get('volumes', []) if v.get('target') not in allowed]
         for key in ('HELIOS_RESCUE', 'HELIOS_DISPLAY'):
             value.get('environment', {}).pop(key, None)
@@ -94,7 +101,7 @@ def validate_rescue_config(original, candidate, service):
 
 def host_action(container, restore):
     recovery_root = Path.home() / '.winboat/recovery'
-    command, service, owned, mounts = compose_context(container, recovery_root)
+    command, service, owned, mounts, image_id = compose_context(container, recovery_root)
     original = json.loads(subprocess.check_output([*command, 'config', '--format', 'json'], text=True))
     validate_running_storage(original, service, mounts)
     if restore:
@@ -111,12 +118,12 @@ def host_action(container, restore):
             destination.chmod(0o755)
             mounts += [{'type': 'bind', 'source': str(destination), 'target': target, 'read_only': True} for target in targets]
         override = folder / 'compose-vga.json'
-        override.write_text(json.dumps({'services': {service: {'environment': {
+        override.write_text(json.dumps({'services': {service: {'image': image_id, 'environment': {
             'HELIOS_RESCUE': '1', 'HELIOS_DISPLAY': 'novnc'}, 'volumes': mounts}}}, indent=2) + '\n')
         override.chmod(0o600)
         candidate_command = [*command, '-f', str(override)]
         candidate = json.loads(subprocess.check_output([*candidate_command, 'config', '--format', 'json'], text=True))
-        validate_rescue_config(original, candidate, service)
+        validate_rescue_config(original, candidate, service, image_id)
         command = candidate_command
     print('Restarting this VM with ' + ('its original graphics configuration.' if restore else 'VGA only; Windows storage is preserved.'), flush=True)
     subprocess.run([*command, 'up', '-d', '--no-deps', '--pull', 'never', '--force-recreate', '--timeout', '120', service], check=True)

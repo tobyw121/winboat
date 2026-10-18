@@ -41,6 +41,9 @@ function Invoke-HeliosRescue([string]$Operation) {
     if ($devices.basic.Count -ne 1 -or $devices.basic[0].ConfigManagerErrorCode -ne 0) {
         return @{status='blocked';message='VGA is not healthy. Helios was not changed.'}
     }
+    if ($devices.helios.Count -eq 0) {
+        return @{status='held';message='Helios hardware is absent. Automatic setup is paused; no device was disabled. Uninstall its package before restoring host graphics if the driver is unstable.'}
+    }
     $pending=$false
     if ($devices.helios.Count -eq 1) {
         $disable=$Operation -eq 'helios-disable'

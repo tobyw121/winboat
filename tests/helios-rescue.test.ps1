@@ -4,11 +4,12 @@ $ErrorActionPreference='Stop'
 . (Join-Path $RepoRoot 'guest_server/scripts/Set-HeliosRescue.ps1') -LibraryOnly
 $script:hold=$false; $script:operations=@(); $script:running=$false; $script:pending=$false
 $script:basic=22; $script:helios=0
+$script:missing=$false
 function Set-HeliosRescueHold([bool]$Disabled) { $script:hold=$Disabled }
 function Get-ScheduledTask { param($TaskName,$ErrorAction) if($script:running){[pscustomobject]@{State='Running'}} }
 function Get-HeliosRescueDevices {
     [pscustomobject]@{basic=@([pscustomobject]@{PNPDeviceID='VGA';ConfigManagerErrorCode=$script:basic});
-        helios=@([pscustomobject]@{PNPDeviceID='HELIOS';ConfigManagerErrorCode=$script:helios})}
+        helios=@(if(-not $script:missing){[pscustomobject]@{PNPDeviceID='HELIOS';ConfigManagerErrorCode=$script:helios}})}
 }
 function pnputil.exe {
     if (-not $script:hold) {throw 'PnP changed before the durable hold'}
@@ -31,4 +32,6 @@ $script:running=$false; $script:basic=31
 if((Invoke-HeliosRescue 'helios-disable').status -ne 'blocked' -or $script:operations.Count){throw 'Unhealthy VGA allowed disable'}
 $script:basic=22; $script:pending=$true
 if((Invoke-HeliosRescue 'helios-disable').status -ne 'restart-required' -or $script:operations.Count -ne 1 -or -not $script:hold){throw 'VGA reboot need ignored'}
+$script:missing=$true; $script:basic=0; $script:pending=$false; $script:operations=@()
+if((Invoke-HeliosRescue 'helios-disable').status -ne 'held' -or $script:operations.Count){throw 'Absent hardware claimed a device disable'}
 Write-Host 'Explicit rescue preserves VGA, serializes with installation, retains its hold and requires deliberate re-enable.'

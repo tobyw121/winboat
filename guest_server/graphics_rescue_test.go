@@ -36,7 +36,7 @@ func TestGraphicsRescueFixedOperations(t *testing.T) {
 	if request("helios-enable") != 200 {
 		t.Fatal("Enable failed")
 	}
-	for status, code := range map[string]int{"blocked": 409, "restart-required": 202, "failed": 500, "invented": 503} {
+	for status, code := range map[string]int{"held": 200, "blocked": 409, "restart-required": 202, "failed": 500, "invented": 503} {
 		result = `{"status":"` + status + `"}`
 		if request("helios-disable") != code {
 			t.Fatal(status)

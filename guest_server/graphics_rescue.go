@@ -36,7 +36,7 @@ func graphicsRescueHandler(run func(context.Context, string) ([]byte, error)) ht
 		}
 		code := 200
 		switch result.Status {
-		case "disabled", "enabled":
+		case "disabled", "enabled", "held":
 		case "restart-required":
 			code = 202
 		case "blocked":
