@@ -133,6 +133,17 @@ def capture_hmp(container, output, trace_seconds=10):
         trace = output / 'qemu-trace.log'
         trace.write_text(logs.stdout+logs.stderr)
         trace.chmod(0o600)
+        # Dockur may redirect QEMU's debug/trace sink to /run/shm rather
+        # than Docker stderr. Preserve bounded tails instead of treating an
+        # empty docker log as proof that the GPU produced no updates.
+        for name in ['qemu.log', 'qemu.out']:
+            try:
+                content = docker('exec', container, 'tail', '-c', '262144', '/run/shm/'+name)
+                saved = output / name
+                saved.write_text(content)
+                saved.chmod(0o600)
+            except (OSError, subprocess.SubprocessError):
+                pass
     finally:
         for label in ['vga', 'helios', 'helios-after']:
             docker('exec', container, 'rm', '-f', '--', '/tmp/winboat-display-'+token+'-'+label+'.png')
@@ -141,6 +152,14 @@ def capture_hmp(container, output, trace_seconds=10):
 
 def capture(container, output, transport='auto', trace_seconds=10):
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
+    try:
+        image = docker('inspect', '--format', '{{.Image}}', container).strip()
+        labels = json.loads(docker('image', 'inspect', '--format', '{{json .Config.Labels}}', image)) or {}
+        identity = {'imageId': image, 'labels': {key:value for key,value in labels.items() if key.startswith('org.winboat.')}}
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        identity = {'error': type(error).__name__}
+    (output / 'host.json').write_text(json.dumps(identity, indent=2))
+    (output / 'host.json').chmod(0o600)
     guest_snapshot(container, output / 'guest-before.json')
     results = {}
     # Dockur's HMP monitor is independent of WinBoat's persistent QMP client.

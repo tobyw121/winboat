@@ -1,0 +1,263 @@
+diff --git a/ui/dbus-listener.c b/ui/dbus-listener.c
+index 702e0fa..6b59013 100644
+--- a/ui/dbus-listener.c
++++ b/ui/dbus-listener.c
+@@ -41,6 +41,10 @@
+ #include "ui/egl-context.h"
+ #include "dbus-gl-context.h"
+ #include "ui/qemu-pixman.h"
++#if defined(CONFIG_GBM) && defined(CONFIG_LINUX)
++#include "ui/vulkan-readback.h"
++#include "standard-headers/drm/drm_fourcc.h"
++#endif
+ #endif
+ #include "trace.h"
+ 
+@@ -90,6 +94,13 @@ struct _DBusDisplayListener {
+     QemuDBusDisplay1ListenerUnixScanoutDMABUF2 *scanout_dmabuf_v2_proxy;
+ #ifdef CONFIG_GBM
+     QemuDmaBuf *active_dmabuf;
++#ifdef CONFIG_LINUX
++    HeliosVulkanReadbackCache *vk_cache;
++    HeliosVulkanReadback *vk_readback;
++    DisplaySurface *vk_surface;
++    bool vk_announced;
++    bool vk_failed;
++#endif
+ #endif
+ #endif
+ 
+@@ -119,12 +130,139 @@ static void ddl_discard_cursor_messages(DBusDisplayListener *ddl)
+     g_atomic_int_set(&ddl->cursor_serial_to_discard, serial);
+ }
+ 
++#if defined(CONFIG_OPENGL) && defined(CONFIG_GBM) && defined(CONFIG_LINUX)
++static void dbus_helios_readback_clear(DBusDisplayListener *ddl)
++{
++    if (ddl->vk_cache) {
++        helios_vulkan_readback_cache_deactivate(ddl->vk_cache,
++                                               ddl->active_dmabuf);
++    }
++    ddl->vk_readback = NULL;
++    g_clear_pointer(&ddl->vk_surface, qemu_free_displaysurface);
++    ddl->vk_announced = false;
++    ddl->vk_failed = false;
++}
++
++static bool dbus_helios_readback_select(DBusDisplayListener *ddl,
++                                       QemuDmaBuf *dmabuf)
++{
++    bool was_readback = ddl->vk_readback != NULL;
++    uint32_t width = qemu_dmabuf_get_width(dmabuf);
++    uint32_t height = qemu_dmabuf_get_height(dmabuf);
++    g_auto(DBusGLContextScope) scope = { 0 };
++
++    if (ddl->vk_cache) {
++        helios_vulkan_readback_cache_deactivate(ddl->vk_cache,
++                                               ddl->active_dmabuf);
++    }
++    ddl->vk_readback = NULL;
++    /* Native Venus primaries may be OPTIMAL without a DRM modifier. EGL's
++     * successful import does not establish that layout. Reuse the same native
++     * Vulkan importer as egl-headless: it accepts this shape only when the
++     * driver memory requirement exactly matches the original blob size.
++     * Never reinterpret MOD_INVALID as LINEAR or mmap opaque DRM storage. */
++    if (qemu_dmabuf_get_modifier(dmabuf) == DRM_FORMAT_MOD_INVALID &&
++        qemu_dmabuf_get_allocation_size(dmabuf) &&
++        dbus_gl_context_bind(&scope)) {
++        if (!ddl->vk_cache) {
++            ddl->vk_cache = helios_vulkan_readback_cache_new();
++        }
++        ddl->vk_readback = helios_vulkan_readback_cache_activate(
++            ddl->vk_cache, dmabuf, true);
++    }
++    if (!ddl->vk_readback) {
++        dbus_helios_readback_clear(ddl);
++        return false;
++    }
++    if (!ddl->vk_surface || (uint32_t)surface_width(ddl->vk_surface) != width ||
++        (uint32_t)surface_height(ddl->vk_surface) != height) {
++        g_clear_pointer(&ddl->vk_surface, qemu_free_displaysurface);
++        ddl->vk_surface = qemu_create_displaysurface(width, height);
++        ddl->vk_announced = false;
++    }
++    if (!was_readback) {
++        ddl->vk_announced = false;
++        error_report("dbus: using validated OPTIMAL Vulkan readback %ux%u",
++                     width, height);
++    }
++    ddl->vk_failed = false;
++    return true;
++}
++
++static void dbus_helios_frame_done(GObject *source, GAsyncResult *result,
++                                  gpointer opaque)
++{
++    DBusDisplayListener *ddl = opaque;
++    g_autoptr(GError) err = NULL;
++    g_autoptr(GVariant) reply = g_dbus_proxy_call_finish(
++        G_DBUS_PROXY(source), result, &err);
++
++    if (!reply) {
++        error_report_err(g_steal_pointer(&err));
++        ddl->vk_announced = false;
++    }
++    qemu_console_hw_gl_block(ddl->dcl.con, false);
++    g_object_unref(ddl);
++}
++
++static bool dbus_helios_readback_update(DBusDisplayListener *ddl)
++{
++    GVariant *data;
++    GBytes *pixels;
++    uint32_t width, height, stride;
++    size_t bytes;
++
++    if (!ddl->vk_readback) {
++        return false;
++    }
++    width = surface_width(ddl->vk_surface);
++    height = surface_height(ddl->vk_surface);
++    stride = surface_stride(ddl->vk_surface);
++    /* Complete the Vulkan external-ownership round trip before acknowledging
++     * the producer. An unsuccessful capture must never publish stale pixels
++     * or fall through to UpdateDMABUF without a DMA-BUF baseline. */
++    if (!helios_vulkan_readback_flush(ddl->vk_readback, ddl->vk_surface,
++                                      0, 0, width, height)) {
++        if (!ddl->vk_failed) {
++            error_report("dbus: OPTIMAL Vulkan readback failed; keeping last frame");
++        }
++        ddl->vk_failed = true;
++        return true;
++    }
++    ddl->vk_failed = false;
++    bytes = (size_t)stride * height;
++    /* GDBus serializes asynchronously. Own an immutable pixel snapshot rather
++     * than a reference to the reusable staging surface of the next frame. */
++    pixels = g_bytes_new(surface_data(ddl->vk_surface), bytes);
++    data = g_variant_new_from_bytes(G_VARIANT_TYPE("ay"), pixels, true);
++    g_bytes_unref(pixels);
++    qemu_console_hw_gl_block(ddl->dcl.con, true);
++    if (!ddl->vk_announced) {
++        ddl_discard_display_messages(ddl);
++        ddl->vk_announced = true;
++        qemu_dbus_display1_listener_call_scanout(ddl->proxy, width, height,
++            stride, surface_format(ddl->vk_surface), data,
++            G_DBUS_CALL_FLAGS_NONE, DBUS_DEFAULT_TIMEOUT, NULL,
++            dbus_helios_frame_done, g_object_ref(ddl));
++    } else {
++        qemu_dbus_display1_listener_call_update(ddl->proxy, 0, 0, width, height,
++            stride, surface_format(ddl->vk_surface), data,
++            G_DBUS_CALL_FLAGS_NONE, DBUS_DEFAULT_TIMEOUT, NULL,
++            dbus_helios_frame_done, g_object_ref(ddl));
++    }
++    return true;
++}
++#endif
++
+ #ifdef CONFIG_OPENGL
+ static void dbus_scanout_disable(DisplayChangeListener *dcl)
+ {
+     DBusDisplayListener *ddl = container_of(dcl, DBusDisplayListener, dcl);
+ 
+ #if defined(CONFIG_GBM) && !defined(WIN32)
++#ifdef CONFIG_LINUX
++    dbus_helios_readback_clear(ddl);
++#endif
+     ddl->active_dmabuf = NULL;
+ #endif
+ 
+@@ -272,6 +410,12 @@ static void dbus_call_update_gl(DisplayChangeListener *dcl,
+     }
+     trace_dbus_update_gl(x, y, w, h);
+ 
++#if defined(CONFIG_GBM) && defined(CONFIG_LINUX)
++    if (dbus_helios_readback_update(ddl)) {
++        return;
++    }
++#endif
++
+     glFlush();
+ #ifdef CONFIG_GBM
+     qemu_console_hw_gl_block(ddl->dcl.con, true);
+@@ -419,9 +563,18 @@ static void dbus_scanout_dmabuf(DisplayChangeListener *dcl,
+ 
+     /* SET_SCANOUT_BLOB binds the replacement before releasing its predecessor.
+      * A release of that predecessor must not disable this new scanout. */
++#ifdef CONFIG_LINUX
++    bool readback = dbus_helios_readback_select(ddl, dmabuf);
++#endif
+     ddl->active_dmabuf = dmabuf;
+     ddl->software_surface = false;
+ 
++#ifdef CONFIG_LINUX
++    if (readback) {
++        return;
++    }
++#endif
++
+     if (ddl->scanout_dmabuf_v2_proxy) {
+         dbus_scanout_dmabuf_v2(ddl, dmabuf);
+     } else {
+@@ -752,10 +905,17 @@ static void dbus_scanout_update(DisplayChangeListener *dcl,
+ static void dbus_gl_refresh(DisplayChangeListener *dcl)
+ {
+     DBusDisplayListener *ddl = container_of(dcl, DBusDisplayListener, dcl);
++    DisplaySurface *surface;
+ 
+     qemu_console_hw_update(dcl->con);
++    surface = ddl->ds;
++#if defined(CONFIG_GBM) && defined(CONFIG_LINUX)
++    if (ddl->vk_surface) {
++        surface = ddl->vk_surface;
++    }
++#endif
+ 
+-    if (!ddl->ds || qemu_console_is_gl_blocked(ddl->dcl.con)) {
++    if (!surface || qemu_console_is_gl_blocked(ddl->dcl.con)) {
+         return;
+     }
+ 
+@@ -768,12 +928,19 @@ static void dbus_gl_refresh(DisplayChangeListener *dcl)
+         /* TODO: Add a UpdateList call to send multiple updates at once */
+         dbus_call_update_gl(dcl, box->x1, box->y1,
+                             box->x2 - box->x1, box->y2 - box->y1);
++#if defined(CONFIG_GBM) && defined(CONFIG_LINUX)
++        if (ddl->vk_readback) {
++            /* Readback sends the full frame. One ACK must own one GL block,
++             * even when damage contains several disjoint rectangles. */
++            break;
++        }
++#endif
+     }
+     pixman_region32_clear(&ddl->gl_damage);
+ #else
+     if (ddl->gl_damage) {
+         dbus_call_update_gl(dcl, 0, 0,
+-                            surface_width(ddl->ds), surface_height(ddl->ds));
++                            surface_width(surface), surface_height(surface));
+         ddl->gl_damage = 0;
+     }
+ #endif
+@@ -907,6 +1074,9 @@ static void dbus_gl_gfx_switch(DisplayChangeListener *dcl,
+     DBusDisplayListener *ddl = container_of(dcl, DBusDisplayListener, dcl);
+ 
+ #if defined(CONFIG_GBM) && !defined(WIN32)
++#ifdef CONFIG_LINUX
++    dbus_helios_readback_clear(ddl);
++#endif
+     ddl->active_dmabuf = NULL;
+ #endif
+ 
+@@ -1025,6 +1195,11 @@ dbus_display_listener_dispose(GObject *object)
+ {
+     DBusDisplayListener *ddl = DBUS_DISPLAY_LISTENER(object);
+ 
++#if defined(CONFIG_OPENGL) && defined(CONFIG_GBM) && defined(CONFIG_LINUX)
++    dbus_helios_readback_clear(ddl);
++    g_clear_pointer(&ddl->vk_cache, helios_vulkan_readback_cache_free);
++#endif
++
+     qemu_console_unregister_listener(&ddl->dcl);
+     g_clear_object(&ddl->conn);
+     g_clear_pointer(&ddl->bus_name, g_free);

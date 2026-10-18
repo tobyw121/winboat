@@ -53,6 +53,8 @@ with tempfile.TemporaryDirectory(prefix='winboat-qemu-dbus-') as temporary:
         expected, name = line.split()
         patch = ROOT / 'helios/host/patches' / name
         assert hashlib.sha256(patch.read_bytes()).hexdigest() == expected, name
+        if name.startswith('0004-'):
+            pre_native_listener = (source / 'ui/dbus-listener.c').read_text()
         subprocess.run(['git', '-C', str(source), 'apply', '--check', '--index', str(patch)], check=True)
         subprocess.run(['git', '-C', str(source), 'apply', '--index', str(patch)], check=True)
     print('Host patches apply to the checksum-verified pinned QEMU sources.', flush=True)
@@ -65,7 +67,7 @@ with tempfile.TemporaryDirectory(prefix='winboat-qemu-dbus-') as temporary:
     for name in ['dbus_create_texture', 'dbus_update_texture', 'dbus_destroy_texture']:
         callbacks += function((source / 'ui/dbus.c').read_text(), name)
     listener = (source / 'ui/dbus-listener.c').read_text()
-    for name in ['dbus_scanout_disable', 'dbus_call_update_gl', 'dbus_scanout_dmabuf', 'dbus_scanout_texture', 'dbus_release_dmabuf', 'dbus_gl_gfx_update', 'dbus_gl_gfx_switch']:
+    for name in ['dbus_helios_readback_clear', 'dbus_helios_readback_select', 'dbus_helios_frame_done', 'dbus_helios_readback_update', 'dbus_scanout_disable', 'dbus_call_update_gl', 'dbus_scanout_dmabuf', 'dbus_scanout_texture', 'dbus_release_dmabuf', 'dbus_gl_gfx_update', 'dbus_gl_gfx_switch', 'dbus_gl_refresh']:
         callbacks += function(listener, name)
     (source / 'callbacks.inc').write_text(callbacks)
     flags = shlex.split(subprocess.check_output(['pkg-config', '--cflags', '--libs', 'gio-2.0', 'epoxy', 'pixman-1'], text=True))
@@ -93,6 +95,15 @@ with tempfile.TemporaryDirectory(prefix='winboat-qemu-dbus-') as temporary:
     old_release = subprocess.run([str(binary)], env={**os.environ, 'EGL_PLATFORM': 'surfaceless', 'LIBGL_ALWAYS_SOFTWARE': '1'}, capture_output=True, text=True)
     assert old_release.returncode < 0 and 'disables==0' in old_release.stderr, old_release.stderr
     print('Old release callback disables the already-bound replacement as expected.', flush=True)
+    missing_native = callbacks.replace(function(callbacks, 'dbus_scanout_dmabuf'), function(pre_native_listener, 'dbus_scanout_dmabuf'))
+    # The unused selector is expected when reproducing the old routing.
+    (source / 'callbacks.inc').write_text(missing_native)
+    binary = source / 'test-missing-native-readback'
+    subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter', '-Wno-unused-function',
+                    '-I', str(source), str(ROOT / 'tests/helios-qemu-dbus.c'), *flags, '-o', str(binary)], check=True)
+    missing = subprocess.run([str(binary)], env={**os.environ, 'EGL_PLATFORM': 'surfaceless', 'LIBGL_ALWAYS_SOFTWARE': '1'}, capture_output=True, text=True)
+    assert missing.returncode < 0 and 'vulkan_imports==1' in missing.stderr, missing.stderr
+    print('Original native scanout routing bypasses the required Vulkan classification as expected.', flush=True)
     (source / 'callbacks.inc').write_text(callbacks)
     for pixman in [False, True]:
         binary = source / ('test-pixman' if pixman else 'test-no-pixman')

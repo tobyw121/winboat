@@ -97,7 +97,7 @@ werden beim normalen Schließen und beim Stoppsignal freigegeben. Anzeige und
 Windows-Anmeldung sind unabhängig: Ein fehlender Windows-Benutzer oder eine
 blockierte AME-OOBE wird durch den Wechsel des Anzeigefensters nicht repariert.
 
-Die Einstellung prüft Viewer-Version und Image-Fähigkeitslabel `dbus-v7`.
+Die Einstellung prüft Viewer-Version und Image-Fähigkeitslabel `dbus-v8`.
 Ein älteres Host-Image muss neu gebaut werden. Schlägt die Viewer-Anmeldung oder
 Frame-Übernahme fehl, meldet WinBoat den Fehler und bietet einen erneuten
 Verbindungsversuch. Ein laufender nativer GL-Modus besitzt keinen VNC-Listener.
@@ -698,6 +698,42 @@ Prüfung der einzelnen gepatchten Callbacks reproduziert den Fehler mit der
 ursprünglichen Release-Funktion und testet die korrigierte Reihenfolge mit
 realem Mesa/EGL. Dies bestätigt keine vollständige Windows-/NVIDIA-VM.
 
+### Native OPTIMAL-Bildpuffer im Local Desktop
+
+Patch `0004-dbus-native-vulkan-readback.patch` ergänzt den D-Bus-Pfad um den
+bereits im EGL-Headless-Pfad vorhandenen Vulkan-Readback. Ein fehlender
+DRM-Modifier (`MOD_INVALID`) beweist kein lineares Bildlayout; selbst ein
+erfolgreicher EGL-Import kann hier ein verzerrtes Bild liefern. QEMU kennt die
+ursprüngliche Blob-Allokationsgröße, die im D-Bus-Scanout bisher nicht an den
+Viewer übertragen wird. Der vorhandene Vulkan-Importer akzeptiert OPTIMAL
+nur bei passender Geometrie, Format und exakt passendem Speicherbedarf.
+
+Akzeptierte Puffer werden in QEMU ausgelesen und als Software-Scanout bzw.
+Update an denselben Viewer gesendet. Jede Nachricht besitzt eine unveränderliche
+Pixelkopie. Der Producer wird erst nach der Viewer-Bestätigung freigegeben;
+ein fehlgeschlagenes Auslesen veröffentlicht keine alten Pixel als neues Bild.
+Der Refresh funktioniert auch ohne die sonstige QEMU-Software-Oberfläche.
+Explizite Modifier und nicht bestätigte OPTIMAL-Layouts verwenden weiterhin
+den vorhandenen DMA-BUF-Pfad. Es wird weder `MOD_INVALID` als LINEAR umgedeutet
+noch opaker DRM-Speicher per `mmap` gelesen.
+
+Dieser Kompatibilitätsweg benötigt zusätzliche Präsentationskopien; das
+Rendering in Windows bleibt GPU-beschleunigt. Die Callback-Tests prüfen
+Nachrichten, Pufferwechsel, Fehler und Bestätigungen mit simulierten Ergebnissen
+des Vulkan-Importers sowie reales Mesa/EGL für den bestehenden Texturpfad.
+Sie ersetzen keinen Windows-/NVIDIA-Test des externen Vulkan-Speicherimports.
+
+Die Fähigkeit heißt jetzt `dbus-v8`. Zum Übernehmen sind ein neues Host-Image,
+ein neu erstellter VM-Container und die dazu passende WinBoat-App erforderlich:
+
+```bash
+./scripts/build-helios.sh
+```
+
+Dabei **nicht** `--skip-host` verwenden. Die vorhandene Windows-Disk bleibt
+erhalten. Bei aktivem Kompatibilitätsweg meldet QEMU
+`dbus: using validated OPTIMAL Vulkan readback`.
+
 ### Verzerrte oder ausbleibende Helios-Bilder aufzeichnen
 
 Bei einem verzerrten Bild lassen sich QEMU-Bilder und ein kurzer Scanout-Trace
@@ -731,3 +767,8 @@ belegter Port wird mit einem verständlichen Fehler in `results.json` gemeldet.
 Treiber-, Desktop- und Versionsdiagnosen der Guest API. Die CLI fasst diese
 Dateien mit den Bildern und dem Trace in einem ZIP-Archiv zusammen. Die
 Docker-Umgebung mit dem Windows-Passwort wird nicht ausgelesen.
+
+`host.json` enthält die tatsächliche laufende Image-ID und nur dessen
+`org.winboat.*`-Labels. Zusätzlich werden, soweit vorhanden, begrenzte Auszüge
+aus `/run/shm/qemu.log` und `qemu.out` gespeichert: QEMU kann seinen Trace
+dorthin statt in die Docker-Ausgabe schreiben.

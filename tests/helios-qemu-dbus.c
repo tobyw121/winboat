@@ -12,10 +12,14 @@
 #include <epoxy/egl.h>
 #include <pixman.h>
 #define CONFIG_GBM 1
+#define CONFIG_LINUX 1
+#define DRM_FORMAT_MOD_INVALID UINT64_C(0x00ffffffffffffff)
 #define DBUS_DEFAULT_TIMEOUT 1000
 /* Protocol fixture does not take asynchronous GObject references. */
 #undef g_object_ref
 #define g_object_ref(p) (p)
+#undef g_object_unref
+#define g_object_unref(p) ((void)(p))
 #define trace_dbus_update_gl(...) ((void)0)
 #define DMABUF_MAX_PLANES 4
 #define container_of(p,t,m) ((t *)((char *)(p)-G_STRUCT_OFFSET(t,m)))
@@ -24,11 +28,13 @@
 #define QEMU_IS_ALIGNED(a,b) ((a) % (b) == 0)
 #define SHARE_KIND_NONE 0
 
-typedef struct DisplaySurface { GLuint texture; uint8_t pixels[64]; } DisplaySurface;
+typedef struct DisplaySurface { GLuint texture; uint8_t pixels[64]; int width,height; } DisplaySurface;
 typedef int QemuGLShader;
 typedef struct DisplayGLCtx { QemuGLShader *gls; } DisplayGLCtx;
 typedef struct DisplayChangeListener { void *con; } DisplayChangeListener;
-typedef struct QemuDmaBuf { int unused; } QemuDmaBuf;
+typedef struct QemuDmaBuf { uint64_t modifier,allocation; bool optimal; unsigned width,height; } QemuDmaBuf;
+typedef struct HeliosVulkanReadback {int unused;} HeliosVulkanReadback;
+typedef struct HeliosVulkanReadbackCache {HeliosVulkanReadback image;QemuDmaBuf *active;} HeliosVulkanReadbackCache;
 typedef struct DBusDisplayListener {
     DisplayChangeListener dcl;
     DisplaySurface *ds;
@@ -37,6 +43,10 @@ typedef struct DBusDisplayListener {
     bool software_surface;
     void *scanout_dmabuf_v2_proxy;
     QemuDmaBuf *active_dmabuf;
+    HeliosVulkanReadbackCache *vk_cache;
+    HeliosVulkanReadback *vk_readback;
+    DisplaySurface *vk_surface;
+    bool vk_announced,vk_failed;
 #ifdef CONFIG_PIXMAN
     pixman_region32_t gl_damage;
 #else
@@ -47,25 +57,67 @@ static EGLDisplay qemu_egl_display;
 static EGLContext qemu_egl_rn_ctx;
 static int diagnostics, baselines, updates, dma_scanouts, exports, closed_fds, dma_updates, disables;
 static bool bind_failure, export_failure;
+static bool readback_failure,reply_failure,last_block;
+static int software_baselines,software_updates,vulkan_imports;
+static GVariant *last_pixels;
+static GAsyncReadyCallback pending_callback;
+static gpointer pending_opaque;
 static void error_report(const char *format, ...) { diagnostics++; }
+static void error_report_err(GError *error) {diagnostics++;g_error_free(error);}
 static const char *qemu_egl_get_error_string(void) { return "fixture EGL error"; }
 static int qemu_egl_make_context_current(void *unused, EGLContext context) {
     if (bind_failure) return -1;
     return eglMakeCurrent(qemu_egl_display,EGL_NO_SURFACE,EGL_NO_SURFACE,context)?0:-1;
 }
-static void qemu_console_hw_gl_block(void *con, bool block) { }
+static void qemu_console_hw_gl_block(void *con, bool block) {last_block=block;}
+static bool qemu_console_is_gl_blocked(void *con) {return last_block;}
+static void qemu_console_hw_update(void *con) { }
 static void dbus_update_gl_cb(void) { }
 static void ddl_discard_display_messages(DBusDisplayListener *ddl) { }
 static void qemu_dbus_display1_listener_call_disable(void *proxy,...) { disables++; }
 static void qemu_dbus_display1_listener_call_update_dmabuf(void *proxy,...) {
     assert(eglGetCurrentContext()!=EGL_NO_CONTEXT);dma_updates++;
 }
-static int surface_width(DisplaySurface *s) {return 4;}
-static int surface_height(DisplaySurface *s) {return 4;}
-static int surface_stride(DisplaySurface *s) {return 16;}
+static int surface_width(DisplaySurface *s) {return s->width?s->width:4;}
+static int surface_height(DisplaySurface *s) {return s->height?s->height:4;}
+static int surface_stride(DisplaySurface *s) {return surface_width(s)*4;}
 static int surface_bytes_per_pixel(DisplaySurface *s) {return 4;}
 static int surface_format(DisplaySurface *s) {return 0;}
 static void *surface_data(DisplaySurface *s) {return s->pixels;}
+static DisplaySurface *qemu_create_displaysurface(unsigned w,unsigned h) {
+    assert(w<=4 && h<=4);DisplaySurface *s=g_new0(DisplaySurface,1);s->width=w;s->height=h;return s;
+}
+static void qemu_free_displaysurface(DisplaySurface *s) {g_free(s);}
+static uint32_t qemu_dmabuf_get_width(QemuDmaBuf *b) {return b->width?b->width:4;}
+static uint32_t qemu_dmabuf_get_height(QemuDmaBuf *b) {return b->height?b->height:4;}
+static uint64_t qemu_dmabuf_get_modifier(QemuDmaBuf *b) {return b->modifier;}
+static uint64_t qemu_dmabuf_get_allocation_size(QemuDmaBuf *b) {return b->allocation;}
+static HeliosVulkanReadbackCache *helios_vulkan_readback_cache_new(void) {return g_new0(HeliosVulkanReadbackCache,1);}
+static void helios_vulkan_readback_cache_deactivate(HeliosVulkanReadbackCache *c,QemuDmaBuf *b) {if(c->active==b)c->active=NULL;}
+static HeliosVulkanReadback *helios_vulkan_readback_cache_activate(HeliosVulkanReadbackCache *c,QemuDmaBuf *b,bool optimal) {
+    assert(optimal);vulkan_imports++;if(!b->optimal)return NULL;c->active=b;return &c->image;
+}
+static bool helios_vulkan_readback_flush(HeliosVulkanReadback *r,DisplaySurface *s,unsigned x,unsigned y,unsigned w,unsigned h) {
+    assert(r && x==0 && y==0 && w==(unsigned)surface_width(s) && h==(unsigned)surface_height(s));
+    if(readback_failure)return false;
+    memset(s->pixels,97,sizeof(s->pixels));return true;
+}
+static GVariant *fixture_proxy_finish(GDBusProxy *p,GAsyncResult *r,GError **err) {
+    if(reply_failure){g_set_error_literal(err,G_IO_ERROR,G_IO_ERROR_FAILED,"fixture rejection");return NULL;}
+    return g_variant_ref_sink(g_variant_new("()"));
+}
+#define g_dbus_proxy_call_finish fixture_proxy_finish
+static void record_pixels(GVariant *pixels,GAsyncReadyCallback cb,gpointer opaque) {
+    g_clear_pointer(&last_pixels,g_variant_unref);last_pixels=g_variant_ref_sink(pixels);pending_callback=cb;pending_opaque=opaque;
+}
+static void qemu_dbus_display1_listener_call_scanout(void *p,unsigned w,unsigned h,unsigned stride,unsigned format,GVariant *pixels,
+    GDBusCallFlags flags,int timeout,GCancellable *cancel,GAsyncReadyCallback cb,gpointer opaque) {
+    software_baselines++;record_pixels(pixels,cb,opaque);
+}
+static void qemu_dbus_display1_listener_call_update(void *p,int x,int y,int w,int h,unsigned stride,unsigned format,GVariant *pixels,
+    GDBusCallFlags flags,int timeout,GCancellable *cancel,GAsyncReadyCallback cb,gpointer opaque) {
+    software_updates++;record_pixels(pixels,cb,opaque);
+}
 static bool map_format(int format, GLenum *glformat, GLenum *gltype) {
     *glformat=GL_RGBA;*gltype=GL_UNSIGNED_BYTE;return true;
 }
@@ -180,6 +232,51 @@ int main(void) {
     dbus_scanout_texture(&listener.dcl,surface.texture,false,4,4,0,0,4,4,NULL);
     assert(!listener.active_dmabuf);
     dbus_release_dmabuf(&listener.dcl,&first);assert(disables==1);
+    /* MOD_INVALID by itself proves no layout. An unmatched native shape stays
+     * on the existing DMA path; only the Vulkan importer's accepted shape may
+     * select the immutable software-frame compatibility transport. */
+    QemuDmaBuf unknown={.modifier=DRM_FORMAT_MOD_INVALID,.allocation=64};
+    dbus_scanout_dmabuf(&listener.dcl,&unknown);
+    assert(!listener.vk_readback && vulkan_imports==1);
+    QemuDmaBuf optimal={.modifier=DRM_FORMAT_MOD_INVALID,.allocation=64,.optimal=true};
+    int previous_dma=dma_scanouts,previous_updates=dma_updates;
+    dbus_scanout_dmabuf(&listener.dcl,&optimal);
+    assert(listener.vk_readback && dma_scanouts==previous_dma && !listener.vk_announced);
+    /* Native GPU consoles need no software surface in QEMU. Damage refresh
+     * must use the private Vulkan staging surface in that case. */
+    listener.ds=NULL;last_block=false;
+    dbus_gl_gfx_update(&listener.dcl,0,0,1,1);
+    dbus_gl_gfx_update(&listener.dcl,3,3,1,1);
+    dbus_gl_refresh(&listener.dcl);
+    assert(software_baselines==1 && software_updates==0 && last_block);
+    gsize n;const uint8_t *copy=g_variant_get_fixed_array(last_pixels,&n,1);
+    assert(n==64 && copy[0]==97);
+    memset(listener.vk_surface->pixels,12,64);
+    assert(copy[0]==97); /* queued message owns its pixels */
+    pending_callback(NULL,NULL,pending_opaque);assert(!last_block);
+    DisplaySurface *canvas=listener.vk_surface;
+    QemuDmaBuf replacement=optimal;
+    dbus_scanout_dmabuf(&listener.dcl,&replacement);
+    dbus_release_dmabuf(&listener.dcl,&optimal);
+    assert(listener.vk_readback && listener.vk_surface==canvas && listener.vk_announced);
+    dbus_call_update_gl(&listener.dcl,0,0,4,4);
+    assert(software_updates==1 && dma_updates==previous_updates);
+    pending_callback(NULL,NULL,pending_opaque);
+    readback_failure=true;dbus_call_update_gl(&listener.dcl,0,0,4,4);readback_failure=false;
+    assert(software_updates==1 && dma_updates==previous_updates && listener.vk_failed && !last_block);
+    dbus_call_update_gl(&listener.dcl,0,0,4,4);
+    reply_failure=true;pending_callback(NULL,NULL,pending_opaque);reply_failure=false;
+    assert(!listener.vk_announced && !last_block);
+    dbus_call_update_gl(&listener.dcl,0,0,4,4);assert(software_baselines==2);
+    pending_callback(NULL,NULL,pending_opaque);
+    QemuDmaBuf explicit_linear={.allocation=64,.optimal=true};
+    int imports=vulkan_imports;
+    dbus_scanout_dmabuf(&listener.dcl,&explicit_linear);
+    assert(!listener.vk_readback && !listener.vk_surface && !listener.vk_announced && imports==vulkan_imports);
+    dbus_release_dmabuf(&listener.dcl,&replacement);
+    assert(listener.active_dmabuf==&explicit_linear);
+    dbus_call_update_gl(&listener.dcl,0,0,4,4);assert(dma_updates==previous_updates+1);
+    g_clear_pointer(&last_pixels,g_variant_unref);g_free(listener.vk_cache);listener.vk_cache=NULL;
     dbus_scanout_dmabuf(&listener.dcl,&first);
     dbus_gl_gfx_switch(&listener.dcl,NULL);
     dbus_release_dmabuf(&listener.dcl,&first);assert(disables==1);
@@ -192,6 +289,6 @@ int main(void) {
     eglDestroySurface(qemu_egl_display,draw);eglDestroySurface(qemu_egl_display,read);
     eglDestroyContext(qemu_egl_display,renderer);eglDestroyContext(qemu_egl_display,qemu_egl_rn_ctx);
     eglTerminate(qemu_egl_display);
-    g_print("QEMU callbacks: real texture upload/readback, EGL context restoration, textureless setup baseline/updates, stale damage clearing and DMA handoff passed.\n");
+    g_print("QEMU callbacks: real Mesa/EGL texture checks, scanout retirement, Vulkan routing fixtures, immutable frame snapshots, ACK/failure handling and DMA handoff passed.\n");
     return 0;
 }

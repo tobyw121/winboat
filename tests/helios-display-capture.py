@@ -53,6 +53,30 @@ class CaptureTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             monitor.capture('not-a-safe-filename')
 
+    def test_host_identity_uses_running_image_and_filters_labels(self):
+        calls = []
+
+        def docker(*args):
+            calls.append(args)
+            if args == ('inspect', '--format', '{{.Image}}', 'fixture'):
+                return 'sha256:running-image\n'
+            if args == ('image', 'inspect', '--format', '{{json .Config.Labels}}', 'sha256:running-image'):
+                return json.dumps({'org.winboat.helios.display': 'dbus-v8', 'unrelated': 'omit'})
+            self.fail('Unexpected Docker inspection: '+repr(args))
+
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / 'capture'
+            with patch.object(host, 'docker', side_effect=docker), \
+                 patch.object(host, 'guest_snapshot'), \
+                 patch.object(host, 'capture_hmp', return_value={'trace': {}}):
+                result = host.capture('fixture', output)
+            self.assertEqual(result['transport'], 'hmp')
+            self.assertEqual(json.loads((output / 'host.json').read_text()), {
+                'imageId': 'sha256:running-image',
+                'labels': {'org.winboat.helios.display': 'dbus-v8'}})
+            self.assertEqual((output / 'host.json').stat().st_mode & 0o777, 0o600)
+            self.assertEqual(len(calls), 2)
+
     def test_real_capture_with_primary_qmp_occupied(self):
         executable = shutil.which('qemu-system-x86_64')
         self.assertIsNotNone(executable, 'Install qemu-system-x86 to run this integration test.')

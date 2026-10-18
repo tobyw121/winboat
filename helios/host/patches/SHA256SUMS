@@ -1,3 +1,4 @@
 0d0c0855095456319fe54427663f03325bee82e2275542c77636b328728fb451  0001-dbus-listener-authenticated-owner.patch
 d4dd866a81eb6469595763a594cd8a8cd6513676d36d4ffb4ba905229113cc92  0002-dbus-gl-surface-context.patch
 467318046e43d0728404e0a4c8bcd129b44f3ad8e0e6f4bfde090a8f2deffb22  0003-dbus-active-scanout-lifetime.patch
+0fa0bcf9c3b27f674c57ffe2a0331c3d1bb781cd35e663115a5b6270005e3983  0004-dbus-native-vulkan-readback.patch
