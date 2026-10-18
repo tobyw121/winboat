@@ -1,0 +1,57 @@
+name: Test Helios live display modes
+on:
+  workflow_dispatch:
+  push:
+    branches: [work]
+    paths:
+      - '.github/workflows/test-helios-display-modes.yml'
+      - 'tests/helios-display-modes.cpp'
+      - 'helios/upstream/kmd_logic/**'
+      - 'helios/upstream/kmd_render/src/ddi/vidpn.rs'
+      - 'helios/upstream/kmd_render/src/adapter/mod.rs'
+  pull_request:
+    paths:
+      - 'tests/helios-display-modes.cpp'
+      - 'helios/upstream/kmd_logic/**'
+      - 'helios/upstream/kmd_render/src/ddi/vidpn.rs'
+permissions:
+  contents: read
+jobs:
+  mode-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test production kernel leaf logic
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/helios-modes
+        run: cargo test --locked --manifest-path helios/upstream/kmd_logic/Cargo.toml
+  acceptance-probe:
+    runs-on: windows-2022
+    strategy:
+      matrix:
+        arch: [x64, x86]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile actual-driver acceptance probe
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
+          $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { throw 'Visual C++ tools are missing.' }
+          $script = Join-Path $env:RUNNER_TEMP 'build-display-modes.cmd'
+          @(
+            "call `"$vs/Common7/Tools/VsDevCmd.bat`" -arch=${{ matrix.arch }} -host_arch=x64"
+            'if errorlevel 1 exit /b 1'
+            'cl /nologo /W4 /WX /EHsc /std:c++17 /MT tests/helios-display-modes.cpp /Fe:helios-display-modes-${{ matrix.arch }}.exe /link user32.lib'
+          ) | Set-Content -LiteralPath $script -Encoding ascii
+          & $env:ComSpec /d /c $script
+          if ($LASTEXITCODE -ne 0) { throw 'Display acceptance probe compilation failed.' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: helios-display-modes-${{ matrix.arch }}
+          path: helios-display-modes-${{ matrix.arch }}.exe
+          if-no-files-found: error

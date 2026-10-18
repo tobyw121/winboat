@@ -107,7 +107,7 @@
 
                 <x-card v-if="heliosEnabled" class="p-4 my-0 w-full bg-neutral-800/20">
                     <h1 class="text-lg font-semibold mb-2">Windows resolution</h1>
-                    <p class="text-neutral-400 text-sm">Choose the startup resolution for Helios and VGA. Saving restarts the VM. Local Desktop scales the picture to its window; zoom does not change the Windows resolution.</p>
+                    <p class="text-neutral-400 text-sm">Choose the startup resolution for Helios and VGA. Saving restarts the VM. With Helios 22.22.291.0 or newer, change the running resolution in Windows Settings → System → Display without restarting. Local Desktop follows the new image size; zoom only scales the picture.</p>
                     <div class="flex items-center gap-3 mt-3">
                         <select v-model="resolution" aria-label="Windows startup resolution" :disabled="isApplyingChanges" class="rounded bg-neutral-900 p-2">
                             <option v-for="mode in HELIOS_RESOLUTIONS" :key="mode.key" :value="mode.key">{{ mode.label }}</option>
