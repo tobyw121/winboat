@@ -133,7 +133,8 @@ try {
     # Clean the application directory (but keep the directory itself)
     Write-Log "Cleaning application directory..."
     try {
-        Get-ChildItem -Path $AppPath -Force | ForEach-Object {
+        . (Join-Path $AppPath 'scripts\Preserve-WinBoatProvisioning.ps1')
+        Get-WinBoatUpdateItemsToRemove $AppPath | ForEach-Object {
             Write-Log "Removing: $($_.Name)"
             if ($_.PSIsContainer) {
                 Remove-Item $_.FullName -Recurse -Force

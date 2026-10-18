@@ -266,6 +266,23 @@ func TestMirrorOnlyAfterSelectedInstallation(t *testing.T) {
 		}
 	}
 	os.Remove(filepath.Join(install, "helios-enabled"))
+	receiptDir := filepath.Join(data, "WinBoat", "Helios")
+	os.MkdirAll(receiptDir, 0700)
+	receipt := filepath.Join(receiptDir, "helios-build.json")
+	os.WriteFile(receipt, []byte(`{"revision":"fecffde64fd32399a877b452332681ef0db7993e"}`), 0600)
+	if !mirrorEnabled(install, data) {
+		t.Fatal("guest update erased the selected Helios policy")
+	}
+	os.WriteFile(state, []byte(`{"status":"driver-restart-required"}`), 0600)
+	if !heliosRestartPending(install, data) {
+		t.Fatal("lost OEM marker suppressed restart verification")
+	}
+	os.WriteFile(state, []byte(`{"status":"finished"}`), 0600)
+	os.WriteFile(receipt, []byte(`{"revision":"unrelated"}`), 0600)
+	if heliosSelected(install, data) {
+		t.Fatal("unrelated receipt selected Helios")
+	}
+	os.Remove(receipt)
 	if mirrorEnabled(install, data) {
 		t.Fatal("unselected machine was modified")
 	}

@@ -94,11 +94,18 @@ function Test-HeliosAtlasReady([string]$Install) {
         return $state.status -eq 'finished'
     } catch {return $false}
 }
+function Test-HeliosSelected([string]$Install) {
+    if (Test-Path -LiteralPath (Join-Path $Install 'helios-enabled')) {return $true}
+    try {
+        $receipt = Get-Content -LiteralPath (Join-Path $root 'helios-build.json') -Raw | ConvertFrom-Json
+        return $receipt.revision -eq $expectedRevision
+    } catch {return $false}
+}
 function Invoke-HeliosRestartVerification([string]$Install) {
     # This operation can finish a stale receipt, never install or reboot.
     # An AME marker may remain forever; its presence alone must not suppress
     # verification after the playbook has actually completed.
-    if (-not (Test-Path -LiteralPath (Join-Path $Install 'helios-enabled')) -or
+    if (-not (Test-HeliosSelected $Install) -or
         -not (Test-HeliosAtlasReady $Install)) {return $false}
     $verificationLock = New-Object Threading.Mutex($false,'Global\WinBoatHeliosProvisioning')
     $verificationOwned = $false
@@ -202,7 +209,7 @@ function Invoke-HeliosProvisioning([string]$Source,[bool]$Continue) {
 function Invoke-HeliosEnsure([string]$Install) {
     # Service startup recovers a missed OEM registration. Atlas owns its handoff
     # until OOBE is complete; never restart Windows in the middle of AME.
-    if (-not (Test-Path -LiteralPath (Join-Path $install 'helios-enabled'))) {return}
+    if (-not (Test-HeliosSelected $Install)) {return}
     # Verify before the legacy Atlas handoff branch: an already installed
     # driver with no resume task otherwise never reaches this completion check.
     if (Invoke-HeliosRestartVerification $Install) {return}

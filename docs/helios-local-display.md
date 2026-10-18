@@ -683,7 +683,7 @@ Ein alter Beleg `driver-restart-required` hielt die Richtlinie bisher auf
 ausgab. Insbesondere ein dauerhaft vorhandener AME-OOBE-Marker zusammen mit
 einer fehlenden Fortsetzungsaufgabe übersprang die Abschlussprüfung.
 
-Guest-Protokoll `helios-watchdog-v6` prüft diesen Beleg vor der alten
+Guest-Protokoll `helios-watchdog-v7` prüft diesen Beleg vor der alten
 Atlas-Übergabe und bei Bedarf alle 30 Sekunden erneut. Nur nach abgeschlossenem
 Atlas, bei untätigen Installer-Aufgaben, aktivem Testmodus, passender
 Treiberidentität, fehlerfreiem Helios-Gerät mit Display-Funktion und einem
@@ -701,6 +701,11 @@ Treiberneustart.
 
 Die neue AppImage aktualisiert bestehende Gastdienste automatisch über die
 Protokollkennung. Für diese Änderung ist kein neues QEMU-Host-Image nötig.
+Ältere Gastdienst-Updates konnten außerdem `helios-enabled` und die OEM-Medien
+aus dem Programmordner löschen. Ein passender dauerhaft gespeicherter
+WinBoat-Helios-Beleg erhält jetzt die Information, dass Helios ausgewählt war.
+Künftige Updates behalten beide Auswahldateien sowie `helios/` und `atlas/`
+im geschützten Programmordner; alter Anwendungscode wird weiter ersetzt.
 
 ### Freigabe des vorigen Bildpuffers deaktiviert die neue Ausgabe
 

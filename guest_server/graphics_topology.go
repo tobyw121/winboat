@@ -11,7 +11,7 @@ func mirrorEnabled(install, programData string) bool {
 	if programData == "" {
 		return false
 	}
-	if _, err := os.Stat(filepath.Join(install, "helios-enabled")); err != nil {
+	if !heliosSelected(install, programData) {
 		return false
 	}
 	if _, err := os.Stat(filepath.Join(programData, "Helios", "install-state.json")); err != nil {
@@ -21,11 +21,28 @@ func mirrorEnabled(install, programData string) bool {
 	return err == nil && state["status"] == "finished"
 }
 
+func heliosSelected(install, programData string) bool {
+	if _, err := os.Stat(filepath.Join(install, "helios-enabled")); err == nil {
+		return true
+	}
+	if programData == "" {
+		return false
+	}
+	// This receipt is only staged by an explicitly selected WinBoat installer.
+	// Legacy guest updates removed the OEM marker from Program Files.
+	receipt, err := readHeliosJSON(filepath.Join(programData, "WinBoat", "Helios", "helios-build.json"))
+	if err != nil {
+		return false
+	}
+	revision, ok := receipt["revision"].(string)
+	return ok && revision == "fecffde64fd32399a877b452332681ef0db7993e"
+}
+
 func heliosRestartPending(install, programData string) bool {
 	if programData == "" {
 		return false
 	}
-	if _, err := os.Stat(filepath.Join(install, "helios-enabled")); err != nil {
+	if !heliosSelected(install, programData) {
 		return false
 	}
 	state, err := readHeliosJSON(filepath.Join(programData, "Helios", "provisioning-status.json"))

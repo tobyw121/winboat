@@ -70,7 +70,8 @@ function Get-VCRedistWaitReason([string]$Install, [string]$Data) {
         (Test-Path -LiteralPath (Join-Path $atlas 'oobe-mode.json'))) {
         $checks += [pscustomobject]@{path=(Join-Path $atlas 'status.json'); name='AME/Atlas'}
     }
-    if (Test-Path -LiteralPath (Join-Path $Install 'helios-enabled')) {
+    if ((Test-Path -LiteralPath (Join-Path $Install 'helios-enabled')) -or
+        (Test-Path -LiteralPath (Join-Path $Data 'WinBoat\Helios\helios-build.json'))) {
         $checks += [pscustomobject]@{path=(Join-Path $Data 'Helios\provisioning-status.json'); name='Helios'}
     }
     foreach ($check in $checks) {

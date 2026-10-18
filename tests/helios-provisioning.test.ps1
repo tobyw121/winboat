@@ -182,6 +182,15 @@ try {
     if(-not (Invoke-HeliosRestartVerification $selectedInstall)){throw 'Idle post-boot verification did not recover a missed continuation'}
     if(Invoke-HeliosRestartVerification $selectedInstall){throw 'Completed receipt was rewritten again'}
     if($global:heliosLaunches -ne $beforeLaunches -or $global:heliosRestarts -ne $beforeRestarts){throw 'Verification installed or rebooted Windows'}
+    # A legacy API update deleted the OEM marker. The protected WinBoat receipt
+    # still proves the original selection; a bare third-party install does not.
+    Remove-Item -LiteralPath (Join-Path $selectedInstall 'helios-enabled')
+    Pending-PreviousBoot
+    if(-not (Test-HeliosSelected $selectedInstall) -or -not (Invoke-HeliosRestartVerification $selectedInstall)){throw 'Lost update marker prevented verified completion'}
+    $savedReceipt=Get-Content -LiteralPath (Join-Path $root 'helios-build.json') -Raw
+    '{"revision":"unrelated"}' | Set-Content (Join-Path $root 'helios-build.json')
+    if(Test-HeliosSelected $selectedInstall){throw 'Unrelated receipt selected Helios'}
+    $savedReceipt | Set-Content (Join-Path $root 'helios-build.json')
     Write-Host 'Provisioning, reboot bounds, false-completion rejection and verified stale restart recovery passed with Windows API fixtures.'
 } finally {
     $env:ProgramData=$previousData; $env:SystemRoot=$previousSystem
