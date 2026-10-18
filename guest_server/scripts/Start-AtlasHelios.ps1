@@ -45,6 +45,9 @@ try {
         New-Item -ItemType Directory -Force $identityRoot | Out-Null
         Set-AtlasTreeAccess $identityRoot '' $false
         Copy-Item -LiteralPath (Join-Path $bundle 'helios-build.json') -Destination $identityRoot -Force
+        if ($RetryFailed) {
+            @{sha256=$receipt.sha256} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $identityRoot 'retry-once.json') -Encoding UTF8
+        }
         $script=Join-Path $install 'scripts\Start-AtlasHelios.ps1'
         $workerArguments='-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"' -f $script
         if ($RetryFailed) {$workerArguments+=' -RetryFailed'}
@@ -86,6 +89,16 @@ try {
         Publish-Handoff 'finished' 'The matching Helios installation is already complete.' | Out-Null
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
         exit 0
+    }
+    if ($RetryFailed) {
+        $permit=Join-Path $env:ProgramData 'WinBoat\Helios\retry-once.json'
+        $RetryFailed=Test-Path -LiteralPath $permit
+        if ($RetryFailed) {
+            $request=Get-Content -LiteralPath $permit -Raw | ConvertFrom-Json
+            $selected=Get-Content -LiteralPath (Join-Path $install 'helios\helios-build.json') -Raw | ConvertFrom-Json
+            $RetryFailed=$request.sha256 -eq $selected.sha256
+            Remove-Item -LiteralPath $permit -Force
+        }
     }
     if ($null -ne $state -and $state.status -eq 'failed' -and -not $RetryFailed) {throw 'Helios already reported a failure. Inspect its installer log before retrying.'}
     $resume=Get-ScheduledTask -TaskName 'WinBoatHeliosReboots' -ErrorAction SilentlyContinue

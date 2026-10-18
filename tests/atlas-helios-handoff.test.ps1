@@ -112,6 +112,8 @@ try {
     $global:handoffResume=[pscustomobject]@{State='Ready'}
     & $script -RetryFailed
     if($global:handoffLaunches -ne 3){throw 'A failed idle legacy worker did not receive the new provisioning script'}
+    & $script -RetryFailed | Out-Null
+    if($global:handoffLaunches -ne 3){throw 'Persisted retry flag reinstalled the failed driver again'}
     Write-Host 'Durable post-Atlas handoff, one guarded reboot after AME exits, reboot ordering, old PID/cache recovery, resume ownership and installed-driver preservation passed with Windows API fixtures.'
 } finally {
     $env:ProgramData=$previousData; $env:ProgramFiles=$previousFiles; $env:SystemRoot=$previousSystem
