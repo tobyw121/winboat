@@ -9,12 +9,16 @@ on:
       - 'helios/upstream/umd/src/forward/transfer.rs'
       - 'guest_server/scripts/Set-WinBoatGameCompatibility.ps1'
       - 'tests/game-compatibility.test.ps1'
+      - 'guest_server/scripts/Test-WinBoatOpenGL.ps1'
+      - 'tests/opengl-game-probe.test.ps1'
   pull_request:
     paths:
       - 'tests/helios-clear-view/**'
       - 'helios/upstream/umd/src/forward/transfer.rs'
       - 'guest_server/scripts/Set-WinBoatGameCompatibility.ps1'
       - 'tests/game-compatibility.test.ps1'
+      - 'guest_server/scripts/Test-WinBoatOpenGL.ps1'
+      - 'tests/opengl-game-probe.test.ps1'
 permissions:
   contents: read
 jobs:
@@ -45,4 +49,9 @@ jobs:
           persist-credentials: false
       - name: Check app-local Direct3D 9 profiles and restoration
         shell: pwsh
-        run: ./tests/game-compatibility.test.ps1
+        run: |
+          ./tests/game-compatibility.test.ps1
+          ./tests/opengl-game-probe.test.ps1
+      - name: Check OpenGL probe on Windows PowerShell
+        shell: powershell
+        run: ./tests/opengl-game-probe.test.ps1

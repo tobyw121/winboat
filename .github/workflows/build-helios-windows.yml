@@ -66,24 +66,20 @@ jobs:
         shell: pwsh
         working-directory: .
         run: |
-          ./tests/atlas-windows.test.ps1
-          ./tests/atlas-recovery.test.ps1
-          ./tests/atlas-observer.test.ps1
-          ./tests/atlas-helios-handoff.test.ps1
-          ./tests/atlas-acl.test.ps1
-          ./tests/atlas-ui.test.ps1
-          ./tests/atlas-session-launcher.test.ps1
+          # Each script owns its fixture types/mocks; do not share Add-Type state.
+          foreach ($test in @('atlas-windows','atlas-recovery','atlas-observer','atlas-helios-handoff','atlas-acl','atlas-ui','atlas-session-launcher')) {
+            pwsh -NoProfile -File "./tests/$test.test.ps1"
+            if ($LASTEXITCODE -ne 0) { throw "Atlas test failed: $test ($LASTEXITCODE)" }
+          }
       - name: Check Atlas provisioning result validation (Windows PowerShell)
         shell: powershell
         working-directory: .
         run: |
-          ./tests/atlas-windows.test.ps1
-          ./tests/atlas-recovery.test.ps1
-          ./tests/atlas-observer.test.ps1
-          ./tests/atlas-helios-handoff.test.ps1
-          ./tests/atlas-acl.test.ps1
-          ./tests/atlas-ui.test.ps1
-          ./tests/atlas-session-launcher.test.ps1
+          # Each script owns its fixture types/mocks; do not share Add-Type state.
+          foreach ($test in @('atlas-windows','atlas-recovery','atlas-observer','atlas-helios-handoff','atlas-acl','atlas-ui','atlas-session-launcher')) {
+            powershell -NoProfile -File "./tests/$test.test.ps1"
+            if ($LASTEXITCODE -ne 0) { throw "Atlas test failed: $test ($LASTEXITCODE)" }
+          }
       - name: Check registry snapshot preservation (PowerShell 7)
         shell: pwsh
         run: ./packaging/windows/Test-HeliosRegistrySnapshots.ps1

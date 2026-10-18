@@ -25,7 +25,13 @@ Gast-/Transportbäume sind zwischen beiden Commits identisch. Ihre gemeinsamen
 Tree-/Dependency-IDs stehen in `sharedSources`. Deshalb bleibt `guestRevision`
 die gemeinsame Gast-Kompatibilitätsidentität. Ein eigener CI-Build zeichnet
 zusätzlich **den tatsächlichen WinBoat-Commit**, das Repository, den Snapshot
-und dessen Lockdatei-Hash auf. Diese Angaben werden nicht gleichgesetzt.
+und dessen Lockdatei-Hash auf. Diese Angaben werden nicht gleichgesetzt. Der aktuelle Quellstand enthält
+zusätzlich die in `source.lock.json.localChanges` dokumentierten WinBoat-
+Änderungen; die ursprünglichen Tree-IDs beschreiben deren Upstream-Basis.
+Die Dateihashes und `sourceLockSha256` identifizieren die tatsächlich gebauten
+Quellen einschließlich dieser Änderungen. Der Quellstand ist 22.22.290.0;
+der mitgelieferte Installer bleibt bis zum geprüften Import auf seinem bisherigen
+Stand. Details: [Spielekompatibilität](helios-game-compatibility.md).
 
 ## Vollständiger CI-Build
 

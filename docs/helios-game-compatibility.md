@@ -1,0 +1,126 @@
+# Helios: Spielekompatibilität
+
+## Was geändert wurde
+
+Der Windows-Quellstand 22.22.290.0 ergänzt `ClearView` für D3D11-UAVs.
+Bisher wurden diese vorgeschriebenen Löschoperationen verworfen. Die neue
+Weiterleitung erhält Rechtecke und verwendet den passenden Handle-Loader;
+RTVs und UAVs haben unterschiedliche interne Speicherlayouts. Videoviews
+bleiben ausdrücklich nicht unterstützt. Feature-Level und WDDM-Version werden
+nicht künstlich angehoben. Die Abweichung vom Upstream-Snapshot ist mit
+Original- und aktuellen Dateiprüfsummen in `helios/source.lock.json` dokumentiert.
+
+`tests/helios-clear-view` kompiliert die tatsächliche geänderte DDI-Funktion
+und führt sie unter Windows mit WARP aus: x86/x64, RTV/UAV, vollständige und
+rechteckige Clears, leere Rechtecke, typisierte Buffer und pixelgenaue
+Staging-Rücklesung. Geräte-/Handle-Auflösung und Diagnosezähler sind Fixtures.
+Dies validiert weder einen geladenen Helios-Treiber noch Venus oder ein Spiel.
+Ein vollständiger Windows-Build, dessen Import und ein Gasttest sind eigene
+Prüfschritte. `./scripts/build-helios.sh` baut die Windows-DLLs nicht: Es nutzt
+die bereits eingebundene `resources/helios/HeliosSetup.exe`.
+
+## Icarus Phoenix (MMORPG)
+
+Für den älteren Direct3D-9-Pfad gibt es ein **optionales Profil pro Spiel**.
+Es verwendet die offizielle DXVK-Version 2.7.1, prüft deren SHA-256 und kopiert
+nur die zur EXE passende x86-/x64-`d3d9.dll` neben die tatsächliche Spiel-EXE.
+Launcher und Spiel können verschiedene Architekturen oder Verzeichnisse haben.
+Das Profil ist kein nativer D3D9-WDDM-Treiber: D3D9 wird über Vulkan übersetzt.
+Es braucht einen funktionierenden Helios/Venus-Vulkan-Pfad.
+
+In Windows PowerShell, nach dem Beenden des Spiels, beispielsweise:
+
+```powershell
+& 'C:\Program Files\WinBoat\scripts\Set-WinBoatGameCompatibility.ps1' `
+  -GameExe 'C:\Games\Icarus\Bin64\Client.exe' -Action Inspect
+
+& 'C:\Program Files\WinBoat\scripts\Set-WinBoatGameCompatibility.ps1' `
+  -GameExe 'C:\Games\Icarus\Bin64\Client.exe' -Action D3D9
+```
+
+Den Beispielpfad durch die **wirkliche Client-EXE** ersetzen. Im Checkout ist
+das Werkzeug unter `guest_server/scripts/` vorhanden; eine aktualisierte
+Guest-Server-Installation liefert es ebenfalls mit. Das Profil greift beim
+nächsten Start des Spiels. Es ändert keine System-DLLs und überschreibt keine
+bereits vorhandene `d3d9.dll`. In diesem Fall muss zuerst geklärt werden, ob die
+Datei zum Client oder einem anderen Wrapper gehört. Ein DXVK-Wrapper kann vom
+Client oder seinem Anti-Cheat abgelehnt werden; ein erfolgreicher Spieltest
+wird hier nicht behauptet.
+
+Rückgängig machen:
+
+```powershell
+& 'C:\Program Files\WinBoat\scripts\Set-WinBoatGameCompatibility.ps1' `
+  -GameExe 'C:\Games\Icarus\Bin64\Client.exe' -Action Restore
+```
+
+Es wird nur die anhand des gespeicherten Hashes zugeordnete DLL entfernt.
+Hat ein Updater die Datei verändert, verweigert das Werkzeug die Entfernung.
+Eine unterbrochene Installation mit bereits vorhandenem Receipt lässt sich
+mit Restore bereinigen. `-DxvkArchive` erlaubt ein lokal bereitgestelltes,
+unverändertes Originalarchiv; die gleiche Hashprüfung bleibt verpflichtend.
+
+## Minecraft Java
+
+Minecraft Java verwendet OpenGL. Ein D3D9-Profil hilft dort nicht; Java-EXEs
+werden von der D3D9-Aktivierung abgewiesen. Helios liefert den OpenGL-Pfad über
+Zink → Venus → Host-Vulkan. Der tatsächliche Spielprozess muss diesen ICD
+verwenden; ein Microsoft-Basic/GDI-Kontext genügt nicht.
+
+Aus der **angemeldeten Windows-Sitzung** prüfen:
+
+```powershell
+& 'C:\Program Files\WinBoat\scripts\Test-WinBoatOpenGL.ps1'
+```
+
+Der Test erzeugt einen echten WGL-Kontext, versucht einen OpenGL-3.3-Core-
+Kontext und liest Version, Renderer, Hersteller und Prozessarchitektur aus.
+Es werden keine Versionsstrings erzwungen und keine Registry-Knöpfe geändert.
+`openGl33Core=true` prüft diese konkrete Grundlage; es ist keine Zusage für
+jede Minecraft-/Sodium-/Shader-Version. Java-Version und Anforderungen müssen
+zur gewählten Minecraft-/Mod-Version passen.
+
+Für ein 32-Bit-Java separat die 32-Bit-Windows-PowerShell verwenden:
+
+```powershell
+& "$env:WINDIR\SysWOW64\WindowsPowerShell\v1.0\powershell.exe" -NoProfile `
+  -File 'C:\Program Files\WinBoat\scripts\Test-WinBoatOpenGL.ps1'
+```
+
+Der Probeprozess muss dieselbe Architektur und denselben Desktop wie das Spiel
+nutzen. Session 0 wird abgewiesen. „GDI Generic“/OpenGL 1.1 oder ein gescheiterter
+3.3-Core-Kontext geben einen konkreten Ansatz für ICD-/Adapterdiagnose. Das
+Werkzeug testet nicht automatisch das tatsächlich von Java geladene Modul.
+
+## Windows 11 IoT Enterprise LTSC ohne AME
+
+Als zweite, unveränderte Testinstallation ist LTSC sinnvoll: weniger Änderungen
+durch AME/Atlas erleichtern den Vergleich, und der feste Featurestand reduziert
+Funktionswechsel. Weniger Hintergrundaktivität kann helfen; zusätzliche FPS
+oder bessere Grafik-API-Kompatibilität folgen daraus nicht automatisch. Für
+die Helios-Entwicklung ist zunächst unverändertes Windows 11 Pro eine gut
+vergleichbare Basis. LTSC bietet eine weitere Vergleichsinstallation.
+
+| Basis | Nutzen | Einschränkung |
+|---|---|---|
+| Windows 11 Pro ohne AME | Breite Spiele-/Launcher-Unterstützung, unveränderte Referenz | Reguläre Featureupdates |
+| Windows 11 mit Atlas/AME | Anpassbare Dienste und Hintergrundkomponenten | Zusätzliche Änderungen bei der Fehlersuche berücksichtigen |
+| Windows 11 IoT Enterprise LTSC 2024 ohne AME | Fester Featurestand auf 24H2-Basis, zehn Jahre Wartung | Für spezialisierte Geräte vorgesehen; passende Lizenz/Einsatzbedingungen beachten; Store-/Xbox-Komponenten und künftige Spielanforderungen separat prüfen |
+
+Für Minecraft Java und klassische Win32-MMORPGs sind Store/Xbox-Komponenten
+gewöhnlich keine Voraussetzung. Die konkrete Client-/Launcher-Unterstützung
+muss dennoch geprüft werden. LTSC behebt weder Helios-Renderingfehler noch
+Beschränkungen durch Testsignierung oder Anti-Cheat.
+
+Die offizielle **Evaluierung läuft 90 Tage**. Nach Ablauf beschreibt Microsoft
+unter anderem einen schwarzen Desktophintergrund und stündliches Herunterfahren.
+Sie ist keine dauerhafte Gaming-Installation. Die ISO als **neue, separate VM**
+installieren, Atlas/AME deaktivieren und vorhandene Windows-Daten behalten.
+Helios, Guest API und VC++-Laufzeiten bleiben unabhängig von AME nutzbar.
+Für Helios ist weiterhin der Testsignierungsmodus erforderlich.
+
+Microsoft-Quellen:
+- [IoT Enterprise LTSC Evaluierung und Ablaufverhalten](https://www.microsoft.com/en-us/evalcenter/evaluate-windows-11-iot-enterprise-ltsc)
+- [Windows 11 IoT Enterprise LTSC 2024](https://learn.microsoft.com/en-us/windows/iot/iot-enterprise/whats-new/windows-11-iot-enterprise-ltsc-2024)
+- [IoT Enterprise: Einsatz und Wartungsmodell](https://learn.microsoft.com/en-us/windows/iot/iot-enterprise/overview)
+- [D3D11.1 ClearView DDI](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3d10umddi/nc-d3d10umddi-pfnd3d11_1ddi_clearview)
