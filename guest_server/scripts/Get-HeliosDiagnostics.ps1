@@ -5,6 +5,7 @@ $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false)
 $diagnosticsLibraryOnly=$LibraryOnly
 . (Join-Path $PSScriptRoot 'Start-HeliosProvisioning.ps1') -LibraryOnly
+. (Join-Path $PSScriptRoot 'Get-HeliosApplicationDiagnostics.ps1') -LibraryOnly
 function Get-HeliosDriverDiagnostics {
     $values=[ordered]@{}
     $key=Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\helios_kmd_render' -ErrorAction SilentlyContinue
@@ -22,6 +23,6 @@ function Get-HeliosDriverDiagnostics {
     } | Select-Object -First 8 Name,PNPDeviceID,DriverVersion,DriverDate,InfFilename,InstalledDisplayDrivers,ConfigManagerErrorCode,CurrentHorizontalResolution,CurrentVerticalResolution)
     $signing=$null
     try {$signing=Test-HeliosBootTestSigning} catch {} # Unsupported query is unknown, never false.
-    return [ordered]@{testSigning=$signing;controllers=$controllers;driverRegistry=$values;updatedAtUtc=[DateTime]::UtcNow.ToString('o')}
+    return [ordered]@{diagnosticsVersion=2;application=(Get-HeliosApplicationDiagnostics);testSigning=$signing;controllers=$controllers;driverRegistry=$values;updatedAtUtc=[DateTime]::UtcNow.ToString('o')}
 }
-if (-not $diagnosticsLibraryOnly) {Get-HeliosDriverDiagnostics | ConvertTo-Json -Depth 6 -Compress}
+if (-not $diagnosticsLibraryOnly) {Get-HeliosDriverDiagnostics | ConvertTo-Json -Depth 10 -Compress}

@@ -279,7 +279,16 @@ The probes are compiled by `ci/windows/Build-SmokeTests.ps1` under `vcvars64` wi
 
 ## 4. Known open conformance gaps
 
-**(a) FL11 MSAA is a table assertion, not a capability probe.** `ROADMAP.md:3027-3034`:
+**(a) FL11 MSAA — historical table assertion, replaced downstream in 22.22.292.0.**
+
+WinBoat now queries the backing `ID3D11Device` for the actual quality count,
+including `ID3D11Device2` for the WDDM 1.3 tiled-resource flag. Invalid inputs
+and failed backend queries return zero. Native WARP tests exercise the production
+helper, and the package smoke probe attempts the advertised texture allocations.
+This corrects over-reporting; it does not prove the whole FL11 format contract or
+Icarus compatibility. The findings below describe the previous implementation.
+
+ `ROADMAP.md:3027-3034`:
 
 > (3) **"MSAA quality reported to be 0"** — FL11 requires every render-target format to support 4x
 > MSAA and does NOT exempt 96-bit R32G32B32; CheckMultisampleQualityLevels now floors RT formats to

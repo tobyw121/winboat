@@ -11,6 +11,10 @@ on:
       - 'guest_server/graphics_topology*'
       - 'guest_server/graphics_diagnostics*'
       - 'guest_server/scripts/Get-HeliosDiagnostics.ps1'
+      - 'guest_server/scripts/Get-HeliosApplicationDiagnostics.ps1'
+      - 'tests/helios-application-diagnostics.test.ps1'
+      - 'scripts/helios/diagnose-graphics.py'
+      - 'tests/helios-graphics-diagnostics.test.py'
       - 'tests/helios-diagnostics.test.ps1'
       - 'guest_server/main.go'
       - 'guest_server/scripts/Preserve-WinBoatProvisioning.ps1'
@@ -34,6 +38,10 @@ on:
       - 'guest_server/graphics_topology*'
       - 'guest_server/graphics_diagnostics*'
       - 'guest_server/scripts/Get-HeliosDiagnostics.ps1'
+      - 'guest_server/scripts/Get-HeliosApplicationDiagnostics.ps1'
+      - 'tests/helios-application-diagnostics.test.ps1'
+      - 'scripts/helios/diagnose-graphics.py'
+      - 'tests/helios-graphics-diagnostics.test.py'
       - 'tests/helios-diagnostics.test.ps1'
       - 'guest_server/main.go'
       - 'guest_server/scripts/Preserve-WinBoatProvisioning.ps1'
@@ -66,6 +74,7 @@ jobs:
           ./tests/vcredist-provisioning.test.ps1
           ./tests/display-adapters.test.ps1
           ./tests/helios-diagnostics.test.ps1
+          ./tests/helios-application-diagnostics.test.ps1
           ./tests/helios-provisioning.test.ps1
           ./tests/atlas-helios-handoff.test.ps1
       - name: Test provisioning and handoff (Windows PowerShell 5.1)
@@ -75,6 +84,7 @@ jobs:
           ./tests/vcredist-provisioning.test.ps1
           ./tests/display-adapters.test.ps1
           ./tests/helios-diagnostics.test.ps1
+          ./tests/helios-application-diagnostics.test.ps1
           ./tests/helios-provisioning.test.ps1
           ./tests/atlas-helios-handoff.test.ps1
       - name: Read real Windows kernel and driver diagnostics without changing configuration
@@ -87,6 +97,9 @@ jobs:
         with:
           go-version: '1.25'
           cache-dependency-path: guest_server/go.sum
+      - name: Check host-side graphics collector
+        shell: pwsh
+        run: python tests/helios-graphics-diagnostics.test.py
       - name: Test and compile Windows Guest API
         working-directory: guest_server
         shell: pwsh

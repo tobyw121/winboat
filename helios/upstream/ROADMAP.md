@@ -1,5 +1,31 @@
 # ROADMAP — Stage: Correctness and D3D12
 
+## WinBoat downstream: Vulkan device creation and D3D capability fidelity
+
+22.22.292.0 filters guest-only feature structures as well as extension names
+before host device creation; application memory and enabled guest features stay
+unchanged. Internal WSI timeline enablement remains host-only. A downstream Mesa
+patch records the rejected feature field in LOCALAPPDATA/helios-vulkan-features.log
+for GUI clients. The Windows Vulkan device name uses the existing Helios branding;
+PCI identity, driver ID and supported capabilities remain truthful.
+
+D3D11 MSAA quality queries now forward to the backend (including the WDDM 1.3
+TILED_RESOURCE flag), rather than assuming a quality level for every table format.
+The installer associates both Vulkan ICDs with the display adapter, retaining
+per-key restore points across repair and PCI movement. The feature roundtrip and
+MSAA allocation probes ship in both architectures. Native WARP regression tests
+exercise the production MSAA helper, separately from hardware acceptance.
+
+Null Create-view descriptors, missing resources and final shader compilation
+failures now reach the originating runtime error callback. The native D3D smoke
+probe also checks compute/UAV data, two shader draws with depth rejection, and
+MSAA resolve/readback. CI runs an explicitly selected WARP software control;
+the default acceptance run still requires the Helios adapter.
+
+FurMark's observed FEATURE_NOT_PRESENT is confirmed, but its particular rejected
+field and game acceptance are not yet established. No capability is force-enabled.
+A complete rebuilt installer and real Helios GPU validation remain required.
+
 ## WinBoat downstream: live display modes (2026-10-18)
 
 The virtual output now offers eleven 60 Hz source/target/monitor modes from

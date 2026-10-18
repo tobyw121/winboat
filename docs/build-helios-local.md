@@ -267,8 +267,8 @@ Details, Herkunft des mitgelieferten Pakets und lokale Windows-Voraussetzungen:
 
 ## Gemeinsame Quellen und Dockerfile
 
-`helios/upstream/` enthält die 611 Originaldateien des festgelegten Helios-
-Quellstands. `helios/source.lock.json` erfasst Herkunft, Commit, Git-Tree,
+`helios/upstream/` enthält den festgelegten Helios-Quellstand mit den im
+Lockfile ausgewiesenen WinBoat-Anpassungen. `helios/source.lock.json` erfasst Herkunft, Commit, Git-Tree,
 Dateiprüfsummen und die sieben ursprünglichen Dependency-Gitlinks. Helios selbst
 ist kein Git-Submodul und benötigt keinen zweiten Checkout. Externe Projekte wie
 QEMU, Mesa, Venus-Protokoll und virglrenderer werden während des Builds anhand

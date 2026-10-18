@@ -1,5 +1,59 @@
 # Helios: Spielekompatibilität
 
+## Vulkan und native D3D-Abfragen ab Quellversion 22.22.292.0
+
+Die Quelländerungen benötigen einen neuen Windows-Installer. Der bisher
+mitgelieferte Installer enthält diese Änderungen noch nicht; ein reiner
+AppImage-Neubau reicht nicht aus.
+
+- Gastseitige Vulkan-WSI-/Speicher-Features werden vor dem Linux-Renderer aus
+  dessen Gerätekette entfernt. Die vom Programm aktivierten Gast-Features
+  bleiben erhalten; nicht unterstützte Funktionen werden weiterhin abgelehnt.
+- Eine lokal abgelehnte Feature-Anforderung wird zusätzlich mit Prozess-ID und
+  Feldnamen nach `%LOCALAPPDATA%\helios-vulkan-features.log` geschrieben.
+  Ein vom Host abgelehntes Feature ist dadurch noch nicht automatisch lokalisiert.
+- `runtime\smoke\vulkan-features.exe` prüft unter einer Vulkan-1.1-Instanz die
+  gemeldeten Core-Feature-Gruppen bis zur tatsächlichen Geräteversion durch
+  echte Geräteerstellung. Das ist kein vollständiger Vulkan-Konformitätstest.
+- D3D11 fragt MSAA-Qualitäten einschließlich Tiled-Resource-Flags beim Backend
+  ab. Der D3D-Smoke-Test versucht für gemeldete Kombinationen reale Texturen
+  anzulegen; erfundene Sample-Unterstützung wird vermieden.
+- x64 und x86 werden zusätzlich über `VulkanDriverName` und
+  `VulkanDriverNameWow` am Windows-Adapter registriert. Reparatur erhält die
+  ursprünglichen Sicherungen; Deinstallation bewahrt fremde Änderungen.
+- Vulkan meldet `Helios vGPU (<Host-GPU>)` statt `Virtio-GPU Venus (...)`.
+  Die virtuelle PCI-Identität und Mesa/Venus-Treiberkennung bleiben erhalten.
+  NVIDIA-NVAPI, VBIOS und Sensoren werden nicht durch Umbenennen verfügbar;
+  GPU-Z oder jedes beliebige Spiel kann daher nicht garantiert werden.
+
+Weitere Diagnose und Regressionen:
+
+- Frühe View-/Shader-Fehler melden den API-Fehler über den Laufzeit-Callback.
+  Der neue Deskriptor-Guard verhindert Nullzugriffe bei View-/Sampler-Erstellung.
+- `d3d11-smoke.exe` prüft Compute/UAV-Daten, Vertex-/Pixelshader, Tiefenprüfung
+  und MSAA-Resolve durch exakten Daten-/Pixelvergleich. `--warp` ist nur die
+  ausdrücklich ausgewählte Softwarekontrolle; ohne dieses Argument wird Helios
+  verlangt. Der Test enthält den HLSL-Compiler, der Treiber selbst weiterhin nicht.
+- Der aktualisierte Guest-Dienst ergänzt `/graphics/diagnostics` um feste
+  API-Registrierungen, gefilterte Feature-Fehler, relevante Absturzfelder und
+  ausgewählte geladene Grafik-DLLs. Es werden keine Befehle ausgeführt oder
+  Passwörter, vollständigen Ereignismeldungen oder Prozessargumente ausgelesen.
+
+Nach Aktualisierung des Guest-Dienstes genügt auf dem Linux-Host:
+
+```bash
+python3 scripts/helios/diagnose-graphics.py
+```
+
+Der Aufruf speichert einen Bericht unter `~/.winboat/diagnostics/` und benötigt
+keine Zwischenablage in der VM. Er startet und stoppt die VM nicht. Fehlende
+Teilinformationen bleiben als solche erkennbar; PID-basierte Feature-Logzeilen
+können von einem früheren Prozess stammen.
+
+Die beobachtete FurMark-Meldung `VK_ERROR_FEATURE_NOT_PRESENT (-8)` ist damit
+noch kein nachweislich behobener FurMark-Fehler. Seine konkrete Feature-Anfrage
+und Icarus müssen mit dem neu gebauten Treiber separat geprüft werden.
+
 ## Was geändert wurde
 
 Der mitgelieferte Windows-Treiber 22.22.290.0 ergänzt `ClearView` für D3D11-UAVs.

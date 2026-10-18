@@ -53,14 +53,14 @@
     ".mcp.json": "9d6c3e97720f413c15950908f2f9b794f5e0ffb7bae0e778a2fdbbf1f27249ff",
     "AGENTS.md": "1508396c5f2e7e6804c906700b9449ae8d943f90a01d23dece83da43ed6e03bc",
     "BRINGUP_QUIRKS.md": "92fc59a3d85a13f23d0bffd011737d2cf02a455a171db9100d5b31b6d2b79b18",
-    "CONFORMANCE.md": "f7e8d5b686c917c062486b8e31f92bdb4d22fe1873d75e7f39aa17ef31787294",
+    "CONFORMANCE.md": "6f5a5f45c0fa5747674710dc241e64599867289e651ebba30ad6941ec92ef373",
     "DX12.md": "18fb1f5db331f3f32299fbc13073e68935bec244908b245ce4767c9449b50301",
     "HELIOS_DRIVER_DEPLOYMENT.md": "9036c0dbfe08f54785bfb33c55f47a62ee6642415d6f713d14c785a088241d20",
     "HOST.md": "76a9b0793882ba0d2a2215c3db6aab2bf5e75c5ca01ad3a55ee1d5a730edf3c4",
     "INVESTIGATIONS/exit8-exclusive-fullscreen-rgb10.md": "9c308aa2ff35670d5739f085e2d690175cc8be30fbc5f7ad8f6e259ca3f0979f",
     "NTOSEYE.md": "555acd226f7298aea224a372070e783289a64615663913d82393cccdff612558",
     "README.md": "2119fe6213c753e6115886169c2a51acc4349260a03254729e430c6795e3dcb3",
-    "ROADMAP.md": "ab8170511657f34ca7b5f393f9c839c73a3284e9ef7eef609ada46f9c2328158",
+    "ROADMAP.md": "3f50542d9f9c56a247bbb5931bb62d186ec215eba87b38488ae7328e1380f930",
     "TOOLCHAIN.md": "6c1d99c8ebffb025cb8e581fcba3dabd70d01f353c0c28d251c0f9923d45b7d9",
     "TRANSPORT.md": "7cbb4f91b03d5e9125b8740444aa15e1d7803b629d0a248d7bbd3f9b56259362",
     "WINDOWS_CI_PACKAGE.md": "30df88e236add10db73c361c1e16987d1e16958e8dc58e247136f9781201bfe2",
@@ -678,7 +678,8 @@
       "packaging/windows/Helios-PackageCommon.ps1": "0ef22b61d47c1c7e6f56b2583384b29f9710abf6fa01b1d15f468a5ee25a8c99",
       "packaging/windows/Install-Helios.ps1": "4a1d4151bf66d070cc8b4faf61f8be496770ca6bacf854e26d6aadf68bf2c8c3",
       "packaging/windows/Uninstall-Helios.ps1": "2e92f523770bbe2e4c2e56bd9ef6eada4ab9ba0ab6dbeefcad330da32c2d179d",
-      "packaging/windows/Verify-Helios.ps1": "7de90520f2961c708adb6213fa3ad26dcb8a9c1399c3b746f686de14f539718c"
+      "packaging/windows/Verify-Helios.ps1": "7de90520f2961c708adb6213fa3ad26dcb8a9c1399c3b746f686de14f539718c",
+      "CONFORMANCE.md": "f7e8d5b686c917c062486b8e31f92bdb4d22fe1873d75e7f39aa17ef31787294"
     },
     "features": [
       "d3d11-uav-clear-view",
