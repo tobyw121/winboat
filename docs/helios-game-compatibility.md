@@ -15,9 +15,25 @@ und führt sie unter Windows mit WARP aus: x86/x64, RTV/UAV, vollständige und
 rechteckige Clears, leere Rechtecke, typisierte Buffer und pixelgenaue
 Staging-Rücklesung. Geräte-/Handle-Auflösung und Diagnosezähler sind Fixtures.
 Dies validiert weder einen geladenen Helios-Treiber noch Venus oder ein Spiel.
+Der festgelegte [DXVK-Backendstand](https://github.com/winboat-org/dxvk/blob/6948271578bf2aa6481389a07b5070c95f911952/src/d3d11/d3d11_context.cpp)
+unterstützt bereits `ClearImageView` und `ClearBufferView` für diese UAV-Aufrufe.
 Ein vollständiger Windows-Build, dessen Import und ein Gasttest sind eigene
 Prüfschritte. `./scripts/build-helios.sh` baut die Windows-DLLs nicht: Es nutzt
 die bereits eingebundene `resources/helios/HeliosSetup.exe`.
+
+## Prüfung mit dem tatsächlich installierten Helios-Treiber
+
+Der Workflow „Test Helios game compatibility“ baut zusätzlich die Standalone-
+Artefakte `helios-clearview-probe-x64` und `helios-clearview-probe-x86` aus
+`tests/helios-game-clearview.cpp`. Die EXEs im angemeldeten Windows-Gast
+starten. Der Probe wählt ausdrücklich den Helios-DXGI-Adapter und verweigert
+einen WARP-/Basic-Ersatz. Er prüft vollständige und rechteckige RTV-/UAV-Clears
+sowie typisierte Puffer mit Staging-Rücklesung. Jeder Unterschied führt zu einem
+Fehlerstatus; ein fehlender Adapter ist kein übersprungener Erfolg.
+
+Dies ist ein Test des geladenen Treibers und des Ressourcentransports. Ein
+sichtbares Bild und ein laufendes Spiel bleiben separate Prüfungen. Der mit-
+gelieferte ältere Treiber kann die neue UAV-Prüfung erwartungsgemäß ablehnen.
 
 ## Icarus Phoenix (MMORPG)
 

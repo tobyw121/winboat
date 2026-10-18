@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/test-helios-game-compatibility.yml'
       - 'tests/helios-clear-view/**'
+      - 'tests/helios-game-clearview.cpp'
       - 'helios/upstream/umd/src/forward/transfer.rs'
       - 'guest_server/scripts/Set-WinBoatGameCompatibility.ps1'
       - 'tests/game-compatibility.test.ps1'
@@ -14,6 +15,7 @@ on:
   pull_request:
     paths:
       - 'tests/helios-clear-view/**'
+      - 'tests/helios-game-clearview.cpp'
       - 'helios/upstream/umd/src/forward/transfer.rs'
       - 'guest_server/scripts/Set-WinBoatGameCompatibility.ps1'
       - 'tests/game-compatibility.test.ps1'
@@ -62,3 +64,32 @@ jobs:
         run: |
           & "$env:WINDIR/SysWOW64/WindowsPowerShell/v1.0/powershell.exe" -NoProfile -File ./tests/opengl-game-probe.test.ps1
           if ($LASTEXITCODE -ne 0) { throw '32-bit OpenGL probe test failed.' }
+  helios-probe:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        arch: [x64, x86]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build actual Helios acceptance probe
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
+          $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { throw 'Visual C++ tools are missing.' }
+          $script = Join-Path $env:RUNNER_TEMP 'build-clearview.cmd'
+          @(
+            "call `"$vs/Common7/Tools/VsDevCmd.bat`" -arch=${{ matrix.arch }} -host_arch=x64"
+            'if errorlevel 1 exit /b 1'
+            'cl /nologo /W4 /EHsc /std:c++17 /MT tests/helios-game-clearview.cpp /Fe:helios-clearview-${{ matrix.arch }}.exe /link d3d11.lib dxgi.lib'
+          ) | Set-Content -LiteralPath $script -Encoding ascii
+          & $env:ComSpec /d /c $script
+          if ($LASTEXITCODE -ne 0) { throw 'Helios acceptance probe compilation failed.' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: helios-clearview-probe-${{ matrix.arch }}
+          path: helios-clearview-${{ matrix.arch }}.exe
+          if-no-files-found: error
