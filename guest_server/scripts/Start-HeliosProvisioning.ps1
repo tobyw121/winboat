@@ -63,6 +63,28 @@ function Assert-HeliosInstalled {
     $manifest = Get-Content -LiteralPath (Join-Path $env:ProgramData 'Helios\manifest.json') -Raw | ConvertFrom-Json
     if ($manifest.source.helios -ne $expectedRevision) {throw 'Installed Helios source identity does not match the selected stack.'}
 }
+function Complete-HeliosRestart([DateTime]$Boot) {
+    # Recover only a restart receipt from an earlier boot. A loaded miniport
+    # during the install boot does not prove that the requested reboot happened.
+    try {
+        $state=Get-Content -LiteralPath $statusPath -Raw | ConvertFrom-Json
+        if ($state.status -ne 'driver-restart-required' -or
+            [DateTime]::Parse($state.updatedAtUtc).ToUniversalTime() -ge $Boot -or
+            -not (Test-HeliosBootTestSigning)) {return $false}
+        Assert-HeliosInstalled
+        $official=Get-ScheduledTask -TaskName 'HeliosGraphicsProvisioning' -ErrorAction SilentlyContinue
+        if ($null -ne $official -and $official.State.ToString() -eq 'Running') {return $false}
+        $devices=@(Get-CimInstance Win32_PnPEntity -Filter "PNPClass = 'Display'" | Where-Object {
+            $_.PNPDeviceID -like 'PCI\VEN_1AF4&DEV_1050*' -and
+            $_.Service -eq 'helios_kmd_render' -and $_.ConfigManagerErrorCode -eq 0
+        })
+        $driver=Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\helios_kmd_render' -ErrorAction Stop
+        if ($devices.Count -ne 1 -or $driver.DspH -ne 1) {return $false}
+    } catch {return $false} # Missing/unknown evidence stays with the installer.
+    Write-HeliosProgress 'finished' 'Helios restart verified: selected driver and display function are running in the new Windows boot.'
+    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+    return $true
+}
 function Invoke-HeliosProvisioning([string]$Source,[bool]$Continue) {
     Assert-HeliosAdministrator
     New-Item -ItemType Directory -Force -Path $root | Out-Null
@@ -113,6 +135,7 @@ function Invoke-HeliosProvisioning([string]$Source,[bool]$Continue) {
         Restart-HeliosProvisioning $guard $boot 'test-signing-restart-required'
         return
     }
+    if (Complete-HeliosRestart $boot) {return}
     $official = Get-ScheduledTask -TaskName 'HeliosGraphicsProvisioning' -ErrorAction SilentlyContinue
     if ($null -ne $official) {
         if ($official.State.ToString() -ne 'Running') {
@@ -162,6 +185,8 @@ function Invoke-HeliosEnsure([string]$Install) {
         }
     }
     if ($null -ne $existing -and $existing.State.ToString() -eq 'Running') {return}
+    $boot=(Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime()
+    if (Complete-HeliosRestart $boot) {return}
     # Re-stage an idle legacy worker from the updated API scripts before starting
     # it, so an old protected copy does not keep the previous boot logic.
 

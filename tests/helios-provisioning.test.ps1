@@ -119,7 +119,43 @@ try {
     $blocked=$false
     try {Invoke-HeliosProvisioning '' $true} catch {if($_.Exception.Message -notmatch 'SHA-256 mismatch'){throw};$blocked=$true}
     if(-not $blocked -or $global:heliosLaunches -ne 1){throw 'Unverified recovery installer executed.'}
-    Write-Host 'Active-kernel test-signing preflight, BCD rejection, durable first launch, persisted verified installer, disabled-task recovery, two-boot completion, no duplicate worker, reboot bounds and false-completion rejection passed with Windows API fixtures.'
+    # A missed installer continuation must not leave a healthy post-reboot
+    # display permanently behind the installation-only topology policy.
+    '{}' | Set-Content (Join-Path $installed 'install-state.json')
+    $global:heliosBcdExit=0; $global:heliosTestSigning=$true; $global:heliosOfficial=$null
+    $global:heliosDeviceCode=0; $global:heliosDisplayHalf=1
+    function Get-CimInstance {
+        param($ClassName,$Filter)
+        if($ClassName -eq 'Win32_OperatingSystem'){return [pscustomobject]@{LastBootUpTime=$global:heliosBoot}}
+        if($ClassName -ne 'Win32_PnPEntity' -or $Filter -ne "PNPClass = 'Display'"){throw 'Unbounded device query'}
+        [pscustomobject]@{PNPDeviceID='PCI\VEN_1AF4&DEV_1050&SUBSYS_11001AF4';Service='helios_kmd_render';ConfigManagerErrorCode=$global:heliosDeviceCode}
+    }
+    function Get-ItemProperty {param($LiteralPath) [pscustomobject]@{DspH=$global:heliosDisplayHalf}}
+    function Pending-PreviousBoot {
+        @{status='driver-restart-required';updatedAtUtc=$global:heliosBoot.AddMinutes(-1).ToString('o')} |
+            ConvertTo-Json | Set-Content -LiteralPath $statusPath
+    }
+    Pending-PreviousBoot
+    $global:heliosDeviceCode=22
+    if(Complete-HeliosRestart $global:heliosBoot){throw 'Disabled driver completed provisioning'}
+    $global:heliosDeviceCode=0; $global:heliosDisplayHalf=0
+    if(Complete-HeliosRestart $global:heliosBoot){throw 'Render-only driver completed display provisioning'}
+    $global:heliosDisplayHalf=1; $global:heliosTestSigning=$false
+    if(Complete-HeliosRestart $global:heliosBoot){throw 'Inactive test-signing completed provisioning'}
+    $global:heliosTestSigning=$true; $global:heliosOfficial=[pscustomobject]@{State='Running'}
+    if(Complete-HeliosRestart $global:heliosBoot){throw 'Recovery raced the active installer'}
+    $global:heliosOfficial=$null
+    Write-HeliosProgress 'driver-restart-required' 'same boot'
+    if(Complete-HeliosRestart $global:heliosBoot){throw 'Requested reboot was skipped'}
+    Pending-PreviousBoot
+    @{source=@{helios='wrong'}} | ConvertTo-Json | Set-Content (Join-Path $installed 'manifest.json')
+    if(Complete-HeliosRestart $global:heliosBoot){throw 'Wrong stack completed provisioning'}
+    @{source=@{helios=$expectedRevision}} | ConvertTo-Json | Set-Content (Join-Path $installed 'manifest.json')
+    $beforeLaunches=$global:heliosLaunches; $beforeRestarts=$global:heliosRestarts
+    Invoke-HeliosEnsure $selectedInstall
+    $completed=Get-Content -LiteralPath $statusPath -Raw | ConvertFrom-Json
+    if($completed.status -ne 'finished' -or $global:heliosLaunches -ne $beforeLaunches -or $global:heliosRestarts -ne $beforeRestarts){throw 'Missed restart receipt recovery reinstalled or rebooted Windows'}
+    Write-Host 'Provisioning, reboot bounds, false-completion rejection and verified stale restart recovery passed with Windows API fixtures.'
 } finally {
     $env:ProgramData=$previousData; $env:SystemRoot=$previousSystem
     Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue

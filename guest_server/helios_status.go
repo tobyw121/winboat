@@ -40,6 +40,9 @@ func getHeliosStatus(w http.ResponseWriter, r *http.Request) {
 		status, err := readHeliosJSON(filepath.Join(root, "Helios", "provisioning-status.json"))
 		if err == nil {
 			progress["status"] = status["status"]
+			if status["status"] == "driver-restart-required" {
+				progress["message"] = "Windows must restart to finish Helios driver provisioning"
+			}
 			if message, ok := status["message"]; ok {
 				progress["message"] = message
 			}
