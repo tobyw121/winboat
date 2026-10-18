@@ -60,7 +60,7 @@
     "INVESTIGATIONS/exit8-exclusive-fullscreen-rgb10.md": "9c308aa2ff35670d5739f085e2d690175cc8be30fbc5f7ad8f6e259ca3f0979f",
     "NTOSEYE.md": "555acd226f7298aea224a372070e783289a64615663913d82393cccdff612558",
     "README.md": "2119fe6213c753e6115886169c2a51acc4349260a03254729e430c6795e3dcb3",
-    "ROADMAP.md": "3f50542d9f9c56a247bbb5931bb62d186ec215eba87b38488ae7328e1380f930",
+    "ROADMAP.md": "e7e399254d1067c1b9668536708bac9bb0275584f906d1268ca53be3ed44ed9f",
     "TOOLCHAIN.md": "6c1d99c8ebffb025cb8e581fcba3dabd70d01f353c0c28d251c0f9923d45b7d9",
     "TRANSPORT.md": "7cbb4f91b03d5e9125b8740444aa15e1d7803b629d0a248d7bbd3f9b56259362",
     "WINDOWS_CI_PACKAGE.md": "30df88e236add10db73c361c1e16987d1e16958e8dc58e247136f9781201bfe2",
@@ -239,7 +239,7 @@
     "kmd_render/Cargo.toml": "02c97c032e886b6ade362d676526657e76741d03e4b387725994c64afe2b308b",
     "kmd_render/README.md": "4575286062689db2debd86ff0af71a0cef864dc8f9129114ad6abc298e3c8824",
     "kmd_render/build.rs": "f13dad099657100ed284c34a5e417718bb1c1b507bc2df7cbc7f3fa03b43b618",
-    "kmd_render/driver-version.env": "9546967c941de0322d16aa2d1317f6d3057d0c9a5a174dc5153d703730e7f625",
+    "kmd_render/driver-version.env": "bc6f7ed321fa7ae3b1ad3a1dafbbfeb56080e64a0e4534002dee822ef53a5d72",
     "kmd_render/helios_kmd_render.inx": "96e329ad2cbe0e4723cdc54b5f4c136bec6ca949d694fc1d21fdd9ef617e65b4",
     "kmd_render/rust-toolchain.toml": "ac257e2301dcb6cea3bf0bbe4e7ffe4c586b58a9916b1597020455ee27285764",
     "kmd_render/src/adapter/backing.rs": "177b2651b690dfe87bf270ca4685b056d8ef26f74c87c2438698c4081630b73b",
@@ -312,8 +312,8 @@
     "nix/default.nix": "5efca4be649d19cbdd6015173617531131ebc13829ed440c4403d7b7b2bd3d40",
     "nix/standalone.nix": "5454bede3534f03ed573ad598ffbee9cf093b063f10c957b7618dda2d6d73645",
     "nix/windows-dependencies.nix": "5db34f398a22bc9f424fa061a58f4f40dfc3fadd6fa28a81823b7b14ce2fcd69",
-    "packaging/windows/Helios-PackageCommon.ps1": "b700772bec61bdb093f61a9b62528c63176e1668ce3131d24283660813258cc1",
-    "packaging/windows/Install-Helios.ps1": "1ed810c9de051a3e24528b191ce3e3858c6baf53a5981f8192b2b06a2b0550f9",
+    "packaging/windows/Helios-PackageCommon.ps1": "b76da6667fc1117cbe562a8004c641509b303d2eb3da153208700124c248201f",
+    "packaging/windows/Install-Helios.ps1": "cb4c9f68080b17f2609b2c0450d0bf3e6f1d8a41b85c43140eb1786369371873",
     "packaging/windows/README.md": "6fb7805c2689bb577be675d9262c0b90fc0b71829d5ef656dc0513931cf6785f",
     "packaging/windows/Test-HeliosRegistrySnapshots.ps1": "1418630d6533ce95ced0ac59436897202d6f9ad2cdb0e2b0d1586c67a831d256",
     "packaging/windows/Uninstall-Helios.ps1": "e45183190e0aa9850b8fec818aca9c39dcfdd40c0a3e041ea87b0bb7c4ef21c9",
@@ -690,7 +690,8 @@
       "d3d11-create-error-propagation",
       "d3d11-compute-depth-msaa-readback",
       "adapter-vulkan-registration",
-      "vulkan-feature-roundtrip-probe"
+      "vulkan-feature-roundtrip-probe",
+      "Accept empty and legacy-null adapter Vulkan rollback state during first installation"
     ],
     "addedFiles": [
       "kmd_logic/src/display_modes.rs",

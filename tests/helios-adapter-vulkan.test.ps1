@@ -18,6 +18,25 @@ function Install-Records($Records, [string]$Key) {
     }
 }
 $script:registry['adapter-A/VulkanDriverName'] = @{ exists=$true; kind='String'; value='previous.json' }
+# Exercise the actual installer's state-loading expression, not just a literal
+# @() argument: an empty if-expression used to become null under StrictMode.
+$install = Join-Path $RepoRoot 'helios/upstream/packaging/windows/Install-Helios.ps1'
+$tokens = $null; $parseErrors = $null
+$ast = [Management.Automation.Language.Parser]::ParseFile($install, [ref]$tokens, [ref]$parseErrors)
+if ($parseErrors.Count) { throw 'Installer parse failed' }
+$assignment = @($ast.FindAll({ param($node)
+    $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+    $node.Left.Extent.Text -eq '$adapterVulkan'
+}, $true))
+if ($assignment.Count -ne 1) { throw 'Expected the installer rollback-state assignment' }
+foreach ($previousState in @($null, [pscustomobject]@{}, [pscustomobject]@{adapterVulkan=@()}, [pscustomobject]@{adapterVulkan=$null})) {
+    . ([scriptblock]::Create($assignment[0].Extent.Text))
+    if ($null -eq $adapterVulkan -or $adapterVulkan.Count -ne 0) { throw 'Missing rollback state must load as an empty array' }
+    $fresh = @(Get-HeliosAdapterVulkanRegistration 'adapter-A' 'x64.json' 'x86.json' $adapterVulkan)
+    if ($fresh.Count -ne 2 -or $fresh[0].previous.value -ne 'previous.json') { throw 'Fresh or legacy install lost its snapshot' }
+}
+$fromNull = @(Get-HeliosAdapterVulkanRegistration 'adapter-A' 'x64.json' 'x86.json' $null)
+if ($fromNull.Count -ne 2) { throw 'Null rollback state was not accepted' }
 $records = @(Get-HeliosAdapterVulkanRegistration 'adapter-A' 'x64.json' 'x86.json' @())
 if ($records.Count -ne 2 -or $records[0].previous.value -ne 'previous.json') { throw 'Initial snapshot lost' }
 Install-Records $records 'adapter-A'

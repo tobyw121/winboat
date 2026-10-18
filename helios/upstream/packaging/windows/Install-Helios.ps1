@@ -451,7 +451,7 @@ New-ItemProperty -LiteralPath $vulkanRegistryX86 -Name $vulkanManifestX86Path -V
 
 # Associate both ICDs with this PnP adapter as well as the legacy global list.
 # Keep per-class-key restore points across repairs and PCI address changes.
-$adapterVulkan = if ($previousState -and $previousState.PSObject.Properties['adapterVulkan']) { @($previousState.adapterVulkan) } else { @() }
+$adapterVulkan = @(if ($previousState -and $previousState.PSObject.Properties['adapterVulkan'] -and $null -ne $previousState.adapterVulkan) { $previousState.adapterVulkan })
 $state.adapterVulkan = @(Get-HeliosAdapterVulkanRegistration $classKey $vulkanManifestPath $vulkanManifestX86Path $adapterVulkan)
 Write-HeliosJson $state $statePath
 foreach ($entry in $state.adapterVulkan | Where-Object { $_.classKey -ieq $classKey }) {

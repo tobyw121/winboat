@@ -1,5 +1,15 @@
 # Helios: Spielekompatibilität
 
+## Installationskorrektur ab 22.22.293.0
+
+22.22.292.0 konnte bei einer Erstinstallation oder einem älteren Installationsbeleg
+nach dem erfolgreichen PnP-Schritt mit `The property 'classKey' cannot be found`
+abbrechen. Ursache war ein leerer PowerShell-Wiederherstellungsdatensatz.
+22.22.293.0 behandelt diesen Zustand korrekt; vorhandene Wiederherstellungswerte
+bleiben bei einer Reparatur erhalten. Eine neue Windows-/Atlas-Installation ist
+dafür nicht erforderlich. Nach einem fehlgeschlagenen Installations-/Deinstallationslauf
+Windows zunächst neu starten und anschließend das korrigierte Paket installieren.
+
 ## Vulkan und native D3D-Abfragen ab Quellversion 22.22.292.0
 
 Die Quelländerungen benötigen einen neuen Windows-Installer. Der bisher

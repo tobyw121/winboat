@@ -189,6 +189,9 @@ function Get-HeliosRegistrySnapshot([Parameter(Mandatory)][string]$Path, [Parame
 
 function Get-HeliosAdapterVulkanRegistration([string]$ClassKey, [string]$Manifest, [string]$ManifestX86, [array]$Previous) {
     # Return the durable rollback record BEFORE modifying registry values.
+    # PowerShell emits no objects for an empty if-expression. Callers and older
+    # JSON receipts can therefore supply null instead of an empty record array.
+    $Previous = @($Previous | Where-Object { $null -ne $_ })
     $records = @($Previous | Where-Object { $_.classKey -ine $ClassKey })
     foreach ($item in @(@{ name = 'VulkanDriverName'; path = $Manifest }, @{ name = 'VulkanDriverNameWow'; path = $ManifestX86 })) {
         $old = @($Previous | Where-Object { $_.classKey -ieq $ClassKey -and $_.name -eq $item.name })

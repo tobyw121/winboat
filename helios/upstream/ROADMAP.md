@@ -1,5 +1,14 @@
 # ROADMAP — Stage: Correctness and D3D12
 
+## WinBoat downstream: fresh-install Vulkan registration (22.22.293.0)
+
+The installer preserves an empty adapter rollback list as an array and accepts
+null from legacy receipts. Previously, an empty PowerShell if-expression became
+null, and StrictMode rejected the classKey access after PnP driver installation.
+Regression tests execute the installer's actual state-loading expression for
+fresh installs, older receipts, empty and null lists, then verify repair and
+guarded restoration. Driver rendering behavior is unchanged.
+
 ## WinBoat downstream: Vulkan device creation and D3D capability fidelity
 
 22.22.292.0 filters guest-only feature structures as well as extension names
