@@ -33,7 +33,13 @@ retain it as an available recovery output.
 
 `cargo test --locked --manifest-path helios/upstream/kmd_logic/Cargo.toml`
 runs the production mode-list, cofunctionality and extent policy with the
-existing kernel logic suite. The full Windows build compiles the real WDK
+existing kernel logic suite. The separate
+`cargo test --locked --manifest-path tests/helios-mode-commit/Cargo.toml`
+harness extracts and executes the unmodified production `CommitVidPn` body.
+Its synthetic OS callbacks verify upward/downward commits, `D3DDDI_ID_ALL`,
+rollback on invalid pins, reference release on failure, and empty/off paths.
+It does not validate native callback ABI or real Windows negotiation.
+The full Windows build compiles the real WDK
 VidPn callbacks and packages the driver. These gates do not prove GPU scanout.
 
 `tests/helios-display-modes.cpp` builds as x86/x64 in the **Test Helios live

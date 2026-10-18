@@ -6,12 +6,14 @@ on:
     paths:
       - '.github/workflows/test-helios-display-modes.yml'
       - 'tests/helios-display-modes.cpp'
+      - 'tests/helios-mode-commit/**'
       - 'helios/upstream/kmd_logic/**'
       - 'helios/upstream/kmd_render/src/ddi/vidpn.rs'
       - 'helios/upstream/kmd_render/src/adapter/mod.rs'
   pull_request:
     paths:
       - 'tests/helios-display-modes.cpp'
+      - 'tests/helios-mode-commit/**'
       - 'helios/upstream/kmd_logic/**'
       - 'helios/upstream/kmd_render/src/ddi/vidpn.rs'
 permissions:
@@ -26,7 +28,9 @@ jobs:
       - name: Test production kernel leaf logic
         env:
           CARGO_TARGET_DIR: ${{ runner.temp }}/helios-modes
-        run: cargo test --locked --manifest-path helios/upstream/kmd_logic/Cargo.toml
+        run: |
+          cargo test --locked --manifest-path helios/upstream/kmd_logic/Cargo.toml
+          cargo test --locked --manifest-path tests/helios-mode-commit/Cargo.toml
   acceptance-probe:
     runs-on: windows-2022
     strategy:
