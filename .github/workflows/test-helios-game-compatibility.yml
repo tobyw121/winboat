@@ -57,3 +57,8 @@ jobs:
         run: |
           ./tests/game-compatibility.test.ps1
           ./tests/opengl-game-probe.test.ps1
+      - name: Check 32-bit OpenGL probe
+        shell: pwsh
+        run: |
+          & "$env:WINDIR/SysWOW64/WindowsPowerShell/v1.0/powershell.exe" -NoProfile -File ./tests/opengl-game-probe.test.ps1
+          if ($LASTEXITCODE -ne 0) { throw '32-bit OpenGL probe test failed.' }
