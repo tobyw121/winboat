@@ -55,7 +55,7 @@ with tempfile.TemporaryDirectory(prefix='winboat-qemu-dbus-') as temporary:
         assert hashlib.sha256(patch.read_bytes()).hexdigest() == expected, name
         subprocess.run(['git', '-C', str(source), 'apply', '--check', '--index', str(patch)], check=True)
         subprocess.run(['git', '-C', str(source), 'apply', '--index', str(patch)], check=True)
-    print('Both host patches apply to the checksum-verified pinned QEMU sources.', flush=True)
+    print('Host patches apply to the checksum-verified pinned QEMU sources.', flush=True)
     header = (source / 'ui/dbus-gl-context.h').read_text()
     # The standalone harness provides QEMU's types and EGL global declarations.
     header = '\n'.join(line for line in header.splitlines() if not line.startswith('#include "ui/'))
@@ -65,7 +65,7 @@ with tempfile.TemporaryDirectory(prefix='winboat-qemu-dbus-') as temporary:
     for name in ['dbus_create_texture', 'dbus_update_texture', 'dbus_destroy_texture']:
         callbacks += function((source / 'ui/dbus.c').read_text(), name)
     listener = (source / 'ui/dbus-listener.c').read_text()
-    for name in ['dbus_call_update_gl', 'dbus_scanout_dmabuf', 'dbus_scanout_texture', 'dbus_gl_gfx_update', 'dbus_gl_gfx_switch']:
+    for name in ['dbus_scanout_disable', 'dbus_call_update_gl', 'dbus_scanout_dmabuf', 'dbus_scanout_texture', 'dbus_release_dmabuf', 'dbus_gl_gfx_update', 'dbus_gl_gfx_switch']:
         callbacks += function(listener, name)
     (source / 'callbacks.inc').write_text(callbacks)
     flags = shlex.split(subprocess.check_output(['pkg-config', '--cflags', '--libs', 'gio-2.0', 'epoxy', 'pixman-1'], text=True))
@@ -81,6 +81,18 @@ with tempfile.TemporaryDirectory(prefix='winboat-qemu-dbus-') as temporary:
     before = subprocess.run([str(binary)], env={**os.environ, 'EGL_PLATFORM': 'surfaceless', 'LIBGL_ALWAYS_SOFTWARE': '1'}, capture_output=True, text=True)
     assert before.returncode < 0, ('Original callbacks unexpectedly passed', before.stdout, before.stderr)
     print('Original callbacks fail the missing-EGL-context regression as expected.', flush=True)
+    # Isolate the new lifecycle regression from the older EGL-context failure:
+    # keep all current callbacks but restore just the old release handler.
+    original_listener = (Path(sys.argv[1]) / 'ui/dbus-listener.c').read_text() if len(sys.argv) > 1 else urllib.request.urlopen(
+        f'https://raw.githubusercontent.com/winboat-org/qemu-helios/{revision}/ui/dbus-listener.c', timeout=30).read().decode()
+    stale_release = callbacks.replace(function(callbacks, 'dbus_release_dmabuf'), function(original_listener, 'dbus_release_dmabuf'))
+    (source / 'callbacks.inc').write_text(stale_release)
+    binary = source / 'test-stale-release'
+    subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter',
+                    '-I', str(source), str(ROOT / 'tests/helios-qemu-dbus.c'), *flags, '-o', str(binary)], check=True)
+    old_release = subprocess.run([str(binary)], env={**os.environ, 'EGL_PLATFORM': 'surfaceless', 'LIBGL_ALWAYS_SOFTWARE': '1'}, capture_output=True, text=True)
+    assert old_release.returncode < 0 and 'disables==0' in old_release.stderr, old_release.stderr
+    print('Old release callback disables the already-bound replacement as expected.', flush=True)
     (source / 'callbacks.inc').write_text(callbacks)
     for pixman in [False, True]:
         binary = source / ('test-pixman' if pixman else 'test-no-pixman')

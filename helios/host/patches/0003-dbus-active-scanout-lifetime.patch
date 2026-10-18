@@ -1,0 +1,70 @@
+diff --git a/ui/dbus-listener.c b/ui/dbus-listener.c
+index f42ca4b..702e0fa 100644
+--- a/ui/dbus-listener.c
++++ b/ui/dbus-listener.c
+@@ -88,6 +88,9 @@ struct _DBusDisplayListener {
+ #else /* !WIN32 */
+     QemuDBusDisplay1ListenerUnixMap *map_proxy;
+     QemuDBusDisplay1ListenerUnixScanoutDMABUF2 *scanout_dmabuf_v2_proxy;
++#ifdef CONFIG_GBM
++    QemuDmaBuf *active_dmabuf;
++#endif
+ #endif
+ 
+     guint dbus_filter;
+@@ -121,6 +124,10 @@ static void dbus_scanout_disable(DisplayChangeListener *dcl)
+ {
+     DBusDisplayListener *ddl = container_of(dcl, DBusDisplayListener, dcl);
+ 
++#if defined(CONFIG_GBM) && !defined(WIN32)
++    ddl->active_dmabuf = NULL;
++#endif
++
+     ddl_discard_display_messages(ddl);
+ 
+     qemu_dbus_display1_listener_call_disable(
+@@ -409,6 +416,10 @@ static void dbus_scanout_dmabuf(DisplayChangeListener *dcl,
+                                 QemuDmaBuf *dmabuf)
+ {
+     DBusDisplayListener *ddl = container_of(dcl, DBusDisplayListener, dcl);
++
++    /* SET_SCANOUT_BLOB binds the replacement before releasing its predecessor.
++     * A release of that predecessor must not disable this new scanout. */
++    ddl->active_dmabuf = dmabuf;
+     ddl->software_surface = false;
+ 
+     if (ddl->scanout_dmabuf_v2_proxy) {
+@@ -627,6 +638,9 @@ static void dbus_scanout_texture(DisplayChangeListener *dcl,
+                              false, backing_y_0_top);
+ 
+     dbus_scanout_dmabuf(dcl, dmabuf);
++    /* Texture exports are temporary wrappers, not the owned DMA-BUF passed by
++     * the console's scanout/release callbacks. Never retain their address. */
++    container_of(dcl, DBusDisplayListener, dcl)->active_dmabuf = NULL;
+     qemu_dmabuf_close(dmabuf);
+ #endif
+ 
+@@ -710,7 +724,11 @@ static void dbus_cursor_dmabuf(DisplayChangeListener *dcl,
+ static void dbus_release_dmabuf(DisplayChangeListener *dcl,
+                                 QemuDmaBuf *dmabuf)
+ {
+-    dbus_scanout_disable(dcl);
++    DBusDisplayListener *ddl = container_of(dcl, DBusDisplayListener, dcl);
++
++    if (ddl->active_dmabuf && ddl->active_dmabuf == dmabuf) {
++        dbus_scanout_disable(dcl);
++    }
+ }
+ #endif /* GBM */
+ 
+@@ -888,6 +906,10 @@ static void dbus_gl_gfx_switch(DisplayChangeListener *dcl,
+ {
+     DBusDisplayListener *ddl = container_of(dcl, DBusDisplayListener, dcl);
+ 
++#if defined(CONFIG_GBM) && !defined(WIN32)
++    ddl->active_dmabuf = NULL;
++#endif
++
+     trace_dbus_gl_gfx_switch(new_surface);
+ 
+     ddl->ds = new_surface;

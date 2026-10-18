@@ -97,7 +97,7 @@ werden beim normalen Schließen und beim Stoppsignal freigegeben. Anzeige und
 Windows-Anmeldung sind unabhängig: Ein fehlender Windows-Benutzer oder eine
 blockierte AME-OOBE wird durch den Wechsel des Anzeigefensters nicht repariert.
 
-Die Einstellung prüft Viewer-Version und Image-Fähigkeitslabel `dbus-v6`.
+Die Einstellung prüft Viewer-Version und Image-Fähigkeitslabel `dbus-v7`.
 Ein älteres Host-Image muss neu gebaut werden. Schlägt die Viewer-Anmeldung oder
 Frame-Übernahme fehl, meldet WinBoat den Fehler und bietet einen erneuten
 Verbindungsversuch. Ein laufender nativer GL-Modus besitzt keinen VNC-Listener.
@@ -676,19 +676,58 @@ Helios-Bild hebt `display-ready` diesen zeitlich begrenzten Hinweis wieder auf.
 Die API akzeptiert dabei keine Geräte-IDs oder Befehle aus der Anfrage; der
 Watchdog bearbeitet ausschließlich den erkannten Bootstrap-VGA-Adapter.
 
-Bei einem verzerrten Bild kann ein direkter QEMU-Export den Viewer als
-Fehlerquelle eingrenzen. Im Checkout bei laufender VM ausführen:
+### Freigabe des vorigen Bildpuffers deaktiviert die neue Ausgabe
+
+Beim Wechsel eines nativen DMA-BUF bindet Virtio-GPU zuerst den neuen Puffer
+und gibt danach den alten frei. Der ursprüngliche D-Bus-Release-Callback
+sendete dabei pauschal `Disable`. Das löschte im Viewer die gerade neu
+angemeldete Ausgabe. Patch `0003-dbus-active-scanout-lifetime.patch` verfolgt
+die aktive Pufferidentität und ignoriert die Freigabe älterer Puffer.
+Textur- und VGA-Wechsel löschen diese Identität; die Freigabe des tatsächlich
+aktiven Puffers deaktiviert die Ausgabe weiterhin korrekt.
+
+Der Fix liegt in QEMU und erfordert einen Neubau des Host-Images:
+
+```bash
+./scripts/build-helios.sh
+```
+
+`--skip-host` übernimmt diesen Fix nicht. Das neue Label `dbus-v7` verhindert,
+dass ein älteres Image als korrigierter D-Bus-Pfad verwendet wird. Die
+Prüfung der einzelnen gepatchten Callbacks reproduziert den Fehler mit der
+ursprünglichen Release-Funktion und testet die korrigierte Reihenfolge mit
+realem Mesa/EGL. Dies bestätigt keine vollständige Windows-/NVIDIA-VM.
+
+### Verzerrte oder ausbleibende Helios-Bilder aufzeichnen
+
+Bei einem verzerrten Bild lassen sich QEMU-Bilder und ein kurzer Scanout-Trace
+gemeinsam aufzeichnen. Im Checkout bei laufender VM ausführen:
 
 ```bash
 python3 scripts/helios/capture-displays.py
 ```
 
-Das Werkzeug legt `vga.png`, `helios.png` und `results.json` in einem neuen
-lokalen Verzeichnis ab. Ein nicht vorhandener oder nicht exportierbarer
+Das Werkzeug legt `vga.png`, `helios.png`, `helios-after.png`, `qemu-trace.log`
+und `results.json` in einem neuen lokalen Verzeichnis ab. Während der zehn
+Sekunden Aufnahme kann der Fehler durch Auswahl der Windows-Anzeige
+reproduziert werden. Die Trace-Punkte zeichnen Layout/Modifier, Scanout-Wechsel
+und Bildaktualisierungen auf; zuvor ausgeschaltete Trace-Punkte werden danach
+wieder ausgeschaltet. Fehlende Trace-Punkte stehen in `results.json`.
+Ein nicht vorhandener oder nicht exportierbarer
 Ausgang steht als Fehler in `results.json`; die andere Aufnahme bleibt
 erhalten. Es ändert weder Windows-Treiber noch die Anzeigetopologie.
-Ist auch `helios.png` verzerrt, liegt der Fehler vor der GTK-Darstellung,
-im Gast-/Host-Scanout- oder QEMU-Auslesepfad. Ist der Export korrekt,
-muss der DMA-BUF-Import beziehungsweise die Darstellung im Viewer untersucht
-werden. Für den Export muss der veröffentlichte QMP-Port frei sein; eine
-andere dauerhaft verbundene QMP-Anwendung kann ihn belegen.
+
+Wichtig: QEMUs `screendump` liest seine Software-Oberfläche. Im D-Bus-/GL-Modus
+kann diese gegenüber dem DMA-BUF veraltet sein. Ein schwarzer PNG-Export ist
+deshalb allein kein Nachweis eines schwarzen GPU-Bildes. Bilder und Trace
+müssen gemeinsam bewertet werden.
+
+Standardmäßig nutzt die Aufnahme den separaten HMP-Monitor im Container.
+WinBoat und seine bestehende QMP-Verbindung können geöffnet bleiben; ein
+VM-Neustart oder zusätzlicher veröffentlichter Port ist nicht nötig. Nur der
+optionale Fallback `--transport qmp` benötigt einen freien QMP-Port. Ein
+belegter Port wird mit einem verständlichen Fehler in `results.json` gemeldet.
+`guest-before.json` und `guest-after.json` enthalten zusätzlich die verfügbaren
+Treiber-, Desktop- und Versionsdiagnosen der Guest API. Die CLI fasst diese
+Dateien mit den Bildern und dem Trace in einem ZIP-Archiv zusammen. Die
+Docker-Umgebung mit dem Windows-Passwort wird nicht ausgelesen.

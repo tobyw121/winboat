@@ -8,6 +8,8 @@ on:
       - 'helios/host/**'
       - 'helios/source.lock.json'
       - 'tests/helios-qemu-dbus.*'
+      - 'scripts/helios/capture-display*.py'
+      - 'tests/helios-display-capture.py'
       - 'native/helios-viewer/**'
       - 'src/shared/helios-viewer.ts'
       - 'src/shared/helios-gl.ts'
@@ -29,6 +31,8 @@ on:
       - 'helios/host/**'
       - 'helios/source.lock.json'
       - 'tests/helios-qemu-dbus.*'
+      - 'scripts/helios/capture-display*.py'
+      - 'tests/helios-display-capture.py'
       - 'native/helios-viewer/**'
       - 'src/shared/helios-viewer.ts'
       - 'src/shared/helios-gl.ts'
@@ -48,6 +52,19 @@ on:
 permissions:
   contents: read
 jobs:
+  capture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install QEMU for display capture tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86
+      - name: Test occupied QMP, HMP captures and restored tracing
+        run: python3 tests/helios-display-capture.py
   display:
     runs-on: ubuntu-24.04
     timeout-minutes: 10

@@ -36,6 +36,7 @@ typedef struct DBusDisplayListener {
     void *proxy;
     bool software_surface;
     void *scanout_dmabuf_v2_proxy;
+    QemuDmaBuf *active_dmabuf;
 #ifdef CONFIG_PIXMAN
     pixman_region32_t gl_damage;
 #else
@@ -44,7 +45,7 @@ typedef struct DBusDisplayListener {
 } DBusDisplayListener;
 static EGLDisplay qemu_egl_display;
 static EGLContext qemu_egl_rn_ctx;
-static int diagnostics, baselines, updates, dma_scanouts, exports, closed_fds, dma_updates;
+static int diagnostics, baselines, updates, dma_scanouts, exports, closed_fds, dma_updates, disables;
 static bool bind_failure, export_failure;
 static void error_report(const char *format, ...) { diagnostics++; }
 static const char *qemu_egl_get_error_string(void) { return "fixture EGL error"; }
@@ -54,6 +55,8 @@ static int qemu_egl_make_context_current(void *unused, EGLContext context) {
 }
 static void qemu_console_hw_gl_block(void *con, bool block) { }
 static void dbus_update_gl_cb(void) { }
+static void ddl_discard_display_messages(DBusDisplayListener *ddl) { }
+static void qemu_dbus_display1_listener_call_disable(void *proxy,...) { disables++; }
 static void qemu_dbus_display1_listener_call_update_dmabuf(void *proxy,...) {
     assert(eglGetCurrentContext()!=EGL_NO_CONTEXT);dma_updates++;
 }
@@ -157,6 +160,29 @@ int main(void) {
     dbus_scanout_texture(&listener.dcl,0,false,4,4,0,0,4,4,NULL);
     assert(diagnostics==2 && dma_scanouts==2);
     assert(closed_fds==2);
+    /* Real virtio-gpu bind/release ordering: B is current before A retires.
+     * Releasing A must not erase B, including repeated rotation to C. */
+    QemuDmaBuf first={0},second={0},third={0};
+    dbus_scanout_dmabuf(&listener.dcl,&first);
+    dbus_scanout_dmabuf(&listener.dcl,&second);
+    dbus_release_dmabuf(&listener.dcl,&first);
+    assert(disables==0 && listener.active_dmabuf==&second);
+    dbus_scanout_dmabuf(&listener.dcl,&third);
+    dbus_release_dmabuf(&listener.dcl,&second);
+    assert(disables==0 && listener.active_dmabuf==&third);
+    dbus_release_dmabuf(&listener.dcl,&third);
+    assert(disables==1 && !listener.active_dmabuf);
+    dbus_release_dmabuf(&listener.dcl,&third);
+    assert(disables==1);
+    /* Switching to an exported texture must not retain its temporary wrapper
+     * or let the retired native buffer disable the new texture scanout. */
+    dbus_scanout_dmabuf(&listener.dcl,&first);
+    dbus_scanout_texture(&listener.dcl,surface.texture,false,4,4,0,0,4,4,NULL);
+    assert(!listener.active_dmabuf);
+    dbus_release_dmabuf(&listener.dcl,&first);assert(disables==1);
+    dbus_scanout_dmabuf(&listener.dcl,&first);
+    dbus_gl_gfx_switch(&listener.dcl,NULL);
+    dbus_release_dmabuf(&listener.dcl,&first);assert(disables==1);
     dbus_destroy_texture(&context,&surface);dbus_destroy_texture(&context,&software);
     assert(!surface.texture && !software.texture && eglGetCurrentContext()==renderer);
     assert(eglMakeCurrent(qemu_egl_display,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT));
