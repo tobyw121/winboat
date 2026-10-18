@@ -2,6 +2,18 @@ param([string]$RepoRoot = (Split-Path -Parent $PSScriptRoot))
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $RepoRoot 'guest_server/scripts/Set-HeliosRescue.ps1') -LibraryOnly
+# Exercise real registry-provider parent creation on Windows, preserving an
+# existing value on a second call. Never modify the production HKLM key.
+if ($env:OS -eq 'Windows_NT') {
+    $registryTest='HKCU:\Software\WinBoatRescueTests-'+[guid]::NewGuid().ToString('N')
+    $nested=Join-Path $registryTest 'MissingParent\DisplayRecovery'
+    try {
+        Initialize-DisplayRecoveryKey $nested
+        New-ItemProperty -LiteralPath $nested -Name ExistingValue -PropertyType DWord -Value 7 | Out-Null
+        Initialize-DisplayRecoveryKey $nested
+        if((Get-ItemProperty -LiteralPath $nested).ExistingValue -ne 7){throw 'Existing registry data erased'}
+    } finally {Remove-Item -LiteralPath $registryTest -Recurse -Force -ErrorAction SilentlyContinue}
+}
 $script:hold=$false; $script:operations=@(); $script:running=$false; $script:pending=$false
 $script:basic=22; $script:helios=0
 $script:missing=$false
@@ -48,4 +60,5 @@ if((Invoke-HeliosRescue 'helios-disable').status -ne 'held' -or $script:operatio
 $script:taskStates.HeliosGraphicsProvisioning='Ready';$script:failPause=$true;$blocked=$false
 try {Invoke-HeliosRescue 'helios-disable'} catch {if($_.Exception.Message -notmatch 'scheduler unavailable'){throw};$blocked=$true}
 if(-not $blocked -or $script:operations.Count -or -not $script:hold){throw 'Failed task suspension allowed device changes'}
+if($script:rescueStage -ne 'pause-HeliosGraphicsProvisioning'){throw 'Rescue failure lost its stage'}
 Write-Host 'Explicit rescue preserves VGA, serializes with installation, retains its hold and requires deliberate re-enable.'

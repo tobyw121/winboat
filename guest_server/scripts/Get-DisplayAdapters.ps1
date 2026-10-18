@@ -2,6 +2,7 @@
 param([switch]$Recover, [switch]$LibraryOnly, [switch]$ViewerUnavailable, [switch]$MirrorDesired)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'Initialize-DisplayRecoveryKey.ps1')
 function Get-WinBoatDisplayState {
     $devices=@(Get-CimInstance Win32_PnPEntity -Filter "PNPClass='Display'")
     $helios=@($devices | Where-Object {$_.PNPDeviceID -like 'PCI\VEN_1AF4&DEV_1050*'})
@@ -26,9 +27,7 @@ function Get-WinBoatDisplayRecoveryTime {
 }
 function Set-WinBoatDisplayRecoveryTime([long]$Ticks) {
     # Preserve the persistent Helios rescue hold and any other recovery values.
-    if (-not (Test-Path -LiteralPath 'HKLM:\SOFTWARE\WinBoat\DisplayRecovery')) {
-        New-Item -Path 'HKLM:\SOFTWARE\WinBoat\DisplayRecovery' | Out-Null
-    }
+    Initialize-DisplayRecoveryKey
     New-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\WinBoat\DisplayRecovery' -Name LastAttemptTicks -PropertyType QWord -Value $Ticks -Force | Out-Null
 }
 function Invoke-WinBoatDisplayCheck([bool]$Repair,[bool]$ViewerUnavailable=$false,[bool]$MirrorDesired=$false) {

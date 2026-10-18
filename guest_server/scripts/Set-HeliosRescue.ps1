@@ -2,9 +2,11 @@
 param([ValidateSet('helios-disable','helios-enable')][string]$Action, [switch]$LibraryOnly)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'Initialize-DisplayRecoveryKey.ps1')
+$script:rescueStage='preflight'
 function Set-HeliosRescueHold([bool]$Disabled) {
     $key='HKLM:\SOFTWARE\WinBoat\DisplayRecovery'
-    if (-not (Test-Path -LiteralPath $key)) { New-Item -Path $key | Out-Null }
+    Initialize-DisplayRecoveryKey $key
     New-ItemProperty -LiteralPath $key -Name HeliosDisabled -PropertyType DWord -Value ([int]$Disabled) -Force | Out-Null
 }
 function Get-HeliosRescueDevices {
@@ -17,6 +19,7 @@ function Get-HeliosRescueDevices {
 function Invoke-HeliosRescue([string]$Operation) {
     if ($Operation -notin @('helios-disable','helios-enable')) { throw 'Unknown graphics recovery operation.' }
     $idleTasks=@()
+    $script:rescueStage='inspect-installer-tasks'
     foreach ($name in @('WinBoatHeliosReboots','WinBoatHeliosAfterAtlas','HeliosGraphicsProvisioning')) {
         $task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
         if ($null -ne $task -and $task.State.ToString() -eq 'Running') {
@@ -24,6 +27,7 @@ function Invoke-HeliosRescue([string]$Operation) {
         }
         if ($null -ne $task -and $task.State.ToString() -ne 'Disabled') { $idleTasks+=$name }
     }
+    $script:rescueStage='inspect-display-devices'
     $devices=Get-HeliosRescueDevices
     if ($devices.basic.Count -ne 1 -or $devices.helios.Count -gt 1) {
         return @{status='blocked';message='A unique WinBoat VGA recovery adapter could not be verified.'}
@@ -33,17 +37,20 @@ function Invoke-HeliosRescue([string]$Operation) {
     }
     # Persist the hold before any device change; failures leave automatic setup
     # and topology changes suppressed across service and Windows restarts.
+    $script:rescueStage='persist-rescue-hold'
     Set-HeliosRescueHold $true
     if ($Operation -eq 'helios-disable') {
         # The official installer has its own startup task and does not read
         # WinBoat's hold. Pause all known idle continuations before changing PnP.
         foreach ($name in $idleTasks) {
+            $script:rescueStage='pause-'+$name
             Disable-ScheduledTask -TaskName $name -ErrorAction Stop | Out-Null
             $paused=Get-ScheduledTask -TaskName $name -ErrorAction Stop
             if ($null -eq $paused -or $paused.State.ToString() -ne 'Disabled') { throw 'Installer continuation could not be paused.' }
         }
     }
     if ($devices.basic[0].ConfigManagerErrorCode -eq 22) {
+        $script:rescueStage='enable-vga'
         & pnputil.exe /enable-device $devices.basic[0].PNPDeviceID | Out-Null
         if ($LASTEXITCODE -eq 3010) { return @{status='restart-required';message='VGA needs a Windows restart; Helios was not changed.'} }
         if ($LASTEXITCODE -ne 0) { throw 'VGA could not be enabled.' }
@@ -56,6 +63,7 @@ function Invoke-HeliosRescue([string]$Operation) {
         return @{status='held';message='Helios hardware is absent. Automatic setup is paused; no device was disabled. Uninstall its package before restoring host graphics if the driver is unstable.'}
     }
     $pending=$false
+    $script:rescueStage='change-helios-device'
     if ($devices.helios.Count -eq 1) {
         $disable=$Operation -eq 'helios-disable'
         $code=[int]$devices.helios[0].ConfigManagerErrorCode
@@ -66,11 +74,13 @@ function Invoke-HeliosRescue([string]$Operation) {
             $pending=$LASTEXITCODE -eq 3010
         }
     }
+    $script:rescueStage='verify-display-devices'
     $verified=Get-HeliosRescueDevices
     if ($verified.basic.Count -ne 1 -or $verified.basic[0].ConfigManagerErrorCode -ne 0) { throw 'VGA verification failed; rescue hold remains active.' }
     if ($pending) { return @{status='restart-required';message='Windows must restart to finish the device change; rescue hold remains active.'} }
     if ($Operation -eq 'helios-enable') {
         if ($verified.helios.Count -ne 1 -or $verified.helios[0].ConfigManagerErrorCode -ne 0) { throw 'Helios did not become healthy; rescue hold remains active.' }
+        $script:rescueStage='clear-rescue-hold'
         Set-HeliosRescueHold $false
         return @{status='enabled';message='Helios enabled explicitly. VGA remains available; rendering success is not yet confirmed.'}
     }
@@ -85,5 +95,12 @@ try {
     if (-not $owned) { @{status='blocked';message='Helios provisioning is active; no devices changed.'} | ConvertTo-Json -Compress; return }
     Invoke-HeliosRescue $Action | ConvertTo-Json -Compress
 }
-catch { @{status='failed';message='Graphics rescue failed. The persistent rescue hold, if set, was retained; no reboot or driver uninstall was requested.'} | ConvertTo-Json -Compress }
+catch {
+    $exception=$_.Exception
+    while ($null -ne $exception.InnerException) {$exception=$exception.InnerException}
+    # Fixed stage + numeric code only; never expose exception text or device/user paths.
+    $code=if ($exception -is [ComponentModel.Win32Exception]) {$exception.NativeErrorCode} else {$exception.HResult}
+    @{status='failed';stage=$script:rescueStage;errorCode=$code;
+        message='Graphics rescue failed. The persistent rescue hold, if set, was retained; no reboot or driver uninstall was requested.'} | ConvertTo-Json -Compress
+}
 finally { if ($owned) {$lock.ReleaseMutex()}; $lock.Dispose() }
