@@ -7,6 +7,12 @@ on:
       - '.github/workflows/test-helios-provisioning.yml'
       - 'guest_server/scripts/Get-DisplayAdapters.ps1'
       - 'guest_server/graphics_monitor*'
+      - 'guest_server/graphics_rescue*'
+      - 'guest_server/scripts/Set-HeliosRescue.ps1'
+      - 'tests/helios-rescue.test.*'
+      - 'scripts/helios/rescue-graphics.py'
+      - 'helios/host/display.sh'
+      - 'helios/host/qemu.sh'
       - 'guest_server/graphics_desktop*'
       - 'guest_server/graphics_topology*'
       - 'guest_server/graphics_diagnostics*'
@@ -34,6 +40,12 @@ on:
     paths:
       - 'guest_server/scripts/Get-DisplayAdapters.ps1'
       - 'guest_server/graphics_monitor*'
+      - 'guest_server/graphics_rescue*'
+      - 'guest_server/scripts/Set-HeliosRescue.ps1'
+      - 'tests/helios-rescue.test.*'
+      - 'scripts/helios/rescue-graphics.py'
+      - 'helios/host/display.sh'
+      - 'helios/host/qemu.sh'
       - 'guest_server/graphics_desktop*'
       - 'guest_server/graphics_topology*'
       - 'guest_server/graphics_diagnostics*'
@@ -60,6 +72,14 @@ on:
 permissions:
   contents: read
 jobs:
+  rescue-host:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check VGA-only rescue arguments and preserved storage configuration
+        run: python3 tests/helios-rescue.test.py
   provisioning:
     runs-on: windows-2022
     timeout-minutes: 10
@@ -73,6 +93,7 @@ jobs:
           ./tests/guest-update-provisioning.test.ps1
           ./tests/vcredist-provisioning.test.ps1
           ./tests/display-adapters.test.ps1
+          ./tests/helios-rescue.test.ps1
           ./tests/helios-diagnostics.test.ps1
           ./tests/helios-application-diagnostics.test.ps1
           ./tests/helios-provisioning.test.ps1
@@ -83,6 +104,7 @@ jobs:
           ./tests/guest-update-provisioning.test.ps1
           ./tests/vcredist-provisioning.test.ps1
           ./tests/display-adapters.test.ps1
+          ./tests/helios-rescue.test.ps1
           ./tests/helios-diagnostics.test.ps1
           ./tests/helios-application-diagnostics.test.ps1
           ./tests/helios-provisioning.test.ps1

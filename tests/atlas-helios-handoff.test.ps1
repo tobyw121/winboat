@@ -24,7 +24,10 @@ try {
         if($global:handoffActive -or $global:handoffApplied.ErrorLevel -ne 0){throw 'Restart interrupted AME or unverified Atlas.'}
         $global:handoffRestarts++;$global:LASTEXITCODE=0
     }
-    function Get-ItemProperty {[CmdletBinding()]param($Path) return $global:handoffApplied}
+    function Get-ItemProperty {[CmdletBinding()]param([Alias('LiteralPath')]$Path,$Name)
+        if ($Path -like '*DisplayRecovery') { return }
+        return $global:handoffApplied
+    }
     function Get-CimInstance {
         param($ClassName,$Filter)
         if ($ClassName -eq 'Win32_OperatingSystem') {return [pscustomobject]@{LastBootUpTime=$global:handoffBoot}}

@@ -12,6 +12,8 @@ function Get-AtlasHeliosPhase($Applied,[DateTime]$Created,[DateTime]$Boot,[bool]
     return 'ready'
 }
 if ($handoffLibraryOnly) {return}
+$rescue=Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\WinBoat\DisplayRecovery' -Name HeliosDisabled -ErrorAction SilentlyContinue
+if ($null -ne $rescue -and $rescue.PSObject.Properties['HeliosDisabled'] -and $rescue.HeliosDisabled -eq 1) {return}
 $root=Join-Path $env:ProgramData 'WinBoat\Atlas'
 $taskName='WinBoatHeliosAfterAtlas'
 $expectedRevision='fecffde64fd32399a877b452332681ef0db7993e'

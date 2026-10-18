@@ -35,7 +35,8 @@ func collectDisplayAdapters(ctx context.Context, viewerUnavailable bool) ([]byte
 		}
 		verifyCancel()
 	}
-	enabled := mirrorEnabled(filepath.Dir(executable), os.Getenv("ProgramData"))
+	rescue := graphicsRescueActive()
+	enabled := !rescue && mirrorEnabled(filepath.Dir(executable), os.Getenv("ProgramData"))
 	desktopCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	desktop, probeErr := collectConsoleDesktop(desktopCtx)
 	cancel()
@@ -64,6 +65,9 @@ func collectDisplayAdapters(ctx context.Context, viewerUnavailable bool) ([]byte
 		return next, err
 	})
 	pnp.Policy = &policy
+	if rescue {
+		pnp.Policy = &topologyStatus{Goal: "vga-rescue", State: "held"}
+	}
 	data, err = json.Marshal(pnp)
 	if err != nil {
 		return nil, err
@@ -71,6 +75,9 @@ func collectDisplayAdapters(ctx context.Context, viewerUnavailable bool) ([]byte
 	return mergeDesktopStatus(data, desktop, probeErr)
 }
 func ensureSelectedHelios() {
+	if graphicsRescueActive() {
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	executable, err := os.Executable()

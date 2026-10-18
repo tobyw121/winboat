@@ -309,6 +309,7 @@ func main() {
 	r.HandleFunc("/graphics/adapters", graphics.status).Methods("GET")
 	r.HandleFunc("/graphics/diagnostics", graphics.diagnostics(collectHeliosDiagnostics)).Methods("GET")
 	r.HandleFunc("/graphics/adapters/recovery", graphics.viewerRecovery).Methods("POST")
+	r.HandleFunc("/graphics/rescue", graphicsRescueHandler(runGraphicsRescue)).Methods("POST")
 	r.HandleFunc("/apps", getApps).Methods("GET")
 	r.HandleFunc("/health", getHealth).Methods("GET")
 	r.HandleFunc("/graphics/helios", getHeliosStatus).Methods("GET")

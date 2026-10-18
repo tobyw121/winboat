@@ -242,6 +242,8 @@ function Invoke-HeliosEnsure([string]$Install) {
     Invoke-HeliosProvisioning (Join-Path $install 'helios') $false
 }
 if ($LibraryOnly) {return}
+$rescue=Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\WinBoat\DisplayRecovery' -Name HeliosDisabled -ErrorAction SilentlyContinue
+if ($null -ne $rescue -and $rescue.PSObject.Properties['HeliosDisabled'] -and $rescue.HeliosDisabled -eq 1) {return}
 $lock = $null; $owned = $false
 try {
     if ($VerifyRestart) {Invoke-HeliosRestartVerification (Split-Path -Parent $PSScriptRoot) | Out-Null;return}

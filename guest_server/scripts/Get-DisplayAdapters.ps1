@@ -25,7 +25,10 @@ function Get-WinBoatDisplayRecoveryTime {
     return [long]$item.LastAttemptTicks
 }
 function Set-WinBoatDisplayRecoveryTime([long]$Ticks) {
-    New-Item -Path 'HKLM:\SOFTWARE\WinBoat\DisplayRecovery' -Force | Out-Null
+    # Preserve the persistent Helios rescue hold and any other recovery values.
+    if (-not (Test-Path -LiteralPath 'HKLM:\SOFTWARE\WinBoat\DisplayRecovery')) {
+        New-Item -Path 'HKLM:\SOFTWARE\WinBoat\DisplayRecovery' | Out-Null
+    }
     New-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\WinBoat\DisplayRecovery' -Name LastAttemptTicks -PropertyType QWord -Value $Ticks -Force | Out-Null
 }
 function Invoke-WinBoatDisplayCheck([bool]$Repair,[bool]$ViewerUnavailable=$false,[bool]$MirrorDesired=$false) {

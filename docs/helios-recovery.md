@@ -36,6 +36,31 @@ Auch dies startet die VM neu. Ein im Gast deaktiviertes Helios-Gerät bleibt
 deaktiviert. Den Treiber erst nach Auswertung der Fehler und mit verfügbarem
 Rettungsweg wieder aktivieren. Eine Windows-/Atlas-Neuinstallation ist unnötig.
 
+## Gezielte Deaktivierung über die Guest API
+
+Mit Gast-Protokoll `helios-watchdog-v8` ist keine Windows-Anmeldung nötig:
+
+```bash
+python3 scripts/helios/rescue-graphics.py --disable-helios
+```
+
+Die API akzeptiert nur festgelegte Operationen, keine Befehle oder Geräte-IDs.
+Sie prüft den bekannten VGA-Adapter, aktiviert ihn nötigenfalls zuerst und
+deaktiviert erst danach das eindeutig identifizierte Helios-Gerät. Bei laufender
+Installation, unbekannten Adaptern oder nicht gesundem VGA wird abgebrochen.
+Ein nötiger Neustart wird gemeldet, aber nicht automatisch ausgeführt.
+
+Ein dauerhafter HKLM-Sperrwert pausiert automatische Helios-Einrichtung und
+Anzeigeumschaltung auch nach Dienst-/Windows-Neustarts. Nur eine ausdrückliche
+Wiederaktivierung hebt ihn nach erfolgreicher PnP-Prüfung auf:
+
+```bash
+python3 scripts/helios/rescue-graphics.py --enable-helios
+```
+
+Das bestätigt die Geräteaktivierung, nicht die fehlerfreie Grafikdarstellung.
+Falls der Dienst fehlt oder nicht antwortet, den Host-Rettungsstart verwenden.
+
 ## Grenzen der Prüfung
 
 Der Rettungs-Displaypfad wird ohne GPU ausgeführt getestet; die tatsächliche
