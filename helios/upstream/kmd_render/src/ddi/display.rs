@@ -1612,7 +1612,8 @@ unsafe fn fast_bind_from_flip(
     // first bind (0) and a mode change (a different extent) both fall through to
     // the worker, which owns mode-set ordering and the LINEAR fallback.
     let wh = ((target.width() as u64) << 32) | target.height() as u64;
-    if wh == 0 || adapter.active_scanout_wh.load(Ordering::Acquire) != wh {
+    if wh == 0 || adapter.active_scanout_wh.load(Ordering::Acquire) != wh
+        || wh != helios_kmd_logic::display_modes::pack(adapter.display_mode()) {
         crate::ddi::scanout_trace::note_fast_bind_skip(skip::EXTENT);
         return;
     }

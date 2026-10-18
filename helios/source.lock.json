@@ -60,7 +60,7 @@
     "INVESTIGATIONS/exit8-exclusive-fullscreen-rgb10.md": "9c308aa2ff35670d5739f085e2d690175cc8be30fbc5f7ad8f6e259ca3f0979f",
     "NTOSEYE.md": "555acd226f7298aea224a372070e783289a64615663913d82393cccdff612558",
     "README.md": "2119fe6213c753e6115886169c2a51acc4349260a03254729e430c6795e3dcb3",
-    "ROADMAP.md": "37c29529dcc5c5a4da78f8e45980815edcccedd83351c185d30ca54999e73de1",
+    "ROADMAP.md": "ab8170511657f34ca7b5f393f9c839c73a3284e9ef7eef609ada46f9c2328158",
     "TOOLCHAIN.md": "6c1d99c8ebffb025cb8e581fcba3dabd70d01f353c0c28d251c0f9923d45b7d9",
     "TRANSPORT.md": "7cbb4f91b03d5e9125b8740444aa15e1d7803b629d0a248d7bbd3f9b56259362",
     "WINDOWS_CI_PACKAGE.md": "30df88e236add10db73c361c1e16987d1e16958e8dc58e247136f9781201bfe2",
@@ -226,10 +226,11 @@
     "kmd/src/wdf.rs": "93160af03e2c4f4371fc27ac11d84c96b2ead56baffa5d6c07ac55d1d13c4dc9",
     "kmd_logic/Cargo.lock": "53200ce5781acd769f57c1beba307e104d841bd9c84b795110ba153c69e275b8",
     "kmd_logic/Cargo.toml": "ab203f7524c87d47396cae9a9d8f2095ad4076f3824dd8478d755c2638a8159a",
+    "kmd_logic/src/display_modes.rs": "9e0cfa5b734acfb4801115d340868a3d2d9ac6e2b7c818afa888b2bde60c1b4c",
     "kmd_logic/src/edid.rs": "3eb7b7d57349379a3a16b1f633816fc99d72f956c6073a1c8d281e7449d1631a",
     "kmd_logic/src/execution_completion.rs": "fb7a6a4325354b7dfee4ff2dd12901066ea681c79eb9b2ff0344fb43f3982064",
     "kmd_logic/src/external_memory.rs": "b9a47a648c5cd61f383bf018bee5749e6685ec71a77400a0d8f78a64486e70ec",
-    "kmd_logic/src/lib.rs": "b5e2291b0ab0f04759ca1df732d729c41044e06039a165577ae05ee315545c8d",
+    "kmd_logic/src/lib.rs": "b1af152a29b194131cd49cee9cbd6b478b00624e56c83b36d20903441a9bea05",
     "kmd_logic/src/producer_completion.rs": "0884a9a19372f8bea9a168e350c4f483eee7fcde99a3eea061dc1c1415acef29",
     "kmd_render/.cargo/config.toml": "61c3443ab5bc695334a7b733f51303cb10daa39dd18d1bf738a8def9c78cf55a",
     "kmd_render/Cargo.lock": "235d83aa2ade912f7a92dd62ecf41de9287a80ed288747bcda7e3ff99fa15ead",
@@ -237,13 +238,13 @@
     "kmd_render/Cargo.toml": "02c97c032e886b6ade362d676526657e76741d03e4b387725994c64afe2b308b",
     "kmd_render/README.md": "4575286062689db2debd86ff0af71a0cef864dc8f9129114ad6abc298e3c8824",
     "kmd_render/build.rs": "f13dad099657100ed284c34a5e417718bb1c1b507bc2df7cbc7f3fa03b43b618",
-    "kmd_render/driver-version.env": "17a8693c94f8319191b44ea9b1c6ff90da68b4a2a7e7d4e853fa755e247ff4b8",
+    "kmd_render/driver-version.env": "1b3357e796032d230719b0259e72bb8357ec4c0e4c03786314e85a609c7754e9",
     "kmd_render/helios_kmd_render.inx": "96e329ad2cbe0e4723cdc54b5f4c136bec6ca949d694fc1d21fdd9ef617e65b4",
     "kmd_render/rust-toolchain.toml": "ac257e2301dcb6cea3bf0bbe4e7ffe4c586b58a9916b1597020455ee27285764",
     "kmd_render/src/adapter/backing.rs": "177b2651b690dfe87bf270ca4685b056d8ef26f74c87c2438698c4081630b73b",
     "kmd_render/src/adapter/kobj.rs": "1af97219ed655a9e9305abd1bea501d176cecbc3e2af150559993b94a63448b0",
     "kmd_render/src/adapter/locks.rs": "92f27a4443701f45ceb105275315ade64b733050d3b4a5579607a4125428553c",
-    "kmd_render/src/adapter/mod.rs": "2558f9d1eeb48b2c847ee949c257ca6a19b70a0747a5cf325bc14c781cab9bd4",
+    "kmd_render/src/adapter/mod.rs": "4ee1ff31eed599257c9cfc6d3c58035101f6549f7a601de4da6ec595982619ed",
     "kmd_render/src/adapter/producer.rs": "db6a04632f702faecb838b68fd0fa7085e0ec0abb45dea35cfb07a4c969428b6",
     "kmd_render/src/adapter/read_ledger.rs": "17f4a8a5ad444840c2d141efeafcfb19f555c51004112afe5c2c78ce43dfe398",
     "kmd_render/src/adapter/scanout.rs": "4a6db5f0b125defa56d392d04a99f90c6fb26ac117669a716c63766d711e904f",
@@ -257,7 +258,7 @@
     "kmd_render/src/ddi/child.rs": "b36bb0c191d6db7d7266bf62eb65dd83b8271c35d6f8bf93653f0bf8f49778ad",
     "kmd_render/src/ddi/cpu_host_aperture.rs": "7f2628ba152ad112817f5ea416f13b9b3f94d81e01a61390c4cf08149de3cb8a",
     "kmd_render/src/ddi/create_allocation.rs": "2dbf785d9fe67e8e641139ab2fcb9e030696d8506dbcfba16f3db7220a4796b5",
-    "kmd_render/src/ddi/display.rs": "35ed160f5aacbc902fd8b12656ee8d82966fc04610e150da6fa75005c4e05b0f",
+    "kmd_render/src/ddi/display.rs": "729088f00089db66e8de8cb8cace9121574496308ebc25de93d904829426c0b7",
     "kmd_render/src/ddi/escape.rs": "0e2e1d71da8520803bc53d74780b98d54ed86c505a60870bd0e5e5db8e7049ab",
     "kmd_render/src/ddi/gpummu.rs": "5dfe4065daa3158b3b16effb578648a7f4a5cfbce268a796b5b429d41d7412d7",
     "kmd_render/src/ddi/hpd.rs": "21d32dc66c73adffd348aa274919f501fe69c1c0fb5c89b1688f0f98ea37b094",
@@ -271,7 +272,7 @@
     "kmd_render/src/ddi/scheduler.rs": "3b0ee06e76b77db624dafdceba79f988ec045a5f0ecaacb685864e0a8440ce24",
     "kmd_render/src/ddi/segment_table.rs": "8e3b976b532c542b09e0eee6061e6f893f15d110b4dbfd58a1e48ed9eef3ec22",
     "kmd_render/src/ddi/submit_command.rs": "715ad8b47d43a5e70928d7d377538c52414c5064a52cccc4855b4b9448cef983",
-    "kmd_render/src/ddi/vidpn.rs": "f2085eefbf9e9937579aef332a7c340fd44316f615790555092fd50ee9bfe420",
+    "kmd_render/src/ddi/vidpn.rs": "b81c933652e3b75f6f6d4462cfdb3bdf94ced56cbf782d3b9309f9d0f2debc7a",
     "kmd_render/src/ddi/wddm_surface.rs": "4527582e42abc350a3fe231d16c9c1a0b715f5bfe24b9a5a1481f88015197c0c",
     "kmd_render/src/device.rs": "796185eb31b585c2546cddf0bdbb21061585f3f420f72cd573dba0e0ed22a74a",
     "kmd_render/src/diag.rs": "e46bf87d18f171d79f52e209e8773ea39dcc2a0850c318d2a6e379eb46527787",
@@ -530,11 +531,11 @@
     "tools/vram_report_probe.cpp": "44b82416a6bf1dfbea883a84e364da1c19abb17a1e8aea4ec7e6e39511e03351",
     "tools/vulkan-depth-copy-probe.ps1": "5688adfafef14aca1b09a110411fabee717da53eba9611da208cba038f151e55",
     "tools/vulkan-sparse-behavior-probe.ps1": "be38b00cfdae15602b9abebccfe0a459ff866337131454f5299497ccd0857ee5",
+    "tools/vulkan_depth_copy_probe.c": "78a398ff16b08c331c213bb098925691586a0aac2c3578096aa1309298213d64",
     "tools/vulkan_depth_copy_probe/build_shaders.py": "16ff728c4eca92892534b41431290b126f14d664700256f7f479fb56a17c12d7",
     "tools/vulkan_depth_copy_probe/fullscreen.vert": "4e8c477fc1856938881355f2b2b7482920145b4ce6388a937d5771dfe6e24b6d",
     "tools/vulkan_depth_copy_probe/read.comp": "d03939cd94bf51dff39699b03e7ad0d650d242ba7b3c4c158bde604978ad290d",
     "tools/vulkan_depth_copy_probe/write.frag": "6dd0f0af2d39f0796d16c3fa85f8da87449713cc9155248747c35faae7261efc",
-    "tools/vulkan_depth_copy_probe.c": "78a398ff16b08c331c213bb098925691586a0aac2c3578096aa1309298213d64",
     "tools/vulkan_dgc_probe.c": "c9785b4026fe174bd43201a3973cbcb242ae0646fd382f8deac4bc09a4b8a544",
     "tools/vulkan_dgc_probe.comp": "b37a25dd5a3462660e36e4c7cac6aebde07f94be4dc0ed7a1cb1f2132f1ed950",
     "tools/vulkan_dgc_probe_shader.h": "1859ce8c609481a2dbe6243801a3e39d8ab5685194ccf4e53b82169c855ecb59",
@@ -575,6 +576,7 @@
     "umd/src/caps.rs": "bbee18410a1a1b76ed27735ad1f85508b7534c7a7b5891134fe50b00ee1e60d5",
     "umd/src/ddi.rs": "9ab6d0167b76a725f31ae664598ab64fbe563795bfbd3ac0f8c3cd0c784c9897",
     "umd/src/device_funcs.rs": "f143b9cc1f8efb7eb022266287a788e629cea49c2a968a66c91da9522dbade29",
+    "umd/src/forward.rs": "c4c56847cf8f1bf747fd81e2dcf936f25db188e2ebde1d9f46acb5e1cdad0b14",
     "umd/src/forward/alloc.rs": "7209f94a001b914a4b3f8f7ba5f9471ee2513f578bd9951dc942bf020602bd89",
     "umd/src/forward/bindings.rs": "7ab9b2b06919949b451631412f4d708b0c06d3a1b6b854efd9f4b5c64e4cea63",
     "umd/src/forward/deferred.rs": "92f042c2d3a8104584c9cbeece3ea0a571b19d52017c44a66612f814b9565b9a",
@@ -595,7 +597,6 @@
     "umd/src/forward/transfer.rs": "df27a824e016d74a19b3d12d086717bb59be80205acbb260033c7d7bc9416e3f",
     "umd/src/forward/vehicle.rs": "93c3af4f28904a118fb3e15a170d00adc09ff89331d36dc68c36c4b4140211bc",
     "umd/src/forward/views.rs": "4f8a338cc6ccac77d85b249a2e2266aeaac17736f3b9d2ca4d0d6490037a3873",
-    "umd/src/forward.rs": "c4c56847cf8f1bf747fd81e2dcf936f25db188e2ebde1d9f46acb5e1cdad0b14",
     "umd/src/knobs.rs": "2e66052c5d5d6b803c2937aba468e83364427605bfdfe1cf2e4f5c20fd8d5ab5",
     "umd/src/lib.rs": "a22163dee04b974c0270075940d9e1e7d6bf1936c7337b327510cb3b1f71d2a4",
     "umd/src/scanout_acquire.rs": "e2f3e8e8393fba41346acb91202b0bbb3454b079422661a2239aa4cd99aa245a",
@@ -653,16 +654,24 @@
     "umd_common/src/window.rs": "fb926bc87c4ca2258f507f957aaba88883a9fe2fcdac060304d23a2b79bd6626"
   },
   "localChanges": {
-    "description": "WinBoat D3D11.1 UAV ClearView support; immutable upstream revision/tree identify the baseline, files identify the effective sources.",
+    "description": "WinBoat D3D11.1 UAV ClearView and live VidPn resolution switching; revision/tree identify the upstream baseline, files identify effective sources.",
     "baseFileSha256": {
       "umd/src/forward/transfer.rs": "2a69d1b929da2aa0ead6048f81db50ee1cc30a55bff6b68108abd2b5d4b34a3d",
       "umd/src/forward.rs": "7c6b7b742452b94c484e3a1fb1971c5ed873af6762aa5b9004e6862fe98d6fa5",
       "ROADMAP.md": "3504a95124ac1c259ac8743d62de6e7495d03eb61ec74c06f6e24ff828cb79e1",
-      "kmd_render/driver-version.env": "8f9d4f91a4a5061392370e554a89fa935dd6d35c75bbda8fb580c6c8c275b6c8"
+      "kmd_render/driver-version.env": "8f9d4f91a4a5061392370e554a89fa935dd6d35c75bbda8fb580c6c8c275b6c8",
+      "kmd_logic/src/lib.rs": "b5e2291b0ab0f04759ca1df732d729c41044e06039a165577ae05ee315545c8d",
+      "kmd_render/src/adapter/mod.rs": "2558f9d1eeb48b2c847ee949c257ca6a19b70a0747a5cf325bc14c781cab9bd4",
+      "kmd_render/src/ddi/display.rs": "35ed160f5aacbc902fd8b12656ee8d82966fc04610e150da6fa75005c4e05b0f",
+      "kmd_render/src/ddi/vidpn.rs": "f2085eefbf9e9937579aef332a7c340fd44316f615790555092fd50ee9bfe420"
     },
     "validationWorkflow": ".github/workflows/test-helios-game-compatibility.yml",
     "features": [
-      "d3d11-uav-clear-view"
+      "d3d11-uav-clear-view",
+      "live-vidpn-display-modes"
+    ],
+    "addedFiles": [
+      "kmd_logic/src/display_modes.rs"
     ]
   }
 }

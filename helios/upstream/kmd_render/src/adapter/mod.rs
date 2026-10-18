@@ -341,7 +341,7 @@ impl StartedState {
     }
 }
 
-/// The scan-out mode the display half presents, and the EDID that describes it.
+/// Immutable preferred boot mode and matching EDID; active mode is atomic.
 ///
 /// The two used to be three independent fields — `display_w`, `display_h` and a
 /// 128-byte array — whose mutual consistency ("every VidPn mode + the generated
@@ -704,6 +704,8 @@ pub struct AdapterContext {
     /// copy marks scanout dirty.
     pub active_scanout_resource: AtomicU32,
     pub active_scanout_wh: AtomicU64,
+    /// Committed source extent, packed atomically for DIRQL readers. Zero before first commit.
+    pub committed_mode_wh: AtomicU64,
     /// The resource the host has actually bound to scanout 0.
     ///
     /// The ONLY rebind that runs is the SYNCHRONOUS `ctrl::set_scanout_blob`
@@ -1107,6 +1109,7 @@ impl AdapterContext {
             last_primary_address: AtomicU64::new(0),
             active_scanout_resource: AtomicU32::new(0),
             active_scanout_wh: AtomicU64::new(0),
+            committed_mode_wh: AtomicU64::new(0),
             host_bound_scanout_resource: AtomicU32::new(0),
             primary_scanout_resource: AtomicU32::new(0),
             primary_scanout_wh: AtomicU64::new(0),
@@ -1240,6 +1243,7 @@ impl AdapterContext {
             .store(0, Ordering::Release);
         self.active_scanout_resource.store(0, Ordering::Release);
         self.active_scanout_wh.store(0, Ordering::Release);
+        self.committed_mode_wh.store(0, Ordering::Release);
         self.host_bound_scanout_resource.store(0, Ordering::Release);
         self.last_primary_address.store(0, Ordering::Release);
         self.dedicated_scanout_resource.store(0, Ordering::Release);
@@ -1304,24 +1308,24 @@ impl AdapterContext {
         crate::diag::record_named_bytes(b"StRstR", was_resource);
     }
 
-    /// The display half's scanout-0 mode `(width, height)`: the host-reported size
-    /// if usable, else the 1920×1080 fallback. Every VidPn mode + the generated
-    /// EDID derive from this so they stay mutually consistent (cofunctional).
-    /// A field read now: the minimum-size check ran ONCE, in
-    /// [`ScanoutMode::adopt`], instead of re-running here on every call through
-    /// bare literals. Returns the same `(u32, u32)` tuple as before, so its five
-    /// consumers are untouched.
-    pub fn display_mode(&self) -> (u32, u32) {
+    /// Immutable boot/EDID preferred mode, independent of Windows' active mode.
+    pub fn preferred_display_mode(&self) -> (u32, u32) {
         self.started()
             .map_or(DEFAULT_SCANOUT_EXTENT, |s| s.scanout_mode.mode)
             .into()
     }
 
-    /// The packed `(w << 16) | h` the `DspMd` breadcrumb reports.
+    /// Current committed Windows source mode; a single acquire prevents torn W/H
+    /// at DIRQL. Before the first commit, use the boot/EDID preference.
+    pub fn display_mode(&self) -> (u32, u32) {
+        let wh = self.committed_mode_wh.load(Ordering::Acquire);
+        if wh == 0 { self.preferred_display_mode() }
+        else { ((wh >> 32) as u32, wh as u32) }
+    }
+
     pub(crate) fn display_mode_packed(&self) -> u32 {
-        self.started()
-            .map_or(DEFAULT_SCANOUT_EXTENT, |s| s.scanout_mode.mode)
-            .packed()
+        let (w,h) = self.display_mode();
+        (w << 16) | h
     }
 
     /// Raise the programming gate for a NEW interval and return its ticket.
@@ -1536,8 +1540,8 @@ impl AdapterContext {
 
     /// The EDID served by `DxgkDdiQueryDeviceDescriptor`.
     ///
-    /// Generated from — and therefore always consistent with — the extent
-    /// `display_mode()` reports: they are one value.
+    /// The boot preference stays stable across live modesets; VidPn additionally
+    /// advertises the supported non-native monitor modes.
     pub fn edid(&self) -> Option<&[u8; 128]> {
         self.started().map(|s| s.scanout_mode.edid())
     }

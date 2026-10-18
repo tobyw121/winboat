@@ -2,7 +2,7 @@
 //!
 //! With the production `DisplayHalf` service knob on, `StartDevice` advertises
 //! one video-present source and one child output. `CommitVidPn` validates the
-//! fixed mode and `SetVidPnSourceAddress` selects the authoritative primary for
+//! selected mode and `SetVidPnSourceAddress` selects the authoritative primary for
 //! virtio-gpu scanout. Knob-off render-only behavior remains a recovery mode.
 //!
 //! The VidPn iteration mirrors the proven virtio-gpu display-only miniport
@@ -14,6 +14,7 @@ use core::ptr::{null, null_mut};
 
 use crate::adapter::AdapterContext;
 use crate::dxgk::*;
+use helios_kmd_logic::display_modes;
 
 // ── Fixed topology / mode constants ─────────────────────────────────────────
 /// One video-present source, one child (video output) — reported at StartDevice.
@@ -279,7 +280,9 @@ unsafe fn add_source_modes(
     h_set: D3DKMDT_HVIDPNSOURCEMODESET,
     w: u32,
     h: u32,
+    opposite: Option<(u32, u32)>,
 ) -> NTSTATUS {
+    for (w,h) in display_modes::modes((w,h)).filter(|m| display_modes::cofunctional(*m, opposite)) {
     for pixel_format in [
         _D3DDDIFORMAT::D3DDDIFMT_A8R8G8B8,
         _D3DDDIFORMAT::D3DDDIFMT_A8B8G8R8,
@@ -289,10 +292,11 @@ unsafe fn add_source_modes(
             return status;
         }
     }
+    }
     STATUS_SUCCESS
 }
 
-/// Create + add our single target mode into `h_set`.
+/// Create + add one target mode into `h_set`.
 ///
 /// # Safety
 /// `iface` is a live `DXGK_VIDPNTARGETMODESET_INTERFACE` for `h_set`.
@@ -301,6 +305,7 @@ unsafe fn add_single_target_mode(
     h_set: D3DKMDT_HVIDPNTARGETMODESET,
     w: u32,
     h: u32,
+    preferred: bool,
 ) -> NTSTATUS {
     // SAFETY: iface valid per the fn contract.
     let iface = unsafe { &*iface };
@@ -327,7 +332,8 @@ unsafe fn add_single_target_mode(
         (*mode)
             .__bindgen_anon_1
             .__bindgen_anon_1
-            .set_Preference(_D3DKMDT_MODE_PREFERENCE::D3DKMDT_MP_PREFERRED);
+            .set_Preference(if preferred { _D3DKMDT_MODE_PREFERENCE::D3DKMDT_MP_PREFERRED }
+                else { _D3DKMDT_MODE_PREFERENCE::D3DKMDT_MP_NOTPREFERRED });
     }
     // SAFETY: add/release take the mode we filled.
     let st = unsafe { add(h_set, mode) };
@@ -341,8 +347,7 @@ unsafe fn add_single_target_mode(
     STATUS_SUCCESS
 }
 
-/// `DxgkDdiRecommendMonitorModes` body: publish the single monitor source mode
-/// for the default monitor the OS created for our EDID-less child.
+/// Publish every supported virtual monitor mode; only the EDID boot mode is preferred.
 ///
 /// # Safety
 /// `arg` points to a valid `DXGKARG_RECOMMENDMONITORMODES` for the call.
@@ -354,7 +359,7 @@ pub unsafe fn recommend_monitor_modes(
     if arg.is_null() {
         return STATUS_INVALID_PARAMETER;
     }
-    let (w, h) = adapter.display_mode();
+    let preferred = adapter.preferred_display_mode();
     // SAFETY: valid per fn contract.
     let a = unsafe { &*arg };
     if a.pMonitorSourceModeSetInterface.is_null() {
@@ -370,6 +375,7 @@ pub unsafe fn recommend_monitor_modes(
         return STATUS_GRAPHICS_INVALID_VIDPN;
     };
     let h_set = a.hMonitorSourceModeSet;
+    for (w,h) in display_modes::modes(preferred) {
     let mut mode: *mut D3DKMDT_MONITOR_SOURCE_MODE = null_mut();
     // SAFETY: valid out-pointer.
     let st = unsafe { create(h_set, &mut mode) };
@@ -389,19 +395,21 @@ pub unsafe fn recommend_monitor_modes(
         (*mode).ColorCoeffDynamicRanges.ThirdChannel = 8;
         (*mode).ColorCoeffDynamicRanges.FourthChannel = 8;
         (*mode).Origin = _D3DKMDT_MONITOR_CAPABILITIES_ORIGIN::D3DKMDT_MCO_DRIVER;
-        (*mode).Preference = _D3DKMDT_MODE_PREFERENCE::D3DKMDT_MP_PREFERRED;
+        (*mode).Preference = if (w,h) == preferred { _D3DKMDT_MODE_PREFERENCE::D3DKMDT_MP_PREFERRED }
+            else { _D3DKMDT_MODE_PREFERENCE::D3DKMDT_MP_NOTPREFERRED };
     }
     // SAFETY: add/release take the mode we filled.
     let st = unsafe { add(h_set, mode) };
     if !ok(st) {
         let _ = unsafe { release(h_set, mode) };
         if st == STATUS_GRAPHICS_MODE_ALREADY_IN_MODESET {
-            return STATUS_SUCCESS;
+            continue;
         }
         // Record the raw pfnAddMode failure so we can tell if the MONITOR mode is
         // what a callback rejects (the caller legalizes the escaping status).
         rec(b"VpMMe", st as u32);
         return st;
+    }
     }
     STATUS_SUCCESS
 }
@@ -682,10 +690,67 @@ impl Drop for PathInfo<'_> {
     }
 }
 
+/// Read pinned dimensions before replacing either mode set, including pivots.
+/// Guards release mode info before its set on success and every error path.
+/// # Safety
+/// The interface and handle are live for this VidPn DDI call.
+unsafe fn pinned_extents(
+    vidpn: &DXGK_VIDPN_INTERFACE, h_vidpn: D3DKMDT_HVIDPN,
+    source_id: u32, target_id: u32,
+) -> Result<(Option<(u32,u32)>, Option<(u32,u32)>), NTSTATUS> {
+    let (Some(acquire_src), Some(acquire_tgt)) =
+        (vidpn.pfnAcquireSourceModeSet, vidpn.pfnAcquireTargetModeSet) else {
+        return Err(STATUS_GRAPHICS_INVALID_VIDPN);
+    };
+    let mut hs = null_mut();
+    let mut si: *const DXGK_VIDPNSOURCEMODESET_INTERFACE = null();
+    // SAFETY: live VidPn and valid output pointers.
+    let st = unsafe { acquire_src(h_vidpn, source_id, &mut hs, &mut si) };
+    if !ok(st) || si.is_null() { return Err(if ok(st) { STATUS_GRAPHICS_INVALID_VIDPN } else { st }); }
+    let ss = SourceModeSet { vidpn, h_vidpn, source_id, h_set: hs, iface: si };
+    // SAFETY: interface acquired above, alive until ss drops.
+    let Some(pin) = (unsafe { (*si).pfnAcquirePinnedModeInfo }) else { return Err(STATUS_GRAPHICS_INVALID_VIDPN); };
+    let mut sm = null();
+    // SAFETY: valid output pointer, matching set.
+    let st = unsafe { pin(hs, &mut sm) };
+    if !ok(st) { return Err(st); }
+    let source = if sm.is_null() { None } else {
+        let held = PinnedSourceMode { set: &ss, mode: sm };
+        // SAFETY: held keeps the pinned mode alive; graphics arm checked first.
+        unsafe {
+            if (*held.mode).Type != _D3DKMDT_VIDPN_SOURCE_MODE_TYPE::D3DKMDT_RMT_GRAPHICS {
+                return Err(STATUS_GRAPHICS_INVALID_VIDPN);
+            }
+            let g = &(*held.mode).Format.Graphics;
+            Some((g.PrimSurfSize.cx, g.PrimSurfSize.cy))
+        }
+    };
+    drop(ss);
+    let mut ht = null_mut();
+    let mut ti: *const DXGK_VIDPNTARGETMODESET_INTERFACE = null();
+    // SAFETY: live VidPn and valid output pointers.
+    let st = unsafe { acquire_tgt(h_vidpn, target_id, &mut ht, &mut ti) };
+    if !ok(st) || ti.is_null() { return Err(if ok(st) { STATUS_GRAPHICS_INVALID_VIDPN } else { st }); }
+    let ts = TargetModeSet { vidpn, h_vidpn, target_id, h_set: ht, iface: ti };
+    // SAFETY: interface remains alive until ts drops.
+    let Some(pin) = (unsafe { (*ti).pfnAcquirePinnedModeInfo }) else { return Err(STATUS_GRAPHICS_INVALID_VIDPN); };
+    let mut tm = null();
+    // SAFETY: valid output pointer, matching set.
+    let st = unsafe { pin(ht, &mut tm) };
+    if !ok(st) { return Err(st); }
+    let target = if tm.is_null() { None } else {
+        let held = PinnedTargetMode { set: &ts, mode: tm };
+        // SAFETY: pinned target info lives for held's scope.
+        let size = unsafe { (*held.mode).VideoSignalInfo.ActiveSize };
+        Some((size.cx, size.cy))
+    };
+    Ok((source, target))
+}
+
 /// `DxgkDdiEnumVidPnCofuncModality` body — populate cofunctional source/target
 /// mode sets for every unpinned end of every path in the constraining VidPn,
 /// and advertise Identity scaling/rotation. Mirrors viogpudo's implementation
-/// (single mode).
+/// (one virtual output, multiple modes).
 ///
 /// Cleanup contract, corrected: the final cleanup releases the path-info
 /// reference ONLY. Every mode set created by `pfnCreateNewSourceModeSet` /
@@ -718,7 +783,7 @@ pub unsafe fn enum_cofunc_modality(
     // SAFETY: valid per fn contract.
     let a = unsafe { &*arg };
     let h_vidpn = a.hConstrainingVidPn;
-    let (mode_w, mode_h) = adapter.display_mode();
+    let (mode_w, mode_h) = adapter.preferred_display_mode();
 
     // Resolve the VidPn + topology interfaces (nothing held yet → early return).
     // The borrow that bounds the interface: the DDI argument struct, which
@@ -792,6 +857,18 @@ pub unsafe fn enum_cofunc_modality(
         let p = path.get();
         let source_id = p.VidPnSourceId;
         let target_id = p.VidPnTargetId;
+        // SAFETY: path IDs and interface belong to this live constraining VidPn.
+        let (source_pin, target_pin) = match unsafe { pinned_extents(vidpn, h_vidpn, source_id, target_id) } {
+            Ok(pins) => pins,
+            Err(e) => { status = e; stage = CofuncStage::AcquireSourcePinned; break; }
+        };
+        let preferred = (mode_w, mode_h);
+        if source_pin.is_some_and(|m| !display_modes::supported(preferred,m))
+            || target_pin.is_some_and(|m| !display_modes::supported(preferred,m))
+            || source_pin.zip(target_pin).is_some_and(|(s,t)| s != t) {
+            status = STATUS_GRAPHICS_INVALID_VIDPN;
+            break;
+        }
 
         // ── source mode set (unless this source is the caller's pivot) ──────
         if !(a.EnumPivotType == _D3DKMDT_ENUMCOFUNCMODALITY_PIVOT_TYPE::D3DKMDT_EPT_VIDPNSOURCE
@@ -855,7 +932,7 @@ pub unsafe fn enum_cofunc_modality(
                     iface: new_iface,
                 };
                 // SAFETY: live set interface + handle.
-                status = unsafe { add_source_modes(created.iface, created.h_set, mode_w, mode_h) };
+                status = unsafe { add_source_modes(created.iface, created.h_set, mode_w, mode_h, target_pin) };
                 if !ok(status) {
                     stage = CofuncStage::AddSourceModes;
                     break; // `created` drops → released
@@ -936,8 +1013,11 @@ pub unsafe fn enum_cofunc_modality(
                     iface: new_iface,
                 };
                 // SAFETY: live set interface + handle.
-                status =
-                    unsafe { add_single_target_mode(created.iface, created.h_set, mode_w, mode_h) };
+                for (w,h) in display_modes::modes(preferred).filter(|m| display_modes::cofunctional(*m, source_pin)) {
+                    // SAFETY: live newly-created target set, bounded validated extent.
+                    status = unsafe { add_single_target_mode(created.iface, created.h_set, w, h, (w,h) == preferred) };
+                    if !ok(status) { break; }
+                }
                 if !ok(status) {
                     stage = CofuncStage::AddTargetMode;
                     break; // `created` drops → released
@@ -1165,6 +1245,7 @@ pub unsafe fn commit_vidpn(adapter: &AdapterContext, arg: *const DXGKARG_COMMITV
     };
     let mut pinned = 0u32;
     let mut wh = 0u32;
+    let mut committed = None;
     // SAFETY: `iface` came from the acquire above.
     if let Some(acquire_pinned) = unsafe { (*set.iface).pfnAcquirePinnedModeInfo } {
         let mut mode: *const D3DKMDT_VIDPN_SOURCE_MODE = null();
@@ -1176,13 +1257,29 @@ pub unsafe fn commit_vidpn(adapter: &AdapterContext, arg: *const DXGKARG_COMMITV
             pinned = 1;
             // SAFETY: `mode` is a live pinned source mode; Graphics is the arm
             // source modes use (Format is a Copy union — read is unsafe).
+            // SAFETY: held keeps the info alive; check the discriminator before the union.
+            if unsafe { (*held.mode).Type } != _D3DKMDT_VIDPN_SOURCE_MODE_TYPE::D3DKMDT_RMT_GRAPHICS {
+                return STATUS_GRAPHICS_INVALID_VIDPN;
+            }
+            // SAFETY: the graphics discriminator was validated above.
             let g = unsafe { &(*held.mode).Format.Graphics };
-            wh = ((g.PrimSurfSize.cx as u32) << 16) | (g.PrimSurfSize.cy as u32 & 0xFFFF);
+            let extent = (g.PrimSurfSize.cx, g.PrimSurfSize.cy);
+            if !display_modes::supported(adapter.preferred_display_mode(), extent) {
+                rec(b"VpModeReject", 1);
+                return STATUS_GRAPHICS_INVALID_VIDPN;
+            }
+            committed = Some(extent);
+            wh = (extent.0 << 16) | extent.1;
         }
     }
     // `set` drops here, releasing the source mode set we acquired.
     drop(set);
 
+    if let Some(extent) = committed {
+        // Windows serializes mode commits; publish before the new primary can
+        // reach scanout. Do not mutate EDID, tear down resources or wait here.
+        adapter.committed_mode_wh.store(display_modes::pack(extent), core::sync::atomic::Ordering::Release);
+    }
     rec(b"VpCP", pinned);
     rec(b"VpCW", wh);
     STATUS_SUCCESS

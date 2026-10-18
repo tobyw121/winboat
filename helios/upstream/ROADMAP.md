@@ -1,5 +1,18 @@
 # ROADMAP — Stage: Correctness and D3D12
 
+## WinBoat downstream: live display modes (2026-10-18)
+
+The virtual output now offers eleven 60 Hz source/target/monitor modes from
+1024x768 through 3840x2160, plus the boot preference without duplicates.
+EnumVidPnCofuncModality respects pinned opposite modes and leaves pivots intact.
+CommitVidPn publishes the selected extent atomically; the immutable preferred
+EDID no longer constrains every scanout to the boot size. The worker retains
+its existing allocation/producer validation and resize path. Fast binds reject
+an old extent after a new mode commit. No performance default was changed.
+Host-testable mode-policy tests live in kmd_logic; WinBoat's Windows acceptance
+probe exercises enumeration, mode changes and restoration on an installed Helios
+adapter. Native driver build and real GPU acceptance are separate gates.
+
 ## WinBoat downstream: D3D11 ClearView UAV dispatch (2026-10-18)
 
 `umd/src/forward/transfer.rs::clear_view_11_1` now accepts UAV handles as

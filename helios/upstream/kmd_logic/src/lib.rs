@@ -19,6 +19,7 @@
 #![no_std]
 
 pub mod edid;
+pub mod display_modes;
 pub mod external_memory;
 pub mod producer_completion;
 pub mod execution_completion;
