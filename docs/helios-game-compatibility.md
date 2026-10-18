@@ -2,7 +2,7 @@
 
 ## Was geändert wurde
 
-Der Windows-Quellstand 22.22.290.0 ergänzt `ClearView` für D3D11-UAVs.
+Der mitgelieferte Windows-Treiber 22.22.290.0 ergänzt `ClearView` für D3D11-UAVs.
 Bisher wurden diese vorgeschriebenen Löschoperationen verworfen. Die neue
 Weiterleitung erhält Rechtecke und verwendet den passenden Handle-Loader;
 RTVs und UAVs haben unterschiedliche interne Speicherlayouts. Videoviews
@@ -17,9 +17,23 @@ Staging-Rücklesung. Geräte-/Handle-Auflösung und Diagnosezähler sind Fixture
 Dies validiert weder einen geladenen Helios-Treiber noch Venus oder ein Spiel.
 Der festgelegte [DXVK-Backendstand](https://github.com/winboat-org/dxvk/blob/6948271578bf2aa6481389a07b5070c95f911952/src/d3d11/d3d11_context.cpp)
 unterstützt bereits `ClearImageView` und `ClearBufferView` für diese UAV-Aufrufe.
-Ein vollständiger Windows-Build, dessen Import und ein Gasttest sind eigene
-Prüfschritte. `./scripts/build-helios.sh` baut die Windows-DLLs nicht: Es nutzt
+Der vollständige Windows-Build und der geprüfte Import sind abgeschlossen.
+Ein Gasttest auf der tatsächlichen GPU bleibt ein eigener Prüfschritt.
+`./scripts/build-helios.sh` baut die Windows-DLLs nicht: Es nutzt
 die bereits eingebundene `resources/helios/HeliosSetup.exe`.
+
+## Bestehende VM aktualisieren
+
+Für eine vorhandene VM die neue `resources/helios/HeliosSetup.exe` nach Windows
+kopieren, als Administrator ausführen und den angeforderten Neustart durchführen.
+Die vorhandene Windows-Disk bleibt erhalten. Der Installer benötigt weiterhin
+den Windows-Testsignierungsmodus. Die neu gebaute AppImage enthält dieses Paket
+für die automatische Treibereinrichtung neuer Windows-Installationen.
+
+Die zusätzlich mitgelieferten Spielwerkzeuge stehen nach Aktualisierung des
+Guest Servers unter `C:\Program Files\WinBoat\scripts` bereit. Alternativ können
+die beiden eigenständigen PowerShell-Skripte aus dem Checkout nach Windows
+kopiert und dort ausgeführt werden.
 
 ## Prüfung mit dem tatsächlich installierten Helios-Treiber
 
@@ -32,8 +46,9 @@ sowie typisierte Puffer mit Staging-Rücklesung. Jeder Unterschied führt zu ein
 Fehlerstatus; ein fehlender Adapter ist kein übersprungener Erfolg.
 
 Dies ist ein Test des geladenen Treibers und des Ressourcentransports. Ein
-sichtbares Bild und ein laufendes Spiel bleiben separate Prüfungen. Der mit-
-gelieferte ältere Treiber kann die neue UAV-Prüfung erwartungsgemäß ablehnen.
+sichtbares Bild und ein laufendes Spiel bleiben separate Prüfungen. Ein noch
+installierter älterer Treiber kann die neue UAV-Prüfung erwartungsgemäß
+ablehnen.
 
 ## Icarus Phoenix (MMORPG)
 

@@ -1,5 +1,45 @@
 # Validation record
 
+## WinBoat driver 22.22.290.0 and game compatibility, 18 October 2026 (UTC)
+
+- Full Windows build, test signing and self-contained assembly passed in
+  [run 39143985874](https://github.com/tobyw121/winboat/actions/runs/39143985874),
+  build commit `3ffa64e29e9dc002fc6918803f30783e498cf367`. It builds the AMD64
+  KMD, x64/x86 D3D11/D3D12 UMDs, both Mesa runtimes, CLVK, loaders and shims.
+- Imported artifact `12143715751`; verified archive SHA-256
+  `e8a973cf57cb3928b1b1bc520d36e66efcf7521e253ef0d3da2dc3c6ce049156`.
+  Complete installer SHA-256:
+  `f7eb6d02a7b86203ce7013237cfad7abae72de59b773d892f9fc2a840c4bcd33`.
+  The authenticated container checksum, decoded manifest version 22.22.290.0,
+  effective source-lock hash and CI provenance were checked before adoption.
+  The payload contains 68 entries. The compatibility identity `fecffde6`
+  remains distinct from the WinBoat build commit and effective source hashes.
+- The actual modified ClearView function passed two native WARP tests per
+  architecture (four total): RTV/UAV full/rect clears, empty rectangles,
+  typed buffers, untouched pixels and explicit refusal. Device/handle lookup
+  uses fixtures; these tests do not load Helios or exercise its GPU transport.
+  The pinned DXVK backend also implements the forwarded image/buffer clears.
+- Windows x86/x64 acceptance probes were built in
+  [run 39144437194](https://github.com/tobyw121/winboat/actions/runs/39144437194).
+  Downloaded artifacts were checked against their GitHub archive digests and
+  PE machines (0x8664/0x014c). They were not executed against a Helios GPU.
+- Optional per-game DXVK D3D9 setup/restoration passed with actual pinned
+  release DLLs under PowerShell 7 and Windows PowerShell 5.1. Foreign DLL
+  protection, archive checksum rejection, Java exclusion, architecture
+  selection, repeated application and interrupted-lock recovery were checked.
+  No game was run. The profile is app-local D3D9 translation, not a D3D9 UMD.
+- The Minecraft WGL diagnostic ran in 32- and 64-bit Windows processes and
+  with both PowerShell versions. CI's Microsoft GDI OpenGL 1.1 correctly
+  failed the actual OpenGL 3.3 core-context requirement. Helios/Zink execution
+  and Minecraft rendering remain unverified on the user's GPU.
+- Atlas preflight passed in both PowerShell versions after isolating fixture
+  types/processes and compiling its native inspector before mocking SystemRoot.
+  57 application tests and the packaging hook test passed after bundle import.
+- Host protocol dbus-v8, runtime glvnd-v4, viewer 13 and guest graphics protocol
+  helios-watchdog-v7 remain compatible. No performance gain or game acceptance
+  result is claimed; the new native behavior is D3D11 UAV ClearView dispatch.
+
+
 ## AME OOBE client filename repair, 17 October 2026 (Berlin)
 
 - The pinned original shim's `Main` checks `%PROGRAMDATA%\AME\OOBE\AME.Client.exe`

@@ -35,10 +35,14 @@ must be clarified before publishing a combined distribution.
 
 See [the local build instructions](../docs/build-helios-local.md).
 
-The complete initial Windows installer is also tracked in
-`resources/helios/HeliosSetup.exe`, together with its receipt. Its provenance is
-an imported upstream bundle, as recorded in `stack.lock.json`. Linux packaging
-uses this local checksum-pinned file and does not download an Actions artifact.
+The complete Windows installer is tracked in `resources/helios/HeliosSetup.exe`,
+together with its receipt. The current 22.22.290.0 package is built by WinBoat's
+Windows CI from the effective sources, including the recorded UAV ClearView
+change. `stack.lock.json` and the receipt record the actual build commit,
+baseline snapshot and effective source-lock hash. The original imported package
+was replaced after a successful full Windows build and checksum verification.
+Linux packaging uses this local checksum-pinned file and does not download an
+Actions artifact.
 
 The WinBoat Windows workflow prepares a separate build tree from these embedded
 sources; it never checks out the Helios root repository. `sharedSources` also

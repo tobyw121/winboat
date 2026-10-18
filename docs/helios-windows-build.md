@@ -14,10 +14,16 @@ GitHub-Token und greift nicht auf ablaufende Upstream-Actions-Artefakte zu.
 
 ## Herkunft und Versionsidentität
 
-Das anfänglich eingecheckte Paket ist der bereits verifizierte vollständige
-Upstream-Installer für Gast-Commit `fecffde6`. Es wird unverändert übernommen;
-seine ursprüngliche Herkunft bleibt in Receipt und `helios/stack.lock.json`
-erhalten. Es wird damit kein neuer Windows-Build behauptet.
+Das aktuelle Paket **22.22.290.0** wurde von WinBoats Windows-CI gebaut,
+test-signiert und anschließend anhand des Artefakt-Digests, der EXE-Prüfsumme,
+des eingebetteten Manifests und der Herkunftsreceipt übernommen. Es enthält die
+WinBoat-Korrektur für D3D11-UAV-ClearView. Der zugehörige Build ist
+[39143985874](https://github.com/tobyw121/winboat/actions/runs/39143985874)
+auf WinBoat-Commit `3ffa64e29e9dc002fc6918803f30783e498cf367`.
+
+Das frühere Startpaket war ein unveränderter Upstream-Installer für Gast-Commit
+`fecffde6`. Dieser Wert bleibt die ABI-/Stack-Kompatibilitätsidentität und ist
+keine Behauptung, dass die aktuellen Quellen unverändert vom Upstream stammen.
 
 Die eingebetteten Eigenquellen stammen aus dem Host-Snapshot `d82ce565`.
 Installer, Windows-Buildskripte, Packaging, Metadaten, Werkzeuge sowie die
@@ -25,13 +31,15 @@ Gast-/Transportbäume sind zwischen beiden Commits identisch. Ihre gemeinsamen
 Tree-/Dependency-IDs stehen in `sharedSources`. Deshalb bleibt `guestRevision`
 die gemeinsame Gast-Kompatibilitätsidentität. Ein eigener CI-Build zeichnet
 zusätzlich **den tatsächlichen WinBoat-Commit**, das Repository, den Snapshot
-und dessen Lockdatei-Hash auf. Diese Angaben werden nicht gleichgesetzt. Der aktuelle Quellstand enthält
+und dessen Lockdatei-Hash auf. Diese Angaben werden nicht gleichgesetzt.
+
+Der aktuelle Quellstand enthält
 zusätzlich die in `source.lock.json.localChanges` dokumentierten WinBoat-
 Änderungen; die ursprünglichen Tree-IDs beschreiben deren Upstream-Basis.
 Die Dateihashes und `sourceLockSha256` identifizieren die tatsächlich gebauten
 Quellen einschließlich dieser Änderungen. Der Quellstand ist 22.22.290.0;
-der mitgelieferte Installer bleibt bis zum geprüften Import auf seinem bisherigen
-Stand. Details: [Spielekompatibilität](helios-game-compatibility.md).
+der mitgelieferte Installer wurde nach bestandenem Vollbuild auf diesen Stand
+aktualisiert. Details: [Spielekompatibilität](helios-game-compatibility.md).
 
 ## Vollständiger CI-Build
 
