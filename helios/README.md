@@ -36,9 +36,9 @@ must be clarified before publishing a combined distribution.
 See [the local build instructions](../docs/build-helios-local.md).
 
 The complete Windows installer is tracked in `resources/helios/HeliosSetup.exe`,
-together with its receipt. The current 22.22.290.0 package is built by WinBoat's
+together with its receipt. The current 22.22.291.0 package is built by WinBoat's
 Windows CI from the effective sources, including the recorded UAV ClearView
-change. `stack.lock.json` and the receipt record the actual build commit,
+change and live VidPn display modes. `stack.lock.json` and the receipt record the actual build commit,
 baseline snapshot and effective source-lock hash. The original imported package
 was replaced after a successful full Windows build and checksum verification.
 Linux packaging uses this local checksum-pinned file and does not download an

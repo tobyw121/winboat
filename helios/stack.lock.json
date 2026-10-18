@@ -27,12 +27,12 @@
   },
   "bundledInstaller": {
     "path": "resources/helios",
-    "sha256": "f7eb6d02a7b86203ce7013237cfad7abae72de59b773d892f9fc2a840c4bcd33",
+    "sha256": "c9aeaf9732990c3bda84c7b01e1690d35e1ea1b74f3908c9abe2a56cfc30e722",
     "provenance": {
       "repository": "tobyw121/winboat",
-      "winboatCommit": "3ffa64e29e9dc002fc6918803f30783e498cf367",
+      "winboatCommit": "4e2ee56a8088391838a3f1e1a8ce408faef64576",
       "sourceSnapshot": "d82ce565ac792eb48da5e59f2a82a12ff221851d",
-      "sourceLockSha256": "428689bbfba765b38c66a00d88c075983b496648b01043c8b5511a5808d41397",
+      "sourceLockSha256": "e2720ad79bd5055ca7bc76bb3e2ddfc83f1958a9309499d36abd71e2e0d87101",
       "workflow": ".github/workflows/build-helios-windows.yml"
     }
   }

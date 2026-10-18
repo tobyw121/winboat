@@ -1,5 +1,38 @@
 # Validation record
 
+## WinBoat driver 22.22.291.0: live display modes, 18 October 2026 (UTC)
+
+- Full native Windows build, test signing and self-contained assembly passed in
+  [run 39151081085](https://github.com/tobyw121/winboat/actions/runs/39151081085),
+  build commit `4e2ee56a8088391838a3f1e1a8ce408faef64576`.
+  The AMD64 KMD, x64/x86 Direct3D UMDs, both Mesa runtimes, CLVK, loaders and
+  compatibility shims were built successfully.
+- Imported artifact `12145987201`, verified archive SHA-256
+  `abf543fb266d591cf77ec0228b464ad4f5ad273050bb6a9de3b62db8777e983f`.
+  Complete installer SHA-256:
+  `c9aeaf9732990c3bda84c7b01e1690d35e1ea1b74f3908c9abe2a56cfc30e722`.
+  Decoded and checked the 68-entry payload and manifest version 22.22.291.0.
+  The CI receipt matches the effective source-lock hash
+  `e2720ad79bd5055ca7bc76bb3e2ddfc83f1958a9309499d36abd71e2e0d87101`.
+- 223 kernel leaf-logic tests passed. Four additional tests execute the exact
+  production CommitVidPn handler using synthetic OS callbacks: all eleven modes
+  in both directions, all-source commits, invalid pins, failed callbacks,
+  preservation of the prior mode, reference release, empty and powered-off paths.
+  These fixtures do not validate the native ABI or visible GPU scanout.
+- [Mode CI 39151081033](https://github.com/tobyw121/winboat/actions/runs/39151081033)
+  passed, including x86/x64 compilation of the actual-driver acceptance probe.
+  Both downloaded archives matched GitHub artifact digests and PE machines.
+  The probe enumerates modes and optionally performs temporary live switches
+  with original-mode restoration; it has not run on an active Helios GPU here.
+- Source integrity checked for all 612 embedded files. Source-preparation,
+  receipt-export, corruption-rejection and skeleton-rejection checks passed.
+  The renderer type check, application build, 57 host tests and packaging test
+  passed. Viewer 13, dbus-v8 and glvnd-v4 are unchanged.
+- Visible live resizing, clone-topology limits and recovery under real Windows
+  with the user's NVIDIA GPU remain hardware acceptance gates. Existing VMs
+  need the new Windows installer and its requested reboot before live switches.
+  Usage and acceptance commands: [live display modes](helios-display-modes.md).
+
 ## WinBoat driver 22.22.290.0 and game compatibility, 18 October 2026 (UTC)
 
 - Full Windows build, test signing and self-contained assembly passed in

@@ -14,12 +14,12 @@ GitHub-Token und greift nicht auf ablaufende Upstream-Actions-Artefakte zu.
 
 ## Herkunft und Versionsidentität
 
-Das aktuelle Paket **22.22.290.0** wurde von WinBoats Windows-CI gebaut,
+Das aktuelle Paket **22.22.291.0** wurde von WinBoats Windows-CI gebaut,
 test-signiert und anschließend anhand des Artefakt-Digests, der EXE-Prüfsumme,
 des eingebetteten Manifests und der Herkunftsreceipt übernommen. Es enthält die
-WinBoat-Korrektur für D3D11-UAV-ClearView. Der zugehörige Build ist
-[39143985874](https://github.com/tobyw121/winboat/actions/runs/39143985874)
-auf WinBoat-Commit `3ffa64e29e9dc002fc6918803f30783e498cf367`.
+WinBoat-Korrektur für D3D11-UAV-ClearView und die dynamische VidPn-Modusauswahl. Der zugehörige Build ist
+[39151081085](https://github.com/tobyw121/winboat/actions/runs/39151081085)
+auf WinBoat-Commit `4e2ee56a8088391838a3f1e1a8ce408faef64576`.
 
 Das frühere Startpaket war ein unveränderter Upstream-Installer für Gast-Commit
 `fecffde6`. Dieser Wert bleibt die ABI-/Stack-Kompatibilitätsidentität und ist
@@ -37,9 +37,10 @@ Der aktuelle Quellstand enthält
 zusätzlich die in `source.lock.json.localChanges` dokumentierten WinBoat-
 Änderungen; die ursprünglichen Tree-IDs beschreiben deren Upstream-Basis.
 Die Dateihashes und `sourceLockSha256` identifizieren die tatsächlich gebauten
-Quellen einschließlich dieser Änderungen. Der Quellstand ist 22.22.290.0;
+Quellen einschließlich dieser Änderungen. Der Quellstand ist 22.22.291.0;
 der mitgelieferte Installer wurde nach bestandenem Vollbuild auf diesen Stand
-aktualisiert. Details: [Spielekompatibilität](helios-game-compatibility.md).
+aktualisiert. Details: [Spielekompatibilität](helios-game-compatibility.md) und
+[Auflösungswechsel im laufenden Windows](helios-display-modes.md).
 
 ## Vollständiger CI-Build
 

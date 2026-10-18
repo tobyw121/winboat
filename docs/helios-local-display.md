@@ -825,17 +825,29 @@ mit Fit wird wieder der vollständige Desktop sichtbar. Der Mauszeiger folgt
 derselben Skalierung. Zoom ändert weder die Windows-Auflösung noch die
 Anzeigetopologie.
 
-Der mitgelieferte Windows-Treiber übernimmt die native Größe beim Start des
-Geräts und bietet während dieses Starts nur diesen Modus an. Die Auswahl
-ersetzt deshalb kein dynamisches Umschalten mehrerer Modi in Windows:
-**Zum Ändern ist ein VM-Neustart nötig.** „Resize guest“ sendet weiterhin einen
-Größenwunsch; die Statusleiste unterscheidet gesendete Wünsche von tatsächlich
-angewendeten Größen. Eine QEMU-Bestätigung allein gilt nicht als erfolgreicher
-Windows-Moduswechsel.
+Ab Helios **22.22.291.0** meldet der Windows-Treiber alle elf Auflösungen
+als Quell-, Ziel- und Monitormodi. Unter **Windows-Einstellungen → System →
+Anzeige → Bildschirmauflösung** kann Helios die Auflösung im laufenden
+Betrieb wechseln. Local Desktop übernimmt die neue Bildgröße und skaliert sie
+mit der aktuellen Zoom-Einstellung. Der EDID-Vorzugsmodus bleibt die
+Startauflösung; die aktive Auflösung wird bei `CommitVidPn` getrennt übernommen.
+Bei Spiegelung beschränkt Windows die Auswahl auf gemeinsame Modi beider
+Adapter. Details und Testprogramm: [Live-Auflösungswechsel](helios-display-modes.md).
 
-Diese Funktion benötigt den Host-Runtime-Stand `glvnd-v4` und Viewer 13.
+Bestehende Windows-VMs benötigen die Installation der neuen
+`resources/helios/HeliosSetup.exe` mit Administratorrechten und den dabei
+angeforderten Neustart. Erst danach brauchen einzelne Auflösungswechsel keinen
+VM-Neustart mehr. Der Linux-Konfigurationsschalter setzt weiterhin die
+Startauflösung und startet die VM beim Speichern neu.
+
+„Resize guest“ sendet weiterhin einen Größenwunsch; die Statusleiste
+unterscheidet gesendete Wünsche von tatsächlich angewendeten Größen. Die neue
+Windows-Modusauswahl macht einen QEMU-Hinweis nicht automatisch zu einem
+bestätigten Windows-Moduswechsel.
+
+Startauflösung und Zoom benötigen den Host-Runtime-Stand `glvnd-v4` und Viewer 13.
 Zum Aktualisieren `./scripts/build-helios.sh` ohne `--skip-host` ausführen.
-Der Windows-Treiber selbst wird durch diese Änderung nicht neu gebaut.
-Die Cloud-Prüfung umfasst echte QEMU-Initialisierung unter TCG, die
-Startskripte und Mesa-Rendering über OpenGL/GLES bis 4K. Ein Windows-Gast
-mit physischer NVIDIA-/AMD-GPU steht in der Cloud nicht zur Verfügung.
+Die Prüfungen in der Cloud decken Modus-Policy, die echte Commit-Funktion mit
+simulierten OS-Callbacks, native WDK-Kompilation und die vorhandene
+QEMU-/Mesa-Größenverarbeitung ab. Ein sichtbarer Auflösungswechsel im Windows-Gast
+mit physischer NVIDIA-/AMD-GPU ist damit nicht nachgewiesen.
