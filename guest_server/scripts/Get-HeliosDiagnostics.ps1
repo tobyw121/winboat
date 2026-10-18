@@ -23,6 +23,12 @@ function Get-HeliosDriverDiagnostics {
     } | Select-Object -First 8 Name,PNPDeviceID,DriverVersion,DriverDate,InfFilename,InstalledDisplayDrivers,ConfigManagerErrorCode,CurrentHorizontalResolution,CurrentVerticalResolution)
     $signing=$null
     try {$signing=Test-HeliosBootTestSigning} catch {} # Unsupported query is unknown, never false.
-    return [ordered]@{diagnosticsVersion=2;application=(Get-HeliosApplicationDiagnostics);testSigning=$signing;controllers=$controllers;driverRegistry=$values;updatedAtUtc=[DateTime]::UtcNow.ToString('o')}
+    # Read the durable hold now, independently of the asynchronous PnP sample.
+    $hold=$null
+    try {
+        $rescue=Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\WinBoat\DisplayRecovery' -ErrorAction Stop
+        $hold=($null -ne $rescue.PSObject.Properties['HeliosDisabled'] -and $rescue.HeliosDisabled -eq 1)
+    } catch [System.Management.Automation.ItemNotFoundException] {$hold=$false} catch {}
+    return [ordered]@{diagnosticsVersion=2;rescueHold=$hold;application=(Get-HeliosApplicationDiagnostics);testSigning=$signing;controllers=$controllers;driverRegistry=$values;updatedAtUtc=[DateTime]::UtcNow.ToString('o')}
 }
 if (-not $diagnosticsLibraryOnly) {Get-HeliosDriverDiagnostics | ConvertTo-Json -Depth 10 -Compress}

@@ -126,6 +126,16 @@ numerische Fehlerfelder übernommen, keine beliebigen Meldungen oder Zugangsdate
 Auch Fehlerantworten der Guest API bleiben erhalten. Die Terminal-Ausgabe zeigt
 den vollständigen Bericht; die private JSON-Datei bleibt die Grundlage zum Teilen.
 
+`driver.rescueHold` liest die dauerhafte Sperre unmittelbar während der Diagnose
+(bei nicht möglicher Abfrage `null`). Der separat erhobene `adapters`-Eintrag kann
+noch aus dem vorherigen Monitorlauf stammen; `sampleAgeMs` zeigt sein Alter.
+`application.umdLogs` wertet die letzten acht Helios-Prozesslogs mit maximal
+64 KiB pro Datei aus. Es werden nur feste Start-/Fehlersignale und API-Fehlercodes
+ausgegeben, keine rohen Logzeilen. Eine im Ausschnitt vorhandene letzte
+`UMD module:`-Grenze trennt ältere Treibergenerationen ab. Fehlt diese Grenze,
+bleibt die Zuordnung ausdrücklich unsicher; auch PIDs können wiederverwendet sein.
+Die Auswertung funktioniert bei deaktiviertem Helios und startet keinen Grafiktest.
+
 Ein DMA-BUF-Größenkonflikt ist weiterhin ein abgewiesener Import. Die Änderung
 interpretiert einen unbekannten Modifier nicht als LINEAR und erfindet keine
 passende Speichergröße. Vor einer Transportkorrektur muss auf der betroffenen

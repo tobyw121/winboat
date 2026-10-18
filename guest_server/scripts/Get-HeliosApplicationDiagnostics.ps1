@@ -2,6 +2,7 @@
 param([switch]$LibraryOnly)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'Get-HeliosUmdDiagnostics.ps1')
 function Read-HeliosFeatureFailures([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return @() }
     $stream = [IO.File]::Open($Path, 'Open', 'Read', 'ReadWrite')
@@ -71,12 +72,15 @@ function Get-HeliosApplicationDiagnostics {
             $loaded += [ordered]@{ processId=$appProcess.Id; name=$appProcess.ProcessName; modules=$modules }
         }
     } catch { $errors += 'Loaded application modules unavailable' }
-    $report = [ordered]@{ apiRegistration=$registration; rejectedFeatures=$features; crashes=$crashes; loadedApplications=$loaded;
+    $umd=@()
+    try {$umd=@(Get-HeliosUmdDiagnostics)} catch {$errors+='Helios UMD log summaries unavailable'}
+    $report = [ordered]@{ apiRegistration=$registration; rejectedFeatures=$features; crashes=$crashes; loadedApplications=$loaded; umdLogs=$umd;
+        umdCorrelation='Recent PID files; may precede the current process. Signals and codes only; no signal is not proof of success.';
         featureCorrelation='PID only; entries may precede the current process'; errors=$errors }
     # Keep this extension below the existing guest API's overall 64 KiB limit.
     # Prefer recent feature/crash details over older registry/module records.
     $limited = $false
-    foreach ($section in @('loadedApplications','apiRegistration','crashes','rejectedFeatures')) {
+    foreach ($section in @('loadedApplications','apiRegistration','crashes','rejectedFeatures','umdLogs')) {
         while ([Text.Encoding]::UTF8.GetByteCount(($report | ConvertTo-Json -Depth 8 -Compress)) -gt 24000 -and @($report[$section]).Count) {
             $limited = $true
             $report[$section] = @($report[$section] | Select-Object -SkipLast 1)

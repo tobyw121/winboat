@@ -4,6 +4,20 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $RepoRoot 'guest_server/scripts/Get-HeliosApplicationDiagnostics.ps1') -LibraryOnly
 $temporary = Join-Path ([IO.Path]::GetTempPath()) ('helios-feature-' + [guid]::NewGuid().ToString('N'))
 try {
+    $prefix='[pid=1484 tid=12] '
+    [IO.File]::WriteAllText($temporary, $prefix+"UMD module: secret-old-path`n"+$prefix+"  CreateDevice: DXVK device creation FAILED -> E_FAIL`n"+
+        $prefix+"UMD module: secret-new-path`n"+$prefix+"open_adapter_common interface=0x12345678`n"+
+        $prefix+"  CreateDevice -> S_OK (DXVK device + D3D11 funcs table installed)`n"+
+        "[dxvk-bridge] producer: stream initialization FAILED (VK_ERROR_DEVICE_LOST secret-user-path)`n"+
+        "private-command HRESULT=0x80004005`n")
+    $summary=Read-HeliosUmdSummary $temporary
+    if (-not $summary.moduleBoundaryFound -or $summary.signals.Count -ne 3 -or
+        $summary.signals.kind -contains 'device-create-failed' -or $summary.codes -notcontains 'VK_ERROR_DEVICE_LOST' -or
+        $summary.codes -notcontains 'HRESULT=0x80004005' -or ($summary | ConvertTo-Json -Depth 6) -match 'secret|private') {throw 'UMD generation/allowlist filtering failed'}
+    [IO.File]::WriteAllText($temporary, $prefix+"UMD module: old`n"+('x'*66000)+"`n"+$prefix+"  CreateDevice: DXVK device creation FAILED -> E_FAIL`n")
+    $summary=Read-HeliosUmdSummary $temporary
+    if (-not $summary.tailTruncated -or $summary.moduleBoundaryFound -or $summary.tailBytes -gt 65536 -or
+        $summary.signals[0].kind -ne 'device-create-failed') {throw 'UMD tail bound/unknown generation failed'}
     [IO.File]::WriteAllText($temporary, ('x' * 16000) + "`npid=12 VkPhysicalDeviceVulkan12Features.timelineSemaphore not supported`npid=13 PASSWORD=secret not supported`n")
     $failures = @(Read-HeliosFeatureFailures $temporary)
     if ($failures.Count -ne 1 -or $failures[0].processId -ne 12 -or $failures[0].feature -ne 'VkPhysicalDeviceVulkan12Features.timelineSemaphore') { throw 'Bounded feature parsing failed' }
@@ -28,6 +42,8 @@ try {
         $adapterKey = 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\0001'
         @{classKey=$adapterKey} | ConvertTo-Json | Set-Content (Join-Path $root 'Helios/install-state.json')
         Copy-Item $temporary (Join-Path $root 'AppData/Local/helios-vulkan-features.log')
+        [IO.File]::WriteAllText((Join-Path $root 'Helios/umd-1484.log'),$prefix+"  CreateDevice: DXVK device creation FAILED -> E_FAIL`n")
+        [IO.File]::WriteAllText((Join-Path $root 'Helios/umd-private.log'),'secret')
         $registry = [pscustomobject]@{}
         $registry | Add-Member ScriptMethod GetValue { param($Name,$Default) return @('C:\Helios\driver.dll') }
         function Get-Item { param($LiteralPath)
@@ -41,7 +57,8 @@ try {
             [pscustomobject]@{ModuleName='unrelated.dll';FileName='private';FileVersionInfo=[pscustomobject]@{FileVersion='private'}})} }
         $before=$env:ProgramData; $env:ProgramData=$root
         try { $report=Get-HeliosApplicationDiagnostics } finally { $env:ProgramData=$before }
-        if ($report.errors.Count -or $report.apiRegistration.Count -ne 6 -or $report.rejectedFeatures.Count -ne 1 -or $report.loadedApplications[0].modules.Count -ne 1) { throw 'Combined registry/profile/module collection failed' }
+        if ($report.errors.Count -or $report.apiRegistration.Count -ne 6 -or $report.rejectedFeatures.Count -ne 1 -or $report.loadedApplications[0].modules.Count -ne 1 -or
+            $report.umdLogs.Count -ne 1 -or $report.umdLogs[0].signals[0].kind -ne 'device-create-failed') { throw 'Combined registry/profile/module/UMD collection failed' }
         if (($report | ConvertTo-Json -Depth 8) -match 'private|unrelated') { throw 'Non-graphics module data leaked' }
         $registry | Add-Member ScriptMethod GetValue { param($Name,$Default) return (@(([char]0x754c).ToString() * 2000) * 4) } -Force
         $before=$env:ProgramData; $env:ProgramData=$root
