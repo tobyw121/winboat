@@ -64,6 +64,8 @@ $held=$false
 try {
     try {$held=$mutex.WaitOne(0)} catch [Threading.AbandonedMutexException] {$held=$true}
     if (-not $held) {throw 'Helios installation or maintenance is active.'}
+    $boundVersion=[string](Get-PnpDeviceProperty -InstanceId $active[0].InstanceId -KeyName 'DEVPKEY_Device_DriverVersion').Data
+    if ($boundVersion -ne [string]$manifest.version) {throw 'Bound display driver differs from this diagnostic package.'}
     $started=[DateTime]::UtcNow.ToString('o')
     $arms=@(Invoke-HeliosProfileArms -ProcessLocal {
         param($mode)
@@ -83,7 +85,7 @@ try {
             [ordered]@{mode=$mode;processId=$process.Id;timedOut=$timeout;exitCode=$process.ExitCode;results=$rows}
         } finally {$process.Dispose()}
     })
-    $report=[ordered]@{schema=1;profileScope='child-process';probeVersion=[string]$manifest.version;probeSha256=(Get-HeliosSha256 $probe);
+    $report=[ordered]@{schema=1;profileScope='child-process';boundDriverVersion=$boundVersion;probeVersion=[string]$manifest.version;probeSha256=(Get-HeliosSha256 $probe);
         startedAtUtc=$started;finishedAtUtc=[DateTime]::UtcNow.ToString('o');registryRestored=$true;arms=$arms}
     $path=Join-Path $env:ProgramData 'Helios/device-probe-result.json'
     $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $path -Encoding UTF8
