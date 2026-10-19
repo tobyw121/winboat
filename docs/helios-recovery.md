@@ -4,6 +4,13 @@ Aktuell ist wieder das unveränderte Paket 22.22.291.0 aus `f0a662f` gebündelt.
 Die Rücknahme ändert keine bereits installierten Windows-Treiber automatisch.
 Die bestehenden Rettungsfunktionen bleiben verfügbar.
 
+Der saubere Vergleich vom 19. Oktober bestätigt erneut Flackern mit .294.
+Das DWM-Log zeigt interne Geräteerstellung und anschließende Zerstörung vor dem
+ersten Present. Die wahrscheinliche D3D11-Capability-Regression und die Grenzen
+der bisherigen Diagnose sind im [GPU-Vergleich .291/.294](helios-291-294-regression.md)
+festgehalten. .295 ergänzt Installer-/DriverStore-Recovery; ein Grafikfix für
+diesen Fehler ist damit noch nicht nachgewiesen.
+
 Der neuere Entwicklungsstand 22.22.293.0 korrigiert den `classKey`-Installationsabbruch;
 22.22.294.0 ergänzt die korrigierte Auswahl des
 umbenannten Vulkan-Geräts in der D3D11-Brücke. Der alte Gerätefilter konnte
