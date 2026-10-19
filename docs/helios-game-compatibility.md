@@ -1,5 +1,20 @@
 # Helios: Spielekompatibilität
 
+## D3D11-Geräteauswahl ab 22.22.294.0
+
+Der gebündelte Installer enthält jetzt 22.22.294.0. Die D3D11-Brücke verwendet
+denselben Produktnamen wie Mesa zur Vulkan-Geräteauswahl. Der alte Filter
+`Virtio-GPU Venus` passte nicht mehr zum gemeldeten `Helios vGPU (...)` und
+konnte deshalb den eigenen Adapter ausschließen. Der Regressionstest führt
+die tatsächliche Filterzuweisung und den Mesa-Namensausdruck aus; mit dem alten
+Filter schlägt er fehl. Windows-CI hat das vollständige x64/x86-Paket gebaut.
+
+Dies bestätigt keine stabile Ausgabe auf der betroffenen RTX 2070. Der separat
+beobachtete DMA-BUF-Größenkonflikt ist weiterhin offen. Bestehende VMs müssen
+mit dem neuen `HeliosSetup.exe` aktualisiert werden; ein neues AppImage allein
+ersetzt den bereits installierten Windows-Treiber nicht. Bei deaktiviertem
+Helios den VGA-Rettungsweg bis zum kontrollierten Hardwaretest beibehalten.
+
 ## Installationskorrektur ab 22.22.293.0
 
 22.22.292.0 konnte bei einer Erstinstallation oder einem älteren Installationsbeleg
@@ -12,7 +27,7 @@ Windows zunächst neu starten und anschließend das korrigierte Paket installier
 
 ## Vulkan und native D3D-Abfragen ab Quellversion 22.22.292.0
 
-Der mitgelieferte, in Windows-CI gebaute Installer 22.22.293.0 enthält diese
+Der mitgelieferte, in Windows-CI gebaute Installer 22.22.294.0 enthält diese
 Änderungen und die Erstinstallationskorrektur. Ein AppImage-Neubau übernimmt
 dieses Paket; eine vorhandene Windows-Installation benötigt anschließend die
 Aktualisierung des Gasttreibers. Der Paketbuild ist kein Hardware-Erfolgsnachweis.
