@@ -17,4 +17,4 @@ if [ "${HELIOS_GPU_VENDOR:-}" = nvidia ] && [ "${HELIOS_RESCUE:-0}" != 1 ]; then
         export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
     fi
 fi
-exec /opt/helios/qemu/bin/qemu-system-x86_64 "$@"
+exec python3 /opt/helios/performance.py /opt/helios/qemu/bin/qemu-system-x86_64 "$@"

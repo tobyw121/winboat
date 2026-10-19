@@ -65,6 +65,7 @@ RUN --mount=from=compiled,source=/opt/helios,target=/build/runtime \
     install -m 755 /build/host/check-runtime.sh /opt/helios/check-runtime.sh && \
     install -m 755 /build/host/display.sh /run/display.sh && \
     install -m 644 /build/host/display-resolution.sh /opt/helios/display-resolution.sh && \
+    install -m 644 /build/host/performance.py /opt/helios/performance.py && \
     install -m 755 /build/host/qemu.sh /usr/bin/qemu-system-x86_64 && \
     install -m 755 /build/host/qemu.sh /usr/local/bin/qemu-system-x86_64 && \
     /usr/bin/qemu-system-x86_64 --version && \
