@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func mirrorEnabled(install, programData string) bool {
+func extendedDesktopEnabled(install, programData string) bool {
 	if programData == "" {
 		return false
 	}
@@ -49,54 +49,32 @@ func heliosRestartPending(install, programData string) bool {
 	return err == nil && state["status"] == "driver-restart-required"
 }
 
-// One serial monitor owns this controller. No HTTP handler changes displays.
-// During a viewer failure, periodically retry cloning even if an old failure
-// hint is renewed: an inactive Helios cannot produce the frame clearing it.
+// The serial monitor makes at most one automatic Helios-only change per
+// console session. A viewer/driver failure must never trigger VGA mode cycling.
 type topologyController struct {
-	retryAt        time.Time
-	probationUntil time.Time
-	attempts       uint
-	lastError      string
-	basicRetryAt   time.Time
-	viewerBadSeen  bool
-	driverFailed   bool
+	sessionID uint32
+	attempted bool
+	lastError string
 }
 type topologyStatus struct {
-	Goal         string `json:"goal"`
-	State        string `json:"state"`
-	Error        string `json:"error,omitempty"`
-	RetryAfterMS int64  `json:"retryAfterMs,omitempty"`
+	Goal          string `json:"goal"`
+	State         string `json:"state"`
+	Error         string `json:"error,omitempty"`
+	RetryAfterMS  int64  `json:"retryAfterMs,omitempty"`
+	VGAProtection string `json:"vgaProtection"`
 }
 
-func (c *topologyController) backoff(now time.Time) {
-	delay := 30 * time.Second
-	for i := uint(0); i < c.attempts && delay < 5*time.Minute; i++ {
-		delay *= 2
-	}
-	if delay > 5*time.Minute {
-		delay = 5 * time.Minute
-	}
-	if c.attempts < 4 {
-		c.attempts++
-	}
-	c.retryAt = now.Add(delay)
-	c.probationUntil = time.Time{}
-}
 func basicDesktop(d desktopSnapshot) bool {
 	return d.Topology == "basic" && d.Basic.State == "active" && d.Helios.State != "active"
 }
 func clonedDesktop(d desktopSnapshot) bool {
 	return d.Topology == "clone" && d.Basic.State == "active" && d.Helios.State == "active"
 }
-func (c *topologyController) reconcile(now time.Time, enabled bool, pnp displayAdapters, d desktopSnapshot, probeErr error, viewerBad bool,
+func (c *topologyController) reconcile(_ time.Time, enabled bool, pnp displayAdapters, d desktopSnapshot, probeErr error, viewerBad bool,
 	apply func(string) (desktopSnapshot, error)) (desktopSnapshot, topologyStatus) {
-	result := topologyStatus{Goal: "mirror-helios-preferred", State: "waiting"}
+	result := topologyStatus{Goal: "extend-preserve-vga", VGAProtection: "no-automatic-vga-or-primary-changes"}
 	finish := func(state string) (desktopSnapshot, topologyStatus) {
-		result.State = state
-		result.Error = c.lastError
-		if c.retryAt.After(now) {
-			result.RetryAfterMS = c.retryAt.Sub(now).Milliseconds()
-		}
+		result.State, result.Error = state, c.lastError
 		return d, result
 	}
 	if !enabled {
@@ -109,84 +87,40 @@ func (c *topologyController) reconcile(now time.Time, enabled bool, pnp displayA
 	if !d.Managed {
 		return finish("unmanaged-displays")
 	}
-	if pnp.Basic.State != "running" {
-		return finish("waiting-for-vga")
+	if c.sessionID != d.SessionID {
+		c.sessionID = d.SessionID
+		c.attempted = false
+		c.lastError = ""
 	}
-	fallback := func(reason string) (desktopSnapshot, topologyStatus) {
-		if !basicDesktop(d) {
-			if now.Before(c.basicRetryAt) {
-				return finish("fallback-failed")
-			}
-			next, err := apply("basic")
-			d = next
-			if err != nil || !basicDesktop(d) {
-				c.lastError = "basic-desktop-not-confirmed"
-				if err != nil {
-					c.lastError = err.Error()
-				}
-				c.backoff(now)
-				c.basicRetryAt = now.Add(30 * time.Second)
-				return finish("fallback-failed")
-			}
-			c.basicRetryAt = time.Time{}
-		}
-		return finish(reason)
-	}
-	// Unknown WMI status is not a driver failure and cannot initiate a layout
-	// change. An explicit viewer failure is independent evidence for fallback.
-	if pnp.Helios.State == "unknown" && !viewerBad {
-		return finish("waiting-for-helios-status")
-	}
-	if !viewerBad {
-		c.viewerBadSeen = false
+	if pnp.Basic.State != "running" || d.Basic.State != "active" {
+		return finish("vga-unavailable")
 	}
 	if pnp.Helios.State != "running" {
-		if !c.driverFailed {
-			c.backoff(now)
-		}
-		c.driverFailed = true
-		return fallback("vga-fallback")
+		return finish("helios-" + pnp.Helios.State)
 	}
-	c.driverFailed = false
-	if viewerBad && !c.viewerBadSeen {
-		c.viewerBadSeen = true
-		c.backoff(now)
-		return fallback("vga-fallback")
-	}
-	// Successful imports may clear the hint during probation. Do not renew the
-	// fallback cooldown on every polling tick or Helios could never return.
-	if clonedDesktop(d) && !viewerBad {
-		c.retryAt = time.Time{}
-		c.probationUntil = time.Time{}
-		c.attempts = 0
+	if extendedDesktop(d) {
+		c.attempted = true
 		c.lastError = ""
-		return finish("mirrored")
-	}
-	if viewerBad && clonedDesktop(d) {
-		if now.Before(c.probationUntil) {
-			return finish("helios-probation")
+		if viewerBad {
+			return finish("extended-viewer-unavailable")
 		}
-		c.backoff(now)
-		return fallback("vga-fallback")
+		return finish("extended")
 	}
-	if now.Before(c.retryAt) {
-		// No repeated SetDisplayConfig calls while the fallback is already active.
-		return fallback("vga-fallback")
+	if c.attempted {
+		return finish("extension-held")
 	}
-	next, err := apply("clone")
+	c.attempted = true
+	before := d.Basic
+	next, err := apply("extend")
 	d = next
-	if err != nil || !clonedDesktop(d) {
-		c.lastError = "clone-not-confirmed"
+	if err != nil || !extendedDesktop(d) || d.Basic.Primary != before.Primary {
+		c.lastError = "extended-desktop-not-confirmed"
 		if err != nil {
 			c.lastError = err.Error()
 		}
-		c.backoff(now)
-		return fallback("clone-unavailable")
+		return finish("extension-failed")
 	}
-	c.lastError = ""
-	c.retryAt = time.Time{}
-	c.probationUntil = now.Add(12 * time.Second)
-	return finish("helios-probation")
+	return finish("extended")
 }
 
 // Windows CCD structures. Keep their ABI independent of Go's pointer width.

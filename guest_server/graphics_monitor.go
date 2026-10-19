@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const graphicsProtocol = "helios-watchdog-v9"
+const graphicsProtocol = "helios-watchdog-v10"
 
 type displayAdapter struct {
 	State        string `json:"state"`

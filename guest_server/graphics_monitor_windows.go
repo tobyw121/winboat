@@ -21,7 +21,6 @@ func collectDisplayAdapters(ctx context.Context, viewerUnavailable bool) ([]byte
 	if err != nil {
 		return nil, err
 	}
-	script := filepath.Join(filepath.Dir(executable), "scripts", "Get-DisplayAdapters.ps1")
 	// Service startup can race the installer continuation. Retry verification
 	// while its receipt remains pending, without relaunching setup or restarting
 	// Windows. Only the serialized monitor owns this cooldown.
@@ -36,29 +35,14 @@ func collectDisplayAdapters(ctx context.Context, viewerUnavailable bool) ([]byte
 		verifyCancel()
 	}
 	rescue := graphicsRescueActive()
-	enabled := !rescue && mirrorEnabled(filepath.Dir(executable), os.Getenv("ProgramData"))
+	enabled := !rescue && extendedDesktopEnabled(filepath.Dir(executable), os.Getenv("ProgramData"))
 	desktopCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	desktop, probeErr := collectConsoleDesktop(desktopCtx)
 	cancel()
-	args := []string{"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, "-Recover"}
-	if viewerUnavailable || desktopRequiresFallback(desktop, probeErr) {
-		args = append(args, "-ViewerUnavailable")
-	}
-	if enabled {
-		args = append(args, "-MirrorDesired")
-	}
+	// Native observation only: viewer failures never enable/restart VGA.
 	pnp, err := collectNativeDisplayAdapters(ctx)
 	if err != nil {
 		return nil, err
-	}
-	if needsVGARecovery(pnp, enabled, viewerUnavailable || desktopRequiresFallback(desktop, probeErr)) {
-		data, recoveryErr := exec.CommandContext(ctx, "powershell.exe", args...).Output()
-		if recoveryErr != nil {
-			return nil, recoveryErr
-		}
-		if err = json.Unmarshal(data, &pnp); err != nil {
-			return nil, err
-		}
 	}
 	desktop, policy := displayTopology.reconcile(time.Now(), enabled, pnp, desktop, probeErr, viewerUnavailable, func(action string) (desktopSnapshot, error) {
 		applyCtx, cancel := context.WithTimeout(ctx, 7*time.Second)

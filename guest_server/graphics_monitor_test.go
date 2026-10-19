@@ -77,7 +77,6 @@ func TestViewerRecoveryHint(t *testing.T) {
 		t.Fatal("Recovered Helios did not clear its hint")
 	}
 }
-
 func TestNativePollingOnlySpawnsRecoveryWhenNeeded(t *testing.T) {
 	pnp := displayAdapters{Helios: displayAdapter{State: "running", InstanceID: "helios"}, Basic: displayAdapter{State: "running"}}
 	if needsVGARecovery(pnp, true, true) {

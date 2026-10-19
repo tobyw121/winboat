@@ -18,146 +18,87 @@ func topologyFixture(mode string) desktopSnapshot {
 	}
 	return d
 }
-func TestMirrorTopologyAndRecovery(t *testing.T) {
-	now := time.Unix(1000, 0)
-	c := topologyController{}
+func TestExtendedDesktopDoesNotCycleVGA(t *testing.T) {
 	pnp := displayAdapters{Helios: displayAdapter{State: "running"}, Basic: displayAdapter{State: "running"}}
-	d := topologyFixture("extend")
-	actions := []string{}
-	apply := func(action string) (desktopSnapshot, error) {
-		actions = append(actions, action)
-		if action == "clone" {
-			return topologyFixture("clone"), nil
+	now := time.Unix(1000, 0)
+	for _, mode := range []string{"basic", "clone"} {
+		c := topologyController{}
+		calls := 0
+		d, s := c.reconcile(now, true, pnp, topologyFixture(mode), nil, false, func(action string) (desktopSnapshot, error) {
+			calls++
+			if action != "extend" {
+				t.Fatal("VGA/global change", action)
+			}
+			return topologyFixture("extend"), nil
+		})
+		if !extendedDesktop(d) || s.State != "extended" || calls != 1 {
+			t.Fatal(d, s, calls)
 		}
-		return topologyFixture("basic"), nil
-	}
-	step := func(offset time.Duration, bad bool) topologyStatus {
-		var status topologyStatus
-		d, status = c.reconcile(now.Add(offset), true, pnp, d, nil, bad, apply)
-		return status
-	}
-	if s := step(0, false); s.State != "helios-probation" || !clonedDesktop(d) {
-		t.Fatal(s, d)
-	}
-	if s := step(time.Second, false); s.State != "mirrored" || len(actions) != 1 {
-		t.Fatal(s, actions)
-	}
-	// A viewer error must expose the actual VGA desktop, not merely enable PnP.
-	if s := step(2*time.Second, true); s.State != "vga-fallback" || !basicDesktop(d) {
-		t.Fatal(s, d)
-	}
-	if s := step(10*time.Second, true); s.State != "vga-fallback" || len(actions) != 2 {
-		t.Fatal(s, actions)
-	}
-	// A renewed old failure hint must not prevent the retry restoring Helios.
-	if s := step(33*time.Second, true); s.State != "helios-probation" || !clonedDesktop(d) {
-		t.Fatal(s, d)
-	}
-	if s := step(38*time.Second, true); s.State != "helios-probation" || len(actions) != 3 {
-		t.Fatal(s, actions)
-	}
-	if s := step(39*time.Second, false); s.State != "mirrored" {
-		t.Fatal(s)
-	}
-	// A real PnP crash is handled immediately; recovery returns to clone.
-	pnp.Helios.State = "failed"
-	if s := step(40*time.Second, false); s.State != "vga-fallback" || !basicDesktop(d) {
-		t.Fatal(s, d)
-	}
-	pnp.Helios.State = "running"
-	if s := step(45*time.Second, false); s.State != "vga-fallback" {
-		t.Fatal(s)
-	}
-	if s := step(71*time.Second, false); s.State != "helios-probation" || !clonedDesktop(d) {
-		t.Fatal(s, d)
+		// A viewer failure does not replace the extended desktop with VGA/clone.
+		for i := 0; i < 20; i++ {
+			d, s = c.reconcile(now, true, pnp, d, nil, true, func(string) (desktopSnapshot, error) { t.Fatal("mode cycling"); return d, nil })
+		}
+		if s.State != "extended-viewer-unavailable" {
+			t.Fatal(s)
+		}
+		pnp.Helios.State = "failed"
+		_, s = c.reconcile(now, true, pnp, d, nil, true, func(string) (desktopSnapshot, error) { t.Fatal("VGA recovery"); return d, nil })
+		if s.State != "helios-failed" {
+			t.Fatal(s)
+		}
+		pnp.Helios.State = "running"
 	}
 }
-
-func TestTopologyRefusalAndRetryBounds(t *testing.T) {
-	now := time.Unix(1000, 0)
-	c := topologyController{}
+func TestExtensionFailureIsHeldAndPrimaryIsPreserved(t *testing.T) {
 	pnp := displayAdapters{Helios: displayAdapter{State: "running"}, Basic: displayAdapter{State: "running"}}
-	d := topologyFixture("extend")
-	calls := []string{}
-	apply := func(action string) (desktopSnapshot, error) {
-		calls = append(calls, action)
-		if action == "clone" {
-			return d, errors.New("clone-set-display-config-50")
+	for _, fail := range []bool{false, true} {
+		c := topologyController{}
+		calls := 0
+		apply := func(string) (desktopSnapshot, error) {
+			calls++
+			if fail {
+				return topologyFixture("basic"), errors.New("extension-error")
+			}
+			d := topologyFixture("extend")
+			d.Basic.Primary = false
+			return d, nil
 		}
-		return topologyFixture("basic"), nil
-	}
-	var status topologyStatus
-	d, status = c.reconcile(now, true, pnp, d, nil, false, apply)
-	if status.State != "clone-unavailable" || !basicDesktop(d) || len(calls) != 2 || status.Error != "clone-set-display-config-50" {
-		t.Fatal(status, d, calls)
-	}
-	for second := 1; second < 30; second++ {
-		d, status = c.reconcile(now.Add(time.Duration(second)*time.Second), true, pnp, d, nil, false, apply)
-	}
-	if len(calls) != 2 {
-		t.Fatal("repeated mode changes during cooldown", calls)
-	}
-	d, status = c.reconcile(now.Add(31*time.Second), true, pnp, d, nil, false, apply)
-	if len(calls) != 3 || status.RetryAfterMS < 59000 {
-		t.Fatal(status, calls)
-	}
-	// Even failures of VGA restoration itself must be rate-limited.
-	c = topologyController{}
-	d = topologyFixture("helios")
-	pnp.Helios.State = "failed"
-	count := 0
-	fail := func(string) (desktopSnapshot, error) {
-		count++
-		return d, errors.New("basic-validate-display-config-87")
-	}
-	for second := 0; second < 30; second++ {
-		_, status = c.reconcile(now.Add(time.Duration(second)*time.Second), true, pnp, d, nil, false, fail)
-	}
-	if count != 1 || status.State != "fallback-failed" {
-		t.Fatal(status, count)
+		for i := 0; i < 100; i++ {
+			c.reconcile(time.Unix(int64(i), 0), true, pnp, topologyFixture("basic"), nil, false, apply)
+		}
+		if calls != 1 {
+			t.Fatal("automatic extension repeated", calls)
+		}
+		next := topologyFixture("basic")
+		next.SessionID = 2
+		c.reconcile(time.Now(), true, pnp, next, nil, false, apply)
+		if calls != 2 {
+			t.Fatal("new console session not handled")
+		}
 	}
 }
-
-func TestTopologySafetyAndVerification(t *testing.T) {
+func TestExtensionRefusesUnknownOrUnavailableVGA(t *testing.T) {
 	pnp := displayAdapters{Helios: displayAdapter{State: "running"}, Basic: displayAdapter{State: "running"}}
-	now := time.Unix(1000, 0)
-	for _, tc := range []struct {
-		name    string
-		enabled bool
-		pnp     displayAdapters
-		desktop desktopSnapshot
-		err     error
-		want    string
-	}{
-		{"installation", false, pnp, topologyFixture("extend"), nil, "installation"},
-		{"no-console", true, pnp, topologyFixture("extend"), errors.New("no console"), "console-unavailable"},
-		{"other-monitors", true, pnp, desktopSnapshot{}, nil, "unmanaged-displays"},
-		{"disabled-vga", true, displayAdapters{Helios: displayAdapter{State: "running"}, Basic: displayAdapter{State: "disabled"}}, topologyFixture("helios"), nil, "waiting-for-vga"},
-		{"unknown-pnp", true, displayAdapters{Helios: displayAdapter{State: "unknown"}, Basic: displayAdapter{State: "running"}}, topologyFixture("basic"), nil, "waiting-for-helios-status"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, mode := range []string{"basic", "helios"} {
+		for _, state := range []string{"disabled", "missing", "failed", "unknown"} {
+			pnp.Basic.State = state
 			c := topologyController{}
-			_, s := c.reconcile(now, tc.enabled, tc.pnp, tc.desktop, tc.err, false, func(string) (desktopSnapshot, error) {
-				t.Fatal("unexpected display change")
-				return desktopSnapshot{}, nil
-			})
-			if s.State != tc.want {
+			_, s := c.reconcile(time.Now(), true, pnp, topologyFixture(mode), nil, true, func(string) (desktopSnapshot, error) { t.Fatal("VGA changed"); return desktopSnapshot{}, nil })
+			if s.State != "vga-unavailable" {
 				t.Fatal(s)
 			}
-		})
-	}
-	// A successful API return alone does not prove that Windows cloned outputs.
-	c := topologyController{}
-	actions := []string{}
-	d, s := c.reconcile(now, true, pnp, topologyFixture("extend"), nil, false, func(action string) (desktopSnapshot, error) {
-		actions = append(actions, action)
-		if action == "clone" {
-			return topologyFixture("extend"), nil
 		}
-		return topologyFixture("basic"), nil
-	})
-	if !basicDesktop(d) || s.State != "clone-unavailable" || len(actions) != 2 {
-		t.Fatal(d, s, actions)
+	}
+	pnp.Basic.State = "running"
+	for _, enabled := range []bool{false, true} {
+		c := topologyController{}
+		_, s := c.reconcile(time.Now(), enabled, pnp, topologyFixture("basic"), errors.New("session unavailable"), false, func(string) (desktopSnapshot, error) {
+			t.Fatal("unknown session changed")
+			return desktopSnapshot{}, nil
+		})
+		if enabled && s.State != "console-unavailable" {
+			t.Fatal(s)
+		}
 	}
 }
 
@@ -219,13 +160,13 @@ func TestActualCloneGeometry(t *testing.T) {
 	}
 }
 
-func TestMirrorOnlyAfterSelectedInstallation(t *testing.T) {
+func TestExtensionOnlyAfterSelectedInstallation(t *testing.T) {
 	root := t.TempDir()
 	install := filepath.Join(root, "WinBoat")
 	data := filepath.Join(root, "ProgramData")
 	os.MkdirAll(install, 0700)
 	os.MkdirAll(filepath.Join(data, "Helios"), 0700)
-	if mirrorEnabled(install, data) {
+	if extendedDesktopEnabled(install, data) {
 		t.Fatal("unselected installation changed displays")
 	}
 	os.WriteFile(filepath.Join(install, "helios-enabled"), nil, 0600)
@@ -236,33 +177,28 @@ func TestMirrorOnlyAfterSelectedInstallation(t *testing.T) {
 		if heliosRestartPending(install, data) != (status == `{"status":"driver-restart-required"}`) {
 			t.Fatal("restart verification must only inspect a selected pending restart", status)
 		}
-		if mirrorEnabled(install, data) {
+		if extendedDesktopEnabled(install, data) {
 			t.Fatal("installation/OOBE was interrupted", status)
 		}
 	}
 	os.WriteFile(state, []byte(`{"status":"finished"}`), 0600)
-	if !mirrorEnabled(install, data) {
+	if !extendedDesktopEnabled(install, data) {
 		t.Fatal("selected installed Helios was ignored")
 	}
 	if heliosRestartPending(install, data) {
 		t.Fatal("finished driver kept rechecking restart completion")
 	}
-	// Finishing a stale receipt must immediately activate the existing clone
-	// policy, including after Windows restores an extended layout on next boot.
+	// An already extended desktop must survive provisioning and cold boot.
 	for _, boot := range []int64{1000, 2000} {
 		controller := topologyController{}
-		calls := 0
 		pnp := displayAdapters{Helios: displayAdapter{State: "running"}, Basic: displayAdapter{State: "running"}}
-		desktop, policy := controller.reconcile(time.Unix(boot, 0), mirrorEnabled(install, data), pnp, topologyFixture("extend"), nil, false,
-			func(action string) (desktopSnapshot, error) {
-				calls++
-				if action != "clone" {
-					t.Fatal("healthy Helios did not request mirroring", action)
-				}
-				return topologyFixture("clone"), nil
+		desktop, policy := controller.reconcile(time.Unix(boot, 0), extendedDesktopEnabled(install, data), pnp, topologyFixture("extend"), nil, false,
+			func(string) (desktopSnapshot, error) {
+				t.Fatal("extended desktop changed")
+				return desktopSnapshot{}, nil
 			})
-		if !clonedDesktop(desktop) || calls != 1 || policy.Goal != "mirror-helios-preferred" {
-			t.Fatal("extended Windows desktop was not automatically cloned", desktop, policy)
+		if !extendedDesktop(desktop) || policy.Goal != "extend-preserve-vga" {
+			t.Fatal(desktop, policy)
 		}
 	}
 	os.Remove(filepath.Join(install, "helios-enabled"))
@@ -270,7 +206,7 @@ func TestMirrorOnlyAfterSelectedInstallation(t *testing.T) {
 	os.MkdirAll(receiptDir, 0700)
 	receipt := filepath.Join(receiptDir, "helios-build.json")
 	os.WriteFile(receipt, []byte(`{"revision":"fecffde64fd32399a877b452332681ef0db7993e"}`), 0600)
-	if !mirrorEnabled(install, data) {
+	if !extendedDesktopEnabled(install, data) {
 		t.Fatal("guest update erased the selected Helios policy")
 	}
 	os.WriteFile(state, []byte(`{"status":"driver-restart-required"}`), 0600)
@@ -283,7 +219,7 @@ func TestMirrorOnlyAfterSelectedInstallation(t *testing.T) {
 		t.Fatal("unrelated receipt selected Helios")
 	}
 	os.Remove(receipt)
-	if mirrorEnabled(install, data) {
+	if extendedDesktopEnabled(install, data) {
 		t.Fatal("unselected machine was modified")
 	}
 	if heliosRestartPending(install, data) {
