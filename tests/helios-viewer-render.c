@@ -55,6 +55,20 @@ int main(void) {
  g_assert_cmpint(gdk_gl_context_get_api(gtk_gl_area_get_context(GTK_GL_AREA(area))),==,expected_api);
  g_assert_true(eglGetCurrentDisplay()!=EGL_NO_DISPLAY);
  Viewer v={0};g_assert_true(initialize_gl(&v));
+ FramePacer pacer={0};unsigned consumed=0;
+ for (int64_t now=0;now<10000000;now+=16667) if(frame_pacer_consume(&pacer,now,5,true))consumed++;
+ g_assert_cmpuint(consumed,==,50);
+ g_assert_true(frame_pacer_consume(&pacer,10000001,5,false));
+ g_assert_true(frame_pacer_consume(&pacer,10000002,0,true));
+ g_assert_true(frame_pacer_consume(&pacer,1,5,true)); /* Reset clock. */
+ Viewer paced_root={.window=window,.area=area,.background_fps=5};
+ Viewer paced_console={.parent=&paced_root,.cache_valid=TRUE};paced_root.active=&paced_console;
+ gtk_widget_set_visible(window,FALSE);
+ g_assert_true(consume_update(&paced_console));
+ g_assert_false(consume_update(&paced_console));g_assert_true(paced_console.background_paused);
+ gtk_widget_set_visible(window,TRUE);
+ while(g_main_context_iteration(NULL,FALSE)) {}
+ g_assert_true(consume_update(&paced_console)); /* Foreground ignores the cap. */
  GVariant *caps=property(NULL,NULL,NULL,NULL,NULL,NULL,&v);
  g_assert_cmpuint(g_variant_n_children(caps),==,1);g_variant_ref_sink(caps);g_variant_unref(caps);
  v.prefer_copy=TRUE;caps=property(NULL,NULL,NULL,NULL,NULL,NULL,&v);

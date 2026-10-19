@@ -14,7 +14,7 @@ import subprocess
 import time
 
 VIEWER_FIELDS = ('pid','console','monotonicUs','dmabufFrames','softwareFrames','renderedFrames',
-                 'sourceCopyWallUs','completionWaitUs','copySamples','skippedRedraws')
+                 'sourceCopyWallUs','completionWaitUs','copySamples','skippedRedraws','coalescedUpdates')
 
 
 def viewer_metrics(text):

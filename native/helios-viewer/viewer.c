@@ -17,6 +17,7 @@
 #include <math.h>
 #include <string.h>
 #include <signal.h>
+#include "frame-policy.h"
 
 #define VM "/org/qemu/Display1/VM"
 #define CONSOLE_PREFIX "/org/qemu/Display1/Console_"
@@ -66,6 +67,10 @@ struct Viewer {
  double last_x, last_y;
  guint64 dma_frames, software_frames, rendered_frames;
  guint64 copy_wall_us, completion_wait_us, copy_samples, skipped_redraws;
+ guint64 coalesced_updates;
+ guint background_fps;
+ gboolean background_paused;
+ FramePacer frame_pacer;
  int exit_code;
  /* One frame cache/listener per graphical console; only the root owns the UI.
   * Keeping listeners alive lets a driver handoff happen without restarting QEMU. */
@@ -85,9 +90,10 @@ struct Viewer {
  guint health_watch, health_timer;
 };
 static Viewer *displayed(Viewer *v) {return v->active?v->active:v;}
+static gboolean viewer_visible(Viewer *root);
 static void queue_frame_redraw(Viewer *v) {
  Viewer *root=v->parent?v->parent:v;
- if (displayed(root)==v && gtk_widget_get_mapped(root->area))
+ if (displayed(root)==v && viewer_visible(root))
   gtk_gl_area_queue_render(GTK_GL_AREA(root->area));
  else root->skipped_redraws++;
 }
@@ -100,6 +106,31 @@ static void update_cursor(Viewer *v) {
 static void select_console(Viewer *v);
 static void refresh_scanout(Viewer *v);
 static gboolean request_resize(gpointer data);
+static gboolean viewer_visible(Viewer *root) {
+ if (!gtk_widget_get_mapped(root->area)) return FALSE;
+ GdkSurface *surface=gtk_native_get_surface(GTK_NATIVE(root->window));
+ return !surface || !GDK_IS_TOPLEVEL(surface) || !(gdk_toplevel_get_state(GDK_TOPLEVEL(surface))&GDK_TOPLEVEL_STATE_MINIMIZED);
+}
+static gboolean consume_update(Viewer *v) {
+ Viewer *root=v->parent?v->parent:v;
+ if (!root->background_fps || !v->cache_valid) return TRUE;
+ gboolean background=displayed(root)!=v || !viewer_visible(root);
+ if (frame_pacer_consume(&v->frame_pacer,g_get_monotonic_time(),root->background_fps,background)) return TRUE;
+ v->background_paused=TRUE;v->coalesced_updates++;return FALSE;
+}
+static void resume_visible(Viewer *root) {
+ Viewer *d=displayed(root);
+ if (d->background_paused && viewer_visible(root)) {
+  d->background_paused=FALSE;d->recovery_attempt=0;
+  refresh_scanout(d); /* Reacquire a complete producer-owned baseline. */
+ }
+}
+static void visibility_changed(GObject *object,GParamSpec *property,Viewer *root) {
+ (void)object;(void)property;resume_visible(root);
+}
+static void viewer_mapped(GtkWidget *widget,Viewer *root) {
+ (void)widget;resume_visible(root);
+}
 
 static gboolean external_only(GDBusAuthObserver *observer,const char *mechanism,gpointer data) {
  (void)observer;(void)data;return !strcmp(mechanism,"EXTERNAL");
@@ -488,6 +519,7 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
  gboolean update=!strcmp(name,"Update") || !strcmp(name,"UpdateDMABUF");
  gboolean frame=scanout || update || !strcmp(name,"Disable");
  if (update && v->awaiting_scanout) {
+  if (v->background_paused) resume_visible(v->parent?v->parent:v);
   /* Acknowledge/drop queued updates while QEMU republishes the baseline.
    * No producer buffer is read or displayed in this state. */
   /* Disable can precede a stale update during a Windows mode transition.
@@ -516,9 +548,14 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
   ok=ok && !v->source && !v->source_renderbuffer && region(v,x,y,w,h);
   if (!ok) g_printerr("%s: region=%d,%d %dx%d, stride=%u, pixman=0x%08x, bytes=%zu, scanout=%ux%u\n",
                      name,x,y,w,h,stride,format,(size_t)len,v->width,v->height);
-  if (ok) {
+  if (ok && (initial || consume_update(v))) {
    upload_software(v,x,y,w,h,stride,(format&0x000f0000)==0x00020000,bytes);
    v->flip=TRUE;v->cache_valid=TRUE;v->software_frames++;v->last_dma=FALSE;
+   if (initial) v->background_paused=FALSE;
+  } else if (ok) {
+   /* Partial software deltas cannot be dropped and later applied to a stale
+    * base. Hold the last complete local image until a fresh full scanout. */
+   v->awaiting_scanout=TRUE;
   }
   g_variant_unref(pixels);
  } else if (!strcmp(name,"ScanoutDMABUF")) {
@@ -538,8 +575,11 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
  } else if (!strcmp(name,"UpdateDMABUF")) {
   gint x,y,w,h;g_variant_get(params,"(iiii)",&x,&y,&w,&h);
   g_snprintf(v->frame_problem,sizeof(v->frame_problem),"UpdateDMABUF region=%d,%d %dx%d, scanout=%ux%u, imported=%s",x,y,w,h,v->width,v->height,(v->source || v->source_renderbuffer)?"yes":"no");
-  ok=region(v,x,y,w,h) && copy_dma(v);
-  if (ok) {v->dma_frames++;v->last_dma=TRUE;v->dma_failures=0;}
+  ok=region(v,x,y,w,h);
+  if (ok && consume_update(v)) {
+   ok=copy_dma(v);
+   if (ok) {v->dma_frames++;v->last_dma=TRUE;v->dma_failures=0;}
+  } /* No source read on a coalesced update: ACK releases only unread storage. */
  } else if (!strcmp(name,"Disable")) {
   discard_source(v);v->width=v->height=0;v->cache_valid=FALSE;v->seen_update=FALSE;v->awaiting_scanout=TRUE;release_input(v);
  } else if (!strcmp(name,"MouseSet")) {
@@ -826,6 +866,7 @@ static void select_console(Viewer *v) {
  }
  if (next==v->active) return;
  release_input(v);v->active=next;
+ if (next && next->background_paused) resume_visible(v);
  if (v->resize_timer) {g_source_remove(v->resize_timer);v->resize_timer=0;}
  update_cursor(v);
  if (next) {
@@ -989,7 +1030,15 @@ static gboolean stats(Viewer *v) {
  char *text=g_strdup_printf("%u × %u · zoom: %s · %s · guest resize: %s (%" G_GUINT64_FORMAT " requests sent)",
   d->width,d->height,zoom,d->last_dma?"DMA-BUF / OpenGL":"Software / OpenGL",resize_state,v->resize_requests);
  gtk_label_set_text(GTK_LABEL(v->status),text);g_free(text);
- g_printerr("{\"event\":\"statistics\",\"pid\":%d,\"console\":%u,\"monotonicUs\":%" G_GINT64_FORMAT ",\"dmabufFrames\":%" G_GUINT64_FORMAT ",\"softwareFrames\":%" G_GUINT64_FORMAT ",\"renderedFrames\":%" G_GUINT64_FORMAT ",\"sourceCopyWallUs\":%" G_GUINT64_FORMAT ",\"completionWaitUs\":%" G_GUINT64_FORMAT ",\"copySamples\":%" G_GUINT64_FORMAT ",\"skippedRedraws\":%" G_GUINT64_FORMAT "}\n",getpid(),d->console_id,g_get_monotonic_time(),d->dma_frames,d->software_frames,v->rendered_frames,d->copy_wall_us,d->completion_wait_us,d->copy_samples,v->skipped_redraws);return G_SOURCE_CONTINUE;
+ g_printerr("{\"event\":\"statistics\",\"pid\":%d,\"console\":%u,\"monotonicUs\":%" G_GINT64_FORMAT
+  ",\"dmabufFrames\":%" G_GUINT64_FORMAT ",\"softwareFrames\":%" G_GUINT64_FORMAT
+  ",\"renderedFrames\":%" G_GUINT64_FORMAT ",\"sourceCopyWallUs\":%" G_GUINT64_FORMAT
+  ",\"completionWaitUs\":%" G_GUINT64_FORMAT ",\"copySamples\":%" G_GUINT64_FORMAT
+  ",\"skippedRedraws\":%" G_GUINT64_FORMAT ",\"coalescedUpdates\":%" G_GUINT64_FORMAT "}\n",
+  getpid(),d->console_id,g_get_monotonic_time(),d->dma_frames,d->software_frames,
+  v->rendered_frames,d->copy_wall_us,d->completion_wait_us,d->copy_samples,
+  v->skipped_redraws,d->coalesced_updates);
+ return G_SOURCE_CONTINUE;
 }
 static gboolean smoke_done(Viewer *v) {
  stats(v);
@@ -1141,7 +1190,16 @@ int main(int argc,char **argv) {
   v.health_watch=g_io_add_watch(channel,G_IO_IN|G_IO_HUP|G_IO_ERR|G_IO_NVAL,adapter_control,&v);
   g_io_channel_unref(channel);v.health_timer=g_timeout_add_seconds(2,expire_adapter_health,&v);
  }
+ const char *background=g_getenv("HELIOS_VIEWER_BACKGROUND_FPS");
+ if (background && *background) {
+  char *end=NULL;guint64 fps=g_ascii_strtoull(background,&end,10);
+  if (*end || fps>30) {fatal(&v,"HELIOS_VIEWER_BACKGROUND_FPS must be 0..30");}
+  else v.background_fps=fps;
+ }
  gtk_window_present(GTK_WINDOW(v.window));gtk_widget_grab_focus(v.area);g_timeout_add_seconds(5,(GSourceFunc)stats,&v);
+ g_signal_connect(v.area,"map",G_CALLBACK(viewer_mapped),&v);
+ GdkSurface *window_surface=gtk_native_get_surface(GTK_NATIVE(v.window));
+ if (window_surface) g_signal_connect(window_surface,"notify::state",G_CALLBACK(visibility_changed),&v);
  if (smoke) g_timeout_add_seconds(12,(GSourceFunc)smoke_done,&v);
  if (!v.exit_code) g_main_loop_run(v.loop);
  if (v.resize_timer) g_source_remove(v.resize_timer);
