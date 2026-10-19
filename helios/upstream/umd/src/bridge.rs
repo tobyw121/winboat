@@ -24,7 +24,8 @@
 //! `HeliosDxvkDevice`; Rust holds it via `UniquePtr`.
 //!
 //! Backend Vulkan device = the Gate-5a venus ICD; the shim force-selects it via
-//! `DXVK_FILTER_DEVICE_NAME="Virtio-GPU Venus"` before creating the instance.
+//! `DXVK_FILTER_DEVICE_NAME` from the shared Helios product name before creating
+//! the instance, matching the Windows Venus ICD's branded adapter prefix.
 
 #[cxx::bridge]
 mod ffi {

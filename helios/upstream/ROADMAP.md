@@ -1,5 +1,16 @@
 # ROADMAP — Stage: Correctness and D3D12
 
+## WinBoat downstream: branded Vulkan adapter selection (22.22.294.0)
+
+The D3D11 bridge now obtains its DXVK device-name filter from the same branding
+header as the Windows Venus ICD. It previously forced the obsolete upstream
+`Virtio-GPU Venus` prefix while the ICD exposed `Helios vGPU`, potentially
+filtering out its own adapter before D3D device creation. The cross-component
+regression executes the production environment setter and Mesa name expression;
+it rejects the old filter. User diagnostics recorded DWM device-creation failures,
+but stable desktop output still requires hardware acceptance. The independent
+DMA-BUF allocation-size mismatch remains unresolved.
+
 ## WinBoat downstream: fresh-install Vulkan registration (22.22.293.0)
 
 The installer preserves an empty adapter rollback list as an array and accepts

@@ -29,6 +29,7 @@
 #include "bridge_util.h"
 
 #include "bridge_dxbc.h"
+#include "../../metadata/helios_branding.h"
 
 #include <algorithm>
 #include <array>
@@ -1744,7 +1745,9 @@ std::unique_ptr<HeliosDxvkDevice> helios_dxvk_create_device(
   static std::once_flag s_envOnce;
   std::call_once(s_envOnce, [] {
     // Force selection of the Helios venus device if other ICDs are present.
-    _putenv_s("DXVK_FILTER_DEVICE_NAME", "Virtio-GPU Venus");
+    // Match the Windows Venus ICD's branded device name. The upstream Venus
+    // prefix no longer exists in this package; filtering for it hides our GPU.
+    _putenv_s("DXVK_FILTER_DEVICE_NAME", HELIOS_PRODUCT_NAME);
     // HELIOS_DXVK_KMT_SHARED is no longer forced here: the engine defaults it
     // ON (2026-08-05). Forcing it made a knob that could not be off in any
     // configuration this process ever produced, which hid the fact that the
@@ -1765,7 +1768,7 @@ std::unique_ptr<HeliosDxvkDevice> helios_dxvk_create_device(
 
     char msg[MAX_PATH + 128];
     std::snprintf(msg, sizeof(msg),
-      "dxvk env configured once: DXVK_FILTER_DEVICE_NAME=Virtio-GPU Venus "
+      "dxvk env configured once: DXVK_FILTER_DEVICE_NAME=" HELIOS_PRODUCT_NAME " "
       "kmt-shared=default-on DXVK_SHADER_DUMP_PATH=%s",
       haveDump ? dumpPath : "(unset)");
     umd_log(msg);

@@ -243,6 +243,7 @@ fn main() {
         .define("WIN32_LEAN_AND_MEAN", None)
         .define("_WIN32_WINNT", "0x0A00")
         .define("_CRT_SECURE_NO_WARNINGS", None);
+    println!("cargo:rerun-if-changed=../metadata/helios_branding.h");
     build.compile("helios_dxvk_bridge");
 
     // --- Link the prebuilt DXVK static libraries -----------------------------

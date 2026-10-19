@@ -5,6 +5,10 @@ on:
     branches: [work]
     paths:
       - '.github/workflows/test-helios-game-compatibility.yml'
+      - 'tests/helios-adapter-selection.py'
+      - 'helios/upstream/umd/bridge/dxvk_bridge.cpp'
+      - 'helios/upstream/metadata/helios_branding.h'
+      - 'helios/upstream/ci/patches/mesa/0001-guest-device-features-and-branding.patch'
       - 'tests/helios-clear-view/**'
       - 'tests/helios-game-clearview.cpp'
       - 'helios/upstream/umd/src/forward/transfer.rs'
@@ -21,6 +25,10 @@ on:
       - 'helios/upstream/packaging/windows/Helios-PackageCommon.ps1'
   pull_request:
     paths:
+      - 'tests/helios-adapter-selection.py'
+      - 'helios/upstream/umd/bridge/dxvk_bridge.cpp'
+      - 'helios/upstream/metadata/helios_branding.h'
+      - 'helios/upstream/ci/patches/mesa/0001-guest-device-features-and-branding.patch'
       - 'tests/helios-clear-view/**'
       - 'tests/helios-game-clearview.cpp'
       - 'helios/upstream/umd/src/forward/transfer.rs'
@@ -38,6 +46,13 @@ on:
 permissions:
   contents: read
 jobs:
+  adapter-selection:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python3 tests/helios-adapter-selection.py
   clear-view:
     runs-on: windows-2022
     timeout-minutes: 10

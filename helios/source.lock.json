@@ -60,7 +60,7 @@
     "INVESTIGATIONS/exit8-exclusive-fullscreen-rgb10.md": "9c308aa2ff35670d5739f085e2d690175cc8be30fbc5f7ad8f6e259ca3f0979f",
     "NTOSEYE.md": "555acd226f7298aea224a372070e783289a64615663913d82393cccdff612558",
     "README.md": "2119fe6213c753e6115886169c2a51acc4349260a03254729e430c6795e3dcb3",
-    "ROADMAP.md": "e7e399254d1067c1b9668536708bac9bb0275584f906d1268ca53be3ed44ed9f",
+    "ROADMAP.md": "1af8e62e284a3e02e337698ba5fe440e5500df90a62c9d19d0ac688e440eb927",
     "TOOLCHAIN.md": "6c1d99c8ebffb025cb8e581fcba3dabd70d01f353c0c28d251c0f9923d45b7d9",
     "TRANSPORT.md": "7cbb4f91b03d5e9125b8740444aa15e1d7803b629d0a248d7bbd3f9b56259362",
     "WINDOWS_CI_PACKAGE.md": "30df88e236add10db73c361c1e16987d1e16958e8dc58e247136f9781201bfe2",
@@ -239,7 +239,7 @@
     "kmd_render/Cargo.toml": "02c97c032e886b6ade362d676526657e76741d03e4b387725994c64afe2b308b",
     "kmd_render/README.md": "4575286062689db2debd86ff0af71a0cef864dc8f9129114ad6abc298e3c8824",
     "kmd_render/build.rs": "f13dad099657100ed284c34a5e417718bb1c1b507bc2df7cbc7f3fa03b43b618",
-    "kmd_render/driver-version.env": "bc6f7ed321fa7ae3b1ad3a1dafbbfeb56080e64a0e4534002dee822ef53a5d72",
+    "kmd_render/driver-version.env": "935cd6af662f0cf78b174d23393ce7ebd10408820550bb55011ba35386669a79",
     "kmd_render/helios_kmd_render.inx": "96e329ad2cbe0e4723cdc54b5f4c136bec6ca949d694fc1d21fdd9ef617e65b4",
     "kmd_render/rust-toolchain.toml": "ac257e2301dcb6cea3bf0bbe4e7ffe4c586b58a9916b1597020455ee27285764",
     "kmd_render/src/adapter/backing.rs": "177b2651b690dfe87bf270ca4685b056d8ef26f74c87c2438698c4081630b73b",
@@ -569,13 +569,13 @@
     "umd/bridge/bridge_dxbc.h": "7ac577330a0f53d866041d5ef8ca22e7f7b09a22eeab439f395dce4d0d3b6c2f",
     "umd/bridge/bridge_icd_exports.cpp": "9f9fcee8e41a2edb8244eee4c32ec3915b4610bb597819a093aef30e0f712965",
     "umd/bridge/bridge_icd_exports.h": "fa993c4fce07766dc09e9051b6fc8d0ac9e68f6971a23470ece7b5353414dda6",
-    "umd/bridge/dxvk_bridge.cpp": "d72802143d06d5a8422fd51dab04366751c97fae15126b62699b58473a18585d",
+    "umd/bridge/dxvk_bridge.cpp": "b85d84bf542197274a116888660d9d3e48a02d55642b3082e8f3a2d50a5dbc1f",
     "umd/bridge/dxvk_bridge.h": "7db70045e9a55f45c1d74edf182358b205ffe060e7ce363264e5e945b8625627",
     "umd/build-support/dxvk_c_compat.h": "affc48258a9d1437396e1d95ea872585bea80d043a9347a0306f09a38518d9b2",
     "umd/build-support/typed_tables.rs": "66a96356829c65705432a00ff96d65112a55477dd1253a57e2a1ca8b9992e521",
-    "umd/build.rs": "545c571b9ccf1683f0536a7cf7419436dded64188adf95de980f505b1a4499c6",
+    "umd/build.rs": "b28dde791e780b2c59ea08a4c86132a4abf9ce99107113ae79408e109fde87e5",
     "umd/src/adapter.rs": "149f1963ea3888c1dedc14478d3e070e564945ae430bec9a1b7ae4646fd340be",
-    "umd/src/bridge.rs": "ea9edc072904540b526f9642593ee3fae502e77c9cd9f446450e10c9d5d7b1ca",
+    "umd/src/bridge.rs": "b78778f862058845d99a5affb654e0fe30a463ae08cc81d5117bc8a324d560cc",
     "umd/src/caps.rs": "bbee18410a1a1b76ed27735ad1f85508b7534c7a7b5891134fe50b00ee1e60d5",
     "umd/src/ddi.rs": "9ab6d0167b76a725f31ae664598ab64fbe563795bfbd3ac0f8c3cd0c784c9897",
     "umd/src/device_funcs.rs": "f143b9cc1f8efb7eb022266287a788e629cea49c2a968a66c91da9522dbade29",
@@ -679,7 +679,10 @@
       "packaging/windows/Install-Helios.ps1": "4a1d4151bf66d070cc8b4faf61f8be496770ca6bacf854e26d6aadf68bf2c8c3",
       "packaging/windows/Uninstall-Helios.ps1": "2e92f523770bbe2e4c2e56bd9ef6eada4ab9ba0ab6dbeefcad330da32c2d179d",
       "packaging/windows/Verify-Helios.ps1": "7de90520f2961c708adb6213fa3ad26dcb8a9c1399c3b746f686de14f539718c",
-      "CONFORMANCE.md": "f7e8d5b686c917c062486b8e31f92bdb4d22fe1873d75e7f39aa17ef31787294"
+      "CONFORMANCE.md": "f7e8d5b686c917c062486b8e31f92bdb4d22fe1873d75e7f39aa17ef31787294",
+      "umd/bridge/dxvk_bridge.cpp": "d72802143d06d5a8422fd51dab04366751c97fae15126b62699b58473a18585d",
+      "umd/build.rs": "545c571b9ccf1683f0536a7cf7419436dded64188adf95de980f505b1a4499c6",
+      "umd/src/bridge.rs": "ea9edc072904540b526f9642593ee3fae502e77c9cd9f446450e10c9d5d7b1ca"
     },
     "features": [
       "d3d11-uav-clear-view",
@@ -691,7 +694,8 @@
       "d3d11-compute-depth-msaa-readback",
       "adapter-vulkan-registration",
       "vulkan-feature-roundtrip-probe",
-      "Accept empty and legacy-null adapter Vulkan rollback state during first installation"
+      "Accept empty and legacy-null adapter Vulkan rollback state during first installation",
+      "Match D3D11 DXVK adapter selection to the shared Windows Venus product branding (22.22.294.0)."
     ],
     "addedFiles": [
       "kmd_logic/src/display_modes.rs",
