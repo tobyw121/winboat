@@ -106,4 +106,11 @@ func TestDiagnosticsReuseSuccessfulCollectorOnly(t *testing.T) {
 	if calls != 2 {
 		t.Fatalf("collector started %d times", calls)
 	}
+	graphicsDiagnosticMutex.Lock()
+	w := httptest.NewRecorder()
+	h(w, httptest.NewRequest("GET", "/graphics/diagnostics", nil))
+	graphicsDiagnosticMutex.Unlock()
+	if w.Code != 200 || calls != 2 {
+		t.Fatal("cached reads must not launch or wait for a PowerShell collector", w.Code, calls)
+	}
 }

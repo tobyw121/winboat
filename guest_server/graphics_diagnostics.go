@@ -17,19 +17,22 @@ func (m *graphicsMonitor) diagnostics(collect func(context.Context) ([]byte, err
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		if !graphicsDiagnosticMutex.TryLock() {
+		if !cacheMu.TryLock() {
 			http.Error(w, `{"error":"Graphics diagnostics already active"}`, http.StatusConflict)
 			return
 		}
-		defer graphicsDiagnosticMutex.Unlock()
-		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-		defer cancel()
-		cacheMu.Lock()
 		defer cacheMu.Unlock()
 		data := cached
 		var err error
 		refresh := data == nil || time.Since(collected) >= 5*time.Second
 		if refresh {
+			if !graphicsDiagnosticMutex.TryLock() {
+				http.Error(w, `{"error":"Graphics diagnostics already active"}`, http.StatusConflict)
+				return
+			}
+			defer graphicsDiagnosticMutex.Unlock()
+			ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+			defer cancel()
 			data, err = collect(ctx)
 		}
 		var driver map[string]interface{}
