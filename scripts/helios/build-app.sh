@@ -31,6 +31,7 @@ cp resources/helios/HeliosSetup.exe resources/helios/helios-build.json /out/
 cp docs/build-helios-local.md /out/BUILD-INSTRUCTIONS.md
 cp docs/helios-local-display.md /out/LOCAL-DISPLAY.md
 cp docs/helios-performance.md /out/helios-performance.md
+cp docs/helios-control-and-validation.md /out/helios-control-and-validation.md
 cp docs/shared-folders.md /out/SHARED-FOLDERS.md
 cp docs/vm-hardware-profile.md /out/vm-hardware-profile.md
 cp docs/atlas-installation.md /out/atlas-installation.md

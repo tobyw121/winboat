@@ -1,5 +1,8 @@
 # Helios: QEMU-Transport und Performance vergleichen
 
+Native Pixel-/MSAA-Prüfungen, A/B/A/B-Auswertung und Windows-Treibersteuerung:
+[helios-control-and-validation.md](helios-control-and-validation.md).
+
 Diese Änderungen betreffen QEMU, den nativen Viewer und den WinBoat-Gastdienst.
 Der Standardinstaller bleibt **22.22.291.0**. Die mitgelieferten `.291`-, `.294`-
 und `.296`-EXE-Dateien wurden dabei nicht verändert. Ein behobener Vulkan-/D3D-
@@ -28,7 +31,7 @@ Den Gastdienst einer laufenden VM unabhängig davon aktualisieren:
 python3 scripts/atlas/diagnose-vm.py --update-guest
 ```
 
-Das aktuelle Grafikprotokoll lautet `helios-watchdog-v11`. Eine alte AppImage
+Das aktuelle Grafikprotokoll lautet `helios-watchdog-v12`. Eine alte AppImage
 kann beim nächsten Start wieder ihren älteren Gastdienst einspielen.
 Details zum Build stehen in [build-helios-local.md](build-helios-local.md).
 

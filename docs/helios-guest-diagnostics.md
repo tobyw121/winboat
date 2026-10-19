@@ -1,5 +1,8 @@
 # Erweiterte Anzeige und Grafikdiagnose über die Guest API
 
+Die neue Windows-Steuerung und den Abnahme-/Rollback-Ablauf beschreibt
+[helios-control-and-validation.md](helios-control-and-validation.md).
+
 QEMU-/Viewer-Optimierungen, Diagnosecache und kontrollierte CPU-/I/O-/Speicher-
 Vergleiche beschreibt [helios-performance.md](helios-performance.md).
 
