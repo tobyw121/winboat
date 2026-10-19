@@ -26,6 +26,10 @@ try {
     $parsed=Read-HeliosGpuJournal $journal
     if ($parsed.events.Count -ne 16 -or $parsed.events[0].seq -ne '15' -or
         $parsed.firstMismatch.format -ne '28' -or ($parsed | ConvertTo-Json -Depth 8) -match 'secret|987') {throw 'Journal generation/field bounds failed'}
+    [IO.File]::WriteAllText($temporary,$prefix+"UMD module: secret-device-path`n"+$journal+$prefix+"UMD module: secret-enumeration-path`n")
+    $summary=Read-HeliosUmdSummary $temporary
+    if ($null -eq $summary.journal -or $summary.journal.latestModuleBoundaryMatches -ne $false -or
+        ($summary | ConvertTo-Json -Depth 9) -match 'secret') {throw 'Adapter-only enumeration erased or misattributed the completed journal'}
     [IO.File]::WriteAllText($temporary, ('x' * 16000) + "`npid=12 VkPhysicalDeviceVulkan12Features.timelineSemaphore not supported`npid=13 PASSWORD=secret not supported`n")
     $failures = @(Read-HeliosFeatureFailures $temporary)
     if ($failures.Count -ne 1 -or $failures[0].processId -ne 12 -or $failures[0].feature -ne 'VkPhysicalDeviceVulkan12Features.timelineSemaphore') { throw 'Bounded feature parsing failed' }

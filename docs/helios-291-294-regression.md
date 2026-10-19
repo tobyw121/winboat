@@ -13,6 +13,11 @@ The leading regression candidate is the D3D11 capability contract changed in
 clean .294 comparison. Keep .291 as the default; do not describe .294 or .295
 as a verified fix for this symptom.
 
+The [.296 diagnostic implementation](helios-diagnostic-build.md) now records
+bounded per-device capability/lifecycle evidence, preserves shader HRESULTs and
+adds an outer-runtime acceptance probe with child-process profile isolation.
+It does not establish that the .294 rendering regression is fixed.
+
 ## Scope and actual packages
 
 Reviewed the installer/registrations, D3D11 and D3D12 UMDs, Mesa/Venus patch,

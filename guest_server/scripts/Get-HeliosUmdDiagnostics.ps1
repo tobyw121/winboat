@@ -32,7 +32,16 @@ function Read-HeliosUmdSummary([string]$Path) {
         # generations if the latest module boundary is inside this tail.
         $boundaries=[regex]::Matches($text,'(?m)^\[pid=\d+ tid=\d+\] UMD module:')
         $boundary=$boundaries.Count -gt 0
+        # Preserve the latest completed device even if a later adapter-only
+        # enumeration appended another module marker without creating a device.
+        $journal=Read-HeliosGpuJournal $text
         if ($boundary) {$text=$text.Substring($boundaries[$boundaries.Count-1].Index)}
+        if ($null -ne $journal) {
+            $journal.latestModuleBoundaryMatches=$null
+            if ($boundary) {
+                $journal.latestModuleBoundaryMatches=($text -match ('GPU-DIAG device='+$journal.device+' birth='+$journal.birth+' '))
+            }
+        }
         $patterns=[ordered]@{
             'adapter-open'='(?m)^\[pid=\d+ tid=\d+\] open_adapter_common interface='
             'device-ready'='(?m)^\[pid=\d+ tid=\d+\]   CreateDevice -> S_OK \(DXVK device \+ D3D11 funcs table installed\)\r?$'
@@ -51,7 +60,7 @@ function Read-HeliosUmdSummary([string]$Path) {
         $codes=@([regex]::Matches($text,'\b(?:VK_ERROR_[A-Z0-9_]{1,64}|(?:hr|HRESULT)=0x[0-9a-fA-F]{8})\b') |
             ForEach-Object {$_.Value} | Sort-Object -Unique | Select-Object -First 16)
         return [ordered]@{tailBytes=$count;tailTruncated=($start -gt 0);moduleBoundaryFound=$boundary;signals=$signals;codes=$codes;
-            deviceReadyMeaning='UMD callback only; outer runtime acceptance unknown';journal=(Read-HeliosGpuJournal $text)}
+            deviceReadyMeaning='UMD callback only; outer runtime acceptance unknown';journal=$journal}
     } finally {$stream.Dispose()}
 }
 function Get-HeliosUmdDiagnostics([uint32[]]$PreferredProcessIds=@()) {
@@ -59,7 +68,8 @@ function Get-HeliosUmdDiagnostics([uint32[]]$PreferredProcessIds=@()) {
     if (-not (Test-Path -LiteralPath $root -PathType Container)) {return @()}
     # File names are fixed by the Helios UMD, not supplied by an API caller.
     $files=@(Get-ChildItem -LiteralPath $root -Filter 'umd*.log' -File |
-        Where-Object {$_.Name -match '^umd(?:12)?-\d{1,10}\.log$' -and -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint)} |
+        Where-Object {$_.Name -match '^umd(?:12)?-\d{1,10}\.log$' -and
+            [uint64]($_.BaseName -replace '^umd(?:12)?-','') -le [uint32]::MaxValue -and -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint)} |
         Sort-Object @{Expression={if ($PreferredProcessIds -contains [uint32]($_.BaseName -replace '^umd(?:12)?-','')) {0} else {1}}},
             @{Expression='LastWriteTimeUtc';Descending=$true} | Select-Object -First 8)
     return @(foreach($file in $files) {
