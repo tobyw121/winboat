@@ -18,6 +18,74 @@ bounded per-device capability/lifecycle evidence, preserves shader HRESULTs and
 adds an outer-runtime acceptance probe with child-process profile isolation.
 It does not establish that the .294 rendering regression is fixed.
 
+## Executable source comparison, 19 October 2026
+
+A new host-side reproducer now compiles the actual historical/current Rust
+format and quality handlers, the actual feature-profile definitions, and the
+shared format table. Only COM backend answers, handle lookup and logging are
+fixtures; it does not run a GPU or Microsoft's runtime.
+
+```bash
+python3 scripts/helios/audit-d3d11-contract.py --revisions f0a662f 90bb311 4c08daa working-tree
+```
+
+Requires `rustc` on PATH (or `--rustc /path/to/rustc`) and the selected Git
+objects locally. The audit performs no installation, registry or VM changes.
+
+Under the same controlled backend answers, the output is:
+
+| Case | .291 (`f0a662f`) | First changed query (`90bb311`) / .294 / .296 |
+| --- | --- | --- |
+| RGBA8, backend supports 4x | MSAA advertised, quality 1 | MSAA advertised, quality 1 |
+| RGBA8, backend does not support 4x | MSAA advertised, **table quality 1** | MSAA advertised, **quality 0** |
+| RGB32 float, sampled format without backend render/MSAA support | Forced render/MSAA caps, **table quality 1** | Forced render/MSAA caps, **quality 0** |
+| Tiled-resource 4x query rejected by backend | Tier 2 advertised, **flags ignored, quality 1** | Tier 2 advertised, **quality 0** |
+| FL10 single-sample control | No high MSAA bits, quality 0 | No high MSAA bits, quality 0 |
+
+This reproduces a source-level integration defect introduced by `90bb311`:
+truthful per-count queries were combined with unchanged optimistic format/tier
+advertisements. The old positive answer establishes internal consistency only;
+it does not establish that .291 could allocate/render every advertised format.
+The supported-format and FL10 controls distinguish the regression from a broken
+fixture or an always-zero query. The exact failing format/count on the user's
+RTX 2070 still requires runtime evidence; fixture results cannot supply that.
+
+The pinned DXVK source strengthens the specific RGB32 lead:
+[`dxgi_format.cpp`](https://github.com/winboat-org/dxvk/blob/6948271578bf2aa6481389a07b5070c95f911952/src/dxgi/dxgi_format.cpp)
+maps `R32G32B32_FLOAT` directly to `VK_FORMAT_R32G32B32_SFLOAT`; its constructor
+only remaps depth/A8 cases, with no RGB32-to-RGBA32 emulation. Its
+[`CheckMultisampleQualityLevels1`](https://github.com/winboat-org/dxvk/blob/6948271578bf2aa6481389a07b5070c95f911952/src/d3d11/d3d11_device.cpp#L1730)
+queries OPTIMAL sampled-image limits and explicitly rejects nonzero Flags.
+The repository's **different GPU** reference (RTX PRO 6000 Blackwell) reports no
+OPTIMAL features for this RGB32 format. That reference supports feasibility of
+the failure scenario; it is not a measurement of the user's RTX 2070.
+
+Other investigated paths:
+
+- Rechecked the extracted .291/.294 files against their package-manifest hashes:
+  KMD/D3D12 executable sections remain identical; D3D11 differs.
+- .292/.293 also had an independent branded-name/filter mismatch, repaired in
+  .294. The supplied .294 log passes adapter selection and internal creation,
+  so that earlier defect does not explain its subsequent immediate teardown.
+- Re-executed Mesa feature-chain allocation/filtering, input immutability,
+  timeline and OOM controls, plus generated feature-rejection logging: passed.
+  This does not establish full Vulkan rendering correctness.
+- Normal host launch changes up to .294 only add the explicit rescue branch;
+  the QEMU readback patch was unchanged. The shared size/layout guards remain
+  necessary and must not be bypassed. The later DRM-device selection fix is
+  independent of the .291-to-.294 D3D11 query change.
+- The topology-controller algorithm is unchanged from the .291 source baseline.
+  Watchdog activity may amplify visible disruption, but no new topology rule
+  was found that explains the clean driver-version comparison.
+
+A corrective driver must change format support, sample support, tiled-resource
+advertisement and selected feature level together. Merely restoring invented
+quality counts hides unsupported operations; merely clearing MSAA bits while
+still promising an incompatible FL11 contract can also be rejected. If a
+required format lacks genuine backend support, implement the missing path or
+select a feature contract the complete backend can satisfy. Keep Mesa/QEMU
+changes out of that causal test and retain the verified .291 default.
+
 ## Scope and actual packages
 
 Reviewed the installer/registrations, D3D11 and D3D12 UMDs, Mesa/Venus patch,
