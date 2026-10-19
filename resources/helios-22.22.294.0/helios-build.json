@@ -5,5 +5,7 @@
   "winboatCommit": "4c08daa4f6ad388281d8f4052518e6aec6d47c99",
   "sourceSnapshot": "d82ce565ac792eb48da5e59f2a82a12ff221851d",
   "sourceLockSha256": "2cffdace658a8bc7db9ec297bba907792dae0d0a1cca7a35fdc2bf08c0b99ae8",
-  "workflow": ".github/workflows/build-helios-windows.yml"
+  "workflow": ".github/workflows/build-helios-windows.yml",
+  "manifestSha256": "c7db7d0fa45378c02e1302c617bd0a26d71d700a43799e4f1bdfabaae6e408e4",
+  "driverVersion": "22.22.294.0"
 }

@@ -577,7 +577,7 @@
     "umd/bridge/dxvk_bridge.h": "5618db6d69c873f55d78a01f69210d97034c49f8be14c107b5bf76797297e476",
     "umd/build-support/dxvk_c_compat.h": "affc48258a9d1437396e1d95ea872585bea80d043a9347a0306f09a38518d9b2",
     "umd/build-support/typed_tables.rs": "66a96356829c65705432a00ff96d65112a55477dd1253a57e2a1ca8b9992e521",
-    "umd/build.rs": "b28dde791e780b2c59ea08a4c86132a4abf9ce99107113ae79408e109fde87e5",
+    "umd/build.rs": "ebc4d289664c67aa09f87aeaac8ab907f7670608c2d238d8af0f0f9a47d5af8e",
     "umd/src/adapter.rs": "a78412e54a87676cc673b39037bb36e4d06c65d17174122fc54f82f88cc0da41",
     "umd/src/bridge.rs": "80c11b531f1fe9968234ccd2a5d08a0cb882386d0404ae14ec8284637e61fba9",
     "umd/src/caps.rs": "bbee18410a1a1b76ed27735ad1f85508b7534c7a7b5891134fe50b00ee1e60d5",

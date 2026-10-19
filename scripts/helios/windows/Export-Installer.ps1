@@ -38,6 +38,9 @@ for ($index = 0; $index -lt 32; $index++) {
     if ($payloadHash[$index] -ne $bytes[$footer + 24 + $index]) { throw 'Installer payload checksum mismatch.' }
 }
 Copy-Item -LiteralPath $installer -Destination (Join-Path $PackageRoot 'HeliosSetup.exe') -Force
+$identityText = & python (Join-Path $RepoRoot 'scripts/helios/installer-identity.py') $installer
+if ($LASTEXITCODE -ne 0) { throw 'Embedded installer manifest inspection failed.' }
+$identity = $identityText | ConvertFrom-Json
 $receipt = [ordered]@{
     revision = $stack.guestRevision
     sha256 = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -46,6 +49,8 @@ $receipt = [ordered]@{
     sourceSnapshot = $source.revision
     sourceLockSha256 = (Get-FileHash -LiteralPath $lockFile -Algorithm SHA256).Hash.ToLowerInvariant()
     workflow = '.github/workflows/build-helios-windows.yml'
+    manifestSha256 = $identity.manifestSha256
+    driverVersion = $identity.driverVersion
 }
 $receipt | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $PackageRoot 'helios-build.json') -Encoding ascii
 Write-Host "Complete WinBoat-built installer exported from $WinBoatCommit"

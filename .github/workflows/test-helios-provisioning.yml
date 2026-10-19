@@ -50,6 +50,9 @@ on:
       - 'guest_server/scripts/Start-AtlasHelios.ps1'
       - 'tests/display-adapters.test.ps1'
       - 'tests/helios-provisioning.test.ps1'
+      - 'scripts/helios/installer-identity.py'
+      - 'scripts/helios/windows/Export-Installer.ps1'
+      - 'tests/helios-installer-identity.py'
       - 'tests/atlas-helios-handoff.test.ps1'
   pull_request:
     paths:
@@ -98,6 +101,9 @@ on:
       - 'guest_server/scripts/Start-AtlasHelios.ps1'
       - 'tests/display-adapters.test.ps1'
       - 'tests/helios-provisioning.test.ps1'
+      - 'scripts/helios/installer-identity.py'
+      - 'scripts/helios/windows/Export-Installer.ps1'
+      - 'tests/helios-installer-identity.py'
       - 'tests/atlas-helios-handoff.test.ps1'
 permissions:
   contents: read
@@ -122,6 +128,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - run: python3 tests/helios-installer-identity.py
       - name: Check VGA-only rescue arguments and preserved storage configuration
         run: python3 tests/helios-rescue.test.py
       - name: Check isolated historical test installer export

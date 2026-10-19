@@ -293,6 +293,7 @@ fn main() {
         "../umd_common/bridge/bridge_util.h",
         "bridge/bridge_dxbc.cpp",
         "bridge/bridge_dxbc.h",
+        "bridge/adapter_selection.h",
         "bridge/bridge_icd_exports.cpp",
         "bridge/bridge_icd_exports.h",
         "bridge/dxvk_bridge.cpp",

@@ -105,6 +105,30 @@ try {
     try {Assert-HeliosInstalled} catch {if($_.Exception.Message -notmatch 'verification failed'){throw};$blocked=$true}
     if(-not $blocked){throw 'Incomplete API/runtime registration completed provisioning'}
     $global:heliosPackageValid=$true
+    # Matching upstream revisions must not accept a different selected payload.
+    $receiptPath=Join-Path $root 'helios-build.json'
+    $legacyReceipt=Get-Content -LiteralPath $receiptPath -Raw
+    @{source=@{helios=$expectedRevision};version='22.22.291.0'} | ConvertTo-Json | Set-Content (Join-Path $installed 'manifest.json')
+    $strictReceipt=$legacyReceipt | ConvertFrom-Json
+    $strictReceipt | Add-Member NoteProperty manifestSha256 (Get-WinBoatFileSha256 (Join-Path $installed 'manifest.json'))
+    $strictReceipt | Add-Member NoteProperty driverVersion '22.22.291.0'
+    $strictReceipt | ConvertTo-Json | Set-Content $receiptPath
+    '{"version":"22.22.291.0"}' | Set-Content (Join-Path $installed 'install-state.json')
+    Assert-HeliosInstalled
+    '{"version":"22.22.294.0"}' | Set-Content (Join-Path $installed 'install-state.json')
+    $blocked=$false
+    try {Assert-HeliosInstalled} catch {if($_.Exception.Message -notmatch 'selected package'){throw};$blocked=$true}
+    if(-not $blocked){throw 'Stale driver state was accepted with the correct manifest'}
+    '{"version":"22.22.291.0"}' | Set-Content (Join-Path $installed 'install-state.json')
+    @{source=@{helios=$expectedRevision};version='22.22.294.0'} | ConvertTo-Json | Set-Content (Join-Path $installed 'manifest.json')
+    $blocked=$false
+    try {Assert-HeliosInstalled} catch {if($_.Exception.Message -notmatch 'selected package'){throw};$blocked=$true}
+    if(-not $blocked){throw 'Different driver with the same upstream revision completed installation'}
+    @{source=@{helios=$expectedRevision};version='22.22.291.0';unexpected='changed'} | ConvertTo-Json | Set-Content (Join-Path $installed 'manifest.json')
+    $blocked=$false
+    try {Assert-HeliosInstalled} catch {if($_.Exception.Message -notmatch 'selected package'){throw};$blocked=$true}
+    if(-not $blocked){throw 'Same version with a different manifest was accepted'}
+    $legacyReceipt | Set-Content $receiptPath
     Invoke-HeliosProvisioning '' $true
     if($global:heliosRemoved -ne 1 -or $global:heliosRestarts -ne 2 -or $global:heliosStarts.Count -ne ($starts+1) -or $global:heliosEnabled -ne 1){throw 'An active installer was duplicated or completion did not require the final boot.'}
     $savedGuard=Get-Content -LiteralPath $guardPath -Raw

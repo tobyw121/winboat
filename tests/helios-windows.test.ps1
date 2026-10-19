@@ -28,14 +28,24 @@ try {
     $nested = Join-Path $package 'fixture'
     New-Item -ItemType Directory -Path $nested | Out-Null
     $installer = Join-Path $nested 'HeliosSetup.exe'
-    [byte[]]$payload = [Text.Encoding]::ASCII.GetBytes('header-fixture-container')
+    # A real payload container around a tiny JSON manifest; PE is still a fixture.
+    $fixtureCode = @'
+import base64,lzma,struct
+name=b'manifest.json'; data=b'{"version":"22.22.291.0"}'
+header=struct.pack('<IH',1,len(name))+name+struct.pack('<Q',len(data))
+print(base64.b64encode(header+lzma.compress(data)).decode())
+'@
+    $fixturePath=Join-Path $temporary 'payload-fixture.py'
+    Set-Content -LiteralPath $fixturePath -Value $fixtureCode -Encoding ascii
+    [byte[]]$payload = [Convert]::FromBase64String((& python $fixturePath))
+    if ($LASTEXITCODE -ne 0) { throw 'Payload fixture generation failed.' }
     [byte[]]$bytes = New-Object byte[] (128 + $payload.Length + 64)
     $bytes[0] = 77; $bytes[1] = 90
     $payload.CopyTo($bytes, 128)
     $footer = $bytes.Length - 64
     [BitConverter]::GetBytes([uint64]128).CopyTo($bytes, $footer)
     [BitConverter]::GetBytes([uint64]$payload.Length).CopyTo($bytes, $footer + 8)
-    [BitConverter]::GetBytes([uint64]6).CopyTo($bytes, $footer + 16)
+    [BitConverter]::GetBytes([uint64]27).CopyTo($bytes, $footer + 16)
     $hasher = [Security.Cryptography.SHA256]::Create()
     try { $hasher.ComputeHash($payload).CopyTo($bytes, $footer + 24) } finally { $hasher.Dispose() }
     [Text.Encoding]::ASCII.GetBytes('HLIOSET2').CopyTo($bytes, $footer + 56)
@@ -44,7 +54,8 @@ try {
     $receipt = Get-Content (Join-Path $package 'helios-build.json') -Raw | ConvertFrom-Json
     $lock = Get-Content (Join-Path $RepoRoot 'helios/stack.lock.json') -Raw | ConvertFrom-Json
     if ($receipt.revision -ne $lock.guestRevision -or $receipt.winboatCommit -ne ('a' * 40) -or
-        $receipt.sha256 -ne (Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant()) {
+        $receipt.sha256 -ne (Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant() -or
+        $receipt.driverVersion -ne '22.22.291.0' -or $receipt.manifestSha256 -notmatch '^[a-f0-9]{64}$') {
         throw 'Exported receipt lost source identity or installer integrity.'
     }
     $bytes[130] = $bytes[130] -bxor 1

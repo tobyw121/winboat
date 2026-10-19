@@ -66,6 +66,25 @@ function Assert-HeliosInstalled {
     }
     $manifest = Get-Content -LiteralPath (Join-Path $env:ProgramData 'Helios\manifest.json') -Raw | ConvertFrom-Json
     if ($manifest.source.helios -ne $expectedRevision) {throw 'Installed Helios source identity does not match the selected stack.'}
+    $receiptPath=Join-Path $root 'helios-build.json'
+    if (-not (Test-Path -LiteralPath $receiptPath -PathType Leaf)) {throw 'Selected Helios package receipt is missing.'}
+    $receipt=Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
+    if ($receipt.revision -ne $expectedRevision) {throw 'Selected Helios receipt belongs to a different stack.'}
+    if ($receipt.PSObject.Properties['manifestSha256']) {
+        $installedState=Get-Content -LiteralPath (Join-Path $env:ProgramData 'Helios\install-state.json') -Raw | ConvertFrom-Json
+        if ([string]$receipt.manifestSha256 -notmatch '^[a-fA-F0-9]{64}$' -or
+            -not $receipt.PSObject.Properties['driverVersion'] -or
+            -not $installedState.PSObject.Properties['version'] -or
+            [string]$installedState.version -ne [string]$receipt.driverVersion -or
+            [string]$manifest.version -ne [string]$receipt.driverVersion -or
+            (Get-WinBoatFileSha256 (Join-Path $env:ProgramData 'Helios\manifest.json')) -ne $receipt.manifestSha256) {
+            throw 'Installed Helios manifest does not match the selected package.'
+        }
+    } else {
+        # Historical receipts predate embedded-manifest identity. Preserve their
+        # read-only verifier fallback; never reinstall or reboot to add metadata.
+        Write-Warning 'Legacy Helios receipt: verifying installed integrity without exact selected-package identity.'
+    }
     # A state file is written before registry setup finishes. It is not a
     # completion receipt: re-run the installed package's full read-only verifier.
     $verify=Join-Path $env:ProgramData 'Helios\Verify-Helios.ps1'
@@ -90,7 +109,7 @@ function Complete-HeliosRestart([DateTime]$Boot) {
         $driver=Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\helios_kmd_render' -ErrorAction Stop
         if ($devices.Count -ne 1 -or $driver.DspH -ne 1) {return $false}
     } catch {return $false} # Missing/unknown evidence stays with the installer.
-    Write-HeliosProgress 'finished' 'Helios restart verified: selected driver and display function are running in the new Windows boot.'
+    Write-HeliosProgress 'finished' 'Helios installation and restart verified. Rendered-frame acceptance is separate; use graphics diagnostics if the desktop is unstable.'
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
     return $true
 }
