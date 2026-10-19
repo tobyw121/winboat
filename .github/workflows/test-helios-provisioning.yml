@@ -15,6 +15,9 @@ on:
       - 'scripts/helios/rescue-graphics.py'
       - 'scripts/helios/Clear-HeliosDriverStore.ps1'
       - 'tests/helios-driverstore.test.ps1'
+      - 'helios/upstream/installer/**'
+      - 'scripts/helios/prepare-test-installer.py'
+      - 'tests/helios-test-installer.test.py'
       - 'helios/host/display.sh'
       - 'helios/host/qemu.sh'
       - 'guest_server/graphics_desktop*'
@@ -53,6 +56,9 @@ on:
       - 'scripts/helios/rescue-graphics.py'
       - 'scripts/helios/Clear-HeliosDriverStore.ps1'
       - 'tests/helios-driverstore.test.ps1'
+      - 'helios/upstream/installer/**'
+      - 'scripts/helios/prepare-test-installer.py'
+      - 'tests/helios-test-installer.test.py'
       - 'helios/host/display.sh'
       - 'helios/host/qemu.sh'
       - 'guest_server/graphics_desktop*'
@@ -82,6 +88,20 @@ on:
 permissions:
   contents: read
 jobs:
+  installer-maintenance:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test actual installer maintenance routing without changing drivers
+        shell: pwsh
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/helios-installer-tests
+        run: |
+          cargo test --locked --manifest-path helios/upstream/installer/Cargo.toml
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
   rescue-host:
     runs-on: ubuntu-24.04
     steps:
@@ -90,6 +110,8 @@ jobs:
           persist-credentials: false
       - name: Check VGA-only rescue arguments and preserved storage configuration
         run: python3 tests/helios-rescue.test.py
+      - name: Check isolated historical test installer export
+        run: python3 tests/helios-test-installer.test.py
   provisioning:
     runs-on: windows-2022
     timeout-minutes: 10

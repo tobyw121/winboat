@@ -78,6 +78,22 @@ bleibt eine separate ausdrückliche Aktion.
 
 ## Helios-Pakete gezielt aus dem DriverStore entfernen
 
+Der nächste Installer-Quellstand 22.22.295.0 bettet den identischen Helfer ein.
+Die GUI bietet dafür die separate Schaltfläche **Clean DriverStore** mit einer
+Bestätigung und dem Hinweis auf den erforderlichen VGA-Rettungsstart. Normales
+**Repair** und die automatische Einrichtung führen diese Bereinigung nie aus.
+Explizit über die Kommandozeile:
+
+```powershell
+HeliosSetup.exe --clean-driver-store
+```
+
+Die Kombination mit `--automatic` oder `--uninstall` wird vor dem Start eines
+Payloads abgelehnt. Ausstehende Neustarts werden als Exitcode 3010 weitergegeben.
+Die Bereinigung installiert anschließend nichts und startet Windows nicht
+automatisch neu. Sie ersetzt auch keine Paket-Deinstallation: gespeicherte
+Runtime-Registrierungen und Loader bleiben ein eigener Schritt.
+
 Für die ausdrücklich gewünschte vollständige Entfernung der Helios-Treiberpakete
 gibt es `scripts/helios/Clear-HeliosDriverStore.ps1`. Zunächst WinBoat schließen
 und auf dem Host `python3 scripts/helios/rescue-graphics.py --rescue-boot`
@@ -110,6 +126,39 @@ nicht manuell gelöscht. Der Helfer entfernt keine Dateien direkt aus FileReposi
 Windows anschließend regulär neu starten und bis zur bestätigten Bereinigung im
 VGA-Rettungsstart bleiben. Die alte Host-Konfiguration nicht automatisch
 wiederherstellen lassen.
+
+## Separater Vergleich mit 22.22.294.0
+
+Die im Branch gebündelte Standardversion bleibt die vom Benutzer nach einer
+vollständigen Bereinigung erfolgreich getestete 22.22.291.0. Ein erneuter Test
+von 22.22.294.0 verwendet dessen unveränderten, bereits gebauten CI-Installer:
+
+```bash
+python3 scripts/helios/prepare-test-installer.py --version 22.22.294.0
+```
+
+Der Helfer exportiert aus dem festgelegten Git-Commit nach
+`dist/helios-test-22.22.294.0/HeliosSetup.exe`. Er prüft Installer- und
+Payload-Hash, den historischen Quellen-Lockhash und den vollständigen
+Build-Beleg. Er verändert weder das Standardpaket noch die VM und überschreibt
+keine abweichenden Testdateien. 22.22.294.0 enthält die neue Bereinigungs-GUI
+noch nicht; diese wird erst mit dem nächsten Installer gebaut.
+
+Vor dem Vergleich einen Grafikbericht der funktionierenden .291 speichern.
+WinBoat schließen, Helios über die vorhandene API deaktivieren und in den
+VGA-Rettungsstart wechseln. Dort den gespeicherten .291-Paket-Deinstaller
+`C:\ProgramData\Helios\Uninstall-Helios.ps1` als Administrator ausführen,
+anschließend alle verbliebenen DriverStore-Pakete mit dem Bereinigungshelfer
+entfernen. Windows im Rettungsstart regulär neu starten und `already-clean`
+bestätigen. Dadurch werden Paket-Registrierungen und DriverStore getrennt
+bereinigt; keine Dateien direkt aus FileRepository löschen.
+
+Danach `rescue-graphics.py --restore-host` auf dem Linux-Host ausführen und den
+separat exportierten .294-Installer vollständig im Gast installieren. Er muss
+22.22.294.0 anzeigen. Nach dem angeforderten Windows-Neustart den Grafikbericht
+erneut erfassen. Bei erneutem Flackern bleiben API-Deaktivierung und
+`--rescue-boot` verfügbar. Eine erfolgreiche Installation oder Paketprüfung
+bestätigt allein keine stabile GPU-Ausgabe.
 
 ## Hintergrundabfragen
 
