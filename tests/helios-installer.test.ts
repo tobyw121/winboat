@@ -55,6 +55,7 @@ test('Windows-style Git checkouts preserve the checksum-locked snapshot includin
     git('-C', source, 'config', 'core.autocrlf', 'false');
     fs.copyFileSync('.gitattributes', path.join(source, '.gitattributes'));
     const originals = { 'helios/upstream/installer/src/main.rs': Buffer.from('first\nsecond\n'),
+        'scripts/helios/Clear-HeliosDriverStore.ps1': Buffer.from('first\nsecond\n'),
         'helios/upstream/umd12/bindgen/cached/bindings.rs': Buffer.from('first\r\nsecond\r\n'),
         'helios/source.lock.json': Buffer.from('{}\n') };
     for (const [name, bytes] of Object.entries(originals)) {

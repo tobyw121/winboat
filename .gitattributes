@@ -1,5 +1,7 @@
 # Keep the checksum-locked upstream snapshot byte-identical on Windows too.
 helios/upstream/** -text
+# The standalone recovery script must match its embedded installer copy.
+scripts/helios/Clear-HeliosDriverStore.ps1 -text
 helios/source.lock.json text eol=lf
 helios/stack.lock.json text eol=lf
 resources/helios/HeliosSetup.exe binary

@@ -5,6 +5,7 @@ on:
     branches: [work]
     paths:
       - '.github/workflows/test-helios-provisioning.yml'
+      - '.gitattributes'
       - 'guest_server/scripts/Get-DisplayAdapters.ps1'
       - 'guest_server/graphics_monitor*'
       - 'guest_server/graphics_rescue*'
@@ -46,6 +47,7 @@ on:
       - 'tests/atlas-helios-handoff.test.ps1'
   pull_request:
     paths:
+      - '.gitattributes'
       - 'guest_server/scripts/Get-DisplayAdapters.ps1'
       - 'guest_server/graphics_monitor*'
       - 'guest_server/graphics_rescue*'
