@@ -1,5 +1,5 @@
 # Read-only, bounded summaries. Never return arbitrary log lines or module paths.
-function Read-HeliosGpuJournal([string]$Text) {
+function Read-HeliosGpuJournal([string]$Text,[ValidateRange(1,96)][int]$EventLimit=16) {
     $prefix='(?m)^\[pid=\d+ tid=\d+\] GPU-DIAG '
     $heads=[regex]::Matches($Text,$prefix+'device=(\d{1,20}) birth=(\d{1,24}) elapsed_ms=(\d{1,16}) queries=(\d{1,16}) mismatches=(\d{1,16})(?: presented=([01]))?\r?$')
     if (-not $heads.Count) {return $null}
@@ -7,7 +7,7 @@ function Read-HeliosGpuJournal([string]$Text) {
     $id=$head.Groups[1].Value; $birth=$head.Groups[2].Value
     $tail=$Text.Substring($head.Index)
     $events=@([regex]::Matches($tail,$prefix+"event device=$id birth=$birth seq=(\d{1,16}) kind=(created|format|msaa|msaa-refused|msaa-policy|runtime-error|resource|view|shader|present|returned) a=(\d{1,20}) b=(\d{1,20}) c=(\d{1,20}) d=(\d{1,20}) e=(\d{1,20}) f=(\d{1,20})\r?$") |
-        Select-Object -Last 16 | ForEach-Object {
+        Select-Object -Last $EventLimit | ForEach-Object {
             [ordered]@{seq=$_.Groups[1].Value;kind=$_.Groups[2].Value;values=@($_.Groups[3..8] | ForEach-Object {$_.Value})}
         })
     $first=[regex]::Match($tail,$prefix+"mismatch device=$id birth=$birth fmt=(\d{1,10}) samples=(\d{1,3}) flags=(\d{1,10}) levels=(\d{1,10}) hr=(0x[0-9a-fA-F]{8})\r?$")
@@ -16,7 +16,7 @@ function Read-HeliosGpuJournal([string]$Text) {
     return [ordered]@{device=$id;birth=$birth;elapsedMs=$head.Groups[3].Value;queries=$head.Groups[4].Value;
         mismatches=$head.Groups[5].Value;presented=$(if ($head.Groups[6].Success) {$head.Groups[6].Value -eq '1'} else {$null});firstMismatch=$mismatch;events=$events}
 }
-function Read-HeliosUmdSummary([string]$Path) {
+function Read-HeliosUmdSummary([string]$Path,[ValidateRange(1,96)][int]$EventLimit=16) {
     $stream=[IO.File]::Open($Path,'Open','Read','ReadWrite')
     try {
         $start=[Math]::Max(0,$stream.Length-65536)
@@ -34,7 +34,7 @@ function Read-HeliosUmdSummary([string]$Path) {
         $boundary=$boundaries.Count -gt 0
         # Preserve the latest completed device even if a later adapter-only
         # enumeration appended another module marker without creating a device.
-        $journal=Read-HeliosGpuJournal $text
+        $journal=Read-HeliosGpuJournal $text $EventLimit
         if ($boundary) {$text=$text.Substring($boundaries[$boundaries.Count-1].Index)}
         if ($null -ne $journal) {
             $journal.latestModuleBoundaryMatches=$null
@@ -63,7 +63,7 @@ function Read-HeliosUmdSummary([string]$Path) {
             deviceReadyMeaning='UMD callback only; outer runtime acceptance unknown';journal=$journal}
     } finally {$stream.Dispose()}
 }
-function Get-HeliosUmdDiagnostics([uint32[]]$PreferredProcessIds=@()) {
+function Get-HeliosUmdDiagnostics([uint32[]]$PreferredProcessIds=@(),[ValidateRange(1,96)][int]$EventLimit=16,[ValidateRange(1,8)][int]$FileLimit=8) {
     $root=Join-Path $env:ProgramData 'Helios'
     if (-not (Test-Path -LiteralPath $root -PathType Container)) {return @()}
     # File names are fixed by the Helios UMD, not supplied by an API caller.
@@ -71,9 +71,9 @@ function Get-HeliosUmdDiagnostics([uint32[]]$PreferredProcessIds=@()) {
         Where-Object {$_.Name -match '^umd(?:12)?-\d{1,10}\.log$' -and
             [uint64]($_.BaseName -replace '^umd(?:12)?-','') -le [uint32]::MaxValue -and -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint)} |
         Sort-Object @{Expression={if ($PreferredProcessIds -contains [uint32]($_.BaseName -replace '^umd(?:12)?-','')) {0} else {1}}},
-            @{Expression='LastWriteTimeUtc';Descending=$true} | Select-Object -First 8)
+            @{Expression='LastWriteTimeUtc';Descending=$true} | Select-Object -First $FileLimit)
     return @(foreach($file in $files) {
-        $summary=Read-HeliosUmdSummary $file.FullName
+        $summary=Read-HeliosUmdSummary $file.FullName $EventLimit
         $summary.file=$file.Name
         $summary.updatedAtUtc=$file.LastWriteTimeUtc.ToString('o')
         $summary

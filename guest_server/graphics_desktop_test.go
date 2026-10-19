@@ -62,3 +62,26 @@ func TestHeliosDriverDiagnostics(t *testing.T) {
 		}
 	}
 }
+
+func TestDiagnosticsConcurrencyIsBounded(t *testing.T) {
+	m := newGraphicsMonitor()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan struct{})
+	first := httptest.NewRecorder()
+	go func() {
+		defer close(done)
+		m.diagnostics(func(context.Context) ([]byte, error) { close(started); <-release; return []byte(`{}`), nil })(first, httptest.NewRequest("GET", "/graphics/diagnostics", nil))
+	}()
+	<-started
+	second := httptest.NewRecorder()
+	m.diagnostics(func(context.Context) ([]byte, error) {
+		t.Error("concurrent PowerShell collector started")
+		return nil, nil
+	})(second, httptest.NewRequest("GET", "/graphics/diagnostics/runtime", nil))
+	close(release)
+	<-done
+	if first.Code != 200 || second.Code != 409 {
+		t.Fatal(first.Code, second.Code)
+	}
+}

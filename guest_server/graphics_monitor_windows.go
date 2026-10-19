@@ -55,7 +55,7 @@ func collectDisplayAdapters(ctx context.Context, viewerUnavailable bool) ([]byte
 	})
 	pnp.Policy = &policy
 	if rescue {
-		pnp.Policy = &topologyStatus{Goal: "vga-rescue", State: "held"}
+		pnp.Policy = &topologyStatus{Goal: "vga-rescue", State: "held", VGAProtection: "no-automatic-vga-or-primary-changes"}
 	}
 	data, err := json.Marshal(pnp)
 	if err != nil {
@@ -86,5 +86,20 @@ func collectHeliosDiagnostics(ctx context.Context) ([]byte, error) {
 		return nil, err
 	}
 	script := filepath.Join(filepath.Dir(executable), "scripts", "Get-HeliosDiagnostics.ps1")
+	return exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script).Output()
+}
+
+func collectHeliosJournals(ctx context.Context) ([]byte, error) {
+	return collectGraphicsScript(ctx, "Get-HeliosJournalReport.ps1")
+}
+func collectGraphicsRuntime(ctx context.Context) ([]byte, error) {
+	return collectGraphicsScript(ctx, "Get-GraphicsRuntimeDiagnostics.ps1")
+}
+func collectGraphicsScript(ctx context.Context, name string) ([]byte, error) {
+	executable, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	script := filepath.Join(filepath.Dir(executable), "scripts", name)
 	return exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script).Output()
 }

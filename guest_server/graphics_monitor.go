@@ -29,16 +29,11 @@ type displayAdapters struct {
 	Policy       *topologyStatus  `json:"policy,omitempty"`
 }
 type graphicsMonitor struct {
+	history                []graphicsHistoryEvent
 	mu                     sync.RWMutex
 	snapshot               displayAdapters
 	lastSample             time.Time
 	viewerUnavailableUntil time.Time
-}
-
-func needsVGARecovery(pnp displayAdapters, mirror, unavailable bool) bool {
-	return (pnp.Helios.InstanceID != "" || mirror) &&
-		(mirror || unavailable || (pnp.Helios.State != "running" && pnp.Helios.State != "unknown")) &&
-		(pnp.Basic.State == "disabled" || pnp.Basic.State == "failed")
 }
 
 func newGraphicsMonitor() *graphicsMonitor {
@@ -47,6 +42,7 @@ func newGraphicsMonitor() *graphicsMonitor {
 func (m *graphicsMonitor) update(data []byte, err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	defer m.recordHistory(time.Now())
 	var next displayAdapters
 	valid := func(state string) bool {
 		switch state {
