@@ -65,6 +65,7 @@ struct Viewer {
  gboolean flip, source_flip, ready, registered, cache_valid, held[256], buttons[7], have_position;
  double last_x, last_y;
  guint64 dma_frames, software_frames, rendered_frames;
+ guint64 copy_wall_us, completion_wait_us, copy_samples, skipped_redraws;
  int exit_code;
  /* One frame cache/listener per graphical console; only the root owns the UI.
   * Keeping listeners alive lets a driver handoff happen without restarting QEMU. */
@@ -82,6 +83,12 @@ struct Viewer {
  guint health_watch, health_timer;
 };
 static Viewer *displayed(Viewer *v) {return v->active?v->active:v;}
+static void queue_frame_redraw(Viewer *v) {
+ Viewer *root=v->parent?v->parent:v;
+ if (displayed(root)==v && gtk_widget_get_mapped(root->area))
+  gtk_gl_area_queue_render(GTK_GL_AREA(root->area));
+ else root->skipped_redraws++;
+}
 static void update_cursor(Viewer *v) {
  if (v->parent && v->parent->active!=v) return;
  Viewer *d=displayed(v);
@@ -430,6 +437,7 @@ static gboolean import_dma(Viewer *v,GDBusMethodInvocation *inv,GVariant *handle
  dma_geometry(v,x,y,w,h,bw,bh,top);v->frame_problem[0]=0;return TRUE;
 }
 static gboolean copy_dma(Viewer *v) {
+ gint64 started=g_get_monotonic_time();
  if (!v->source && !v->source_renderbuffer) return FALSE;
  GLint previous,previous_read;glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING,&previous);glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING,&previous_read);
  glBindFramebuffer(GL_DRAW_FRAMEBUFFER,v->fbo);glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,v->texture,0);
@@ -444,7 +452,10 @@ static gboolean copy_dma(Viewer *v) {
   * before ACK; redraws only sample our own texture, never a released scanout.
   * Producer completion still relies on the protocol/driver's implicit sync.
   */
- glFinish();glBindFramebuffer(GL_DRAW_FRAMEBUFFER,previous);glBindFramebuffer(GL_READ_FRAMEBUFFER,previous_read);v->flip=FALSE;
+ gint64 waiting=g_get_monotonic_time();glFinish();
+ v->completion_wait_us+=g_get_monotonic_time()-waiting;
+ v->copy_wall_us+=g_get_monotonic_time()-started;v->copy_samples++;
+ glBindFramebuffer(GL_DRAW_FRAMEBUFFER,previous);glBindFramebuffer(GL_READ_FRAMEBUFFER,previous_read);v->flip=FALSE;
  v->cache_valid=glGetError()==GL_NO_ERROR;return v->cache_valid;
 }
 static void report_display_recovery(Viewer *v,const char *message) {
@@ -561,7 +572,7 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
   if (!strcmp(name,"Update") || !strcmp(name,"UpdateDMABUF")) v->seen_update=TRUE;
   if (v->parent) select_console(v->parent);
   if (!strcmp(name,"Scanout") || !strcmp(name,"Update") || !strcmp(name,"UpdateDMABUF") || !strcmp(name,"Disable"))
-   gtk_gl_area_queue_render(GTK_GL_AREA(v->area));
+   queue_frame_redraw(v);
   g_dbus_method_invocation_return_value(inv,NULL);
  }
  else {
@@ -970,7 +981,7 @@ static gboolean stats(Viewer *v) {
  char *text=g_strdup_printf("%u × %u · zoom: %s · %s · guest resize: %s (%" G_GUINT64_FORMAT " requests sent)",
   d->width,d->height,zoom,d->last_dma?"DMA-BUF / OpenGL":"Software / OpenGL",resize_state,v->resize_requests);
  gtk_label_set_text(GTK_LABEL(v->status),text);g_free(text);
- g_printerr("{\"event\":\"statistics\",\"dmabufFrames\":%" G_GUINT64_FORMAT ",\"softwareFrames\":%" G_GUINT64_FORMAT ",\"renderedFrames\":%" G_GUINT64_FORMAT "}\n",d->dma_frames,d->software_frames,v->rendered_frames);return G_SOURCE_CONTINUE;
+ g_printerr("{\"event\":\"statistics\",\"pid\":%d,\"console\":%u,\"monotonicUs\":%" G_GINT64_FORMAT ",\"dmabufFrames\":%" G_GUINT64_FORMAT ",\"softwareFrames\":%" G_GUINT64_FORMAT ",\"renderedFrames\":%" G_GUINT64_FORMAT ",\"sourceCopyWallUs\":%" G_GUINT64_FORMAT ",\"completionWaitUs\":%" G_GUINT64_FORMAT ",\"copySamples\":%" G_GUINT64_FORMAT ",\"skippedRedraws\":%" G_GUINT64_FORMAT "}\n",getpid(),d->console_id,g_get_monotonic_time(),d->dma_frames,d->software_frames,v->rendered_frames,d->copy_wall_us,d->completion_wait_us,d->copy_samples,v->skipped_redraws);return G_SOURCE_CONTINUE;
 }
 static gboolean smoke_done(Viewer *v) {
  stats(v);

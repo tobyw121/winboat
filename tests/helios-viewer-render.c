@@ -77,6 +77,8 @@ int main(void) {
   glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
   dma_geometry(&v,1,2,4,4,6,8,top);
   g_assert_true(copy_dma(&v));
+  g_assert_cmpuint(v.copy_samples,>,0);
+  g_assert_cmpuint(v.copy_wall_us,>=,v.completion_wait_us);
   glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,4,4);
   draw(&v,v.texture,full,v.flip);expect_corners(fbo);
   /* A replacement DMA-BUF of the same size has not yet received Update.
