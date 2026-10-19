@@ -1,5 +1,8 @@
 # WinBoat und Helios lokal bauen
 
+Neue QEMU-/Viewer-Optionen und Messverfahren stehen in
+[helios-performance.md](helios-performance.md).
+
 Der gemeinsame Einstieg ist `scripts/build-helios.sh`. Es baut auf deinem
 Linux-Host mit Docker beide Komponenten: das Helios-VM-Image und WinBoat samt
 Windows-Treiberinstaller. Node.js, Go, Rust und Compiler müssen dafür nicht auf

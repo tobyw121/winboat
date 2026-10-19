@@ -1,5 +1,8 @@
 # Erweiterte Anzeige und Grafikdiagnose über die Guest API
 
+QEMU-/Viewer-Optimierungen, Diagnosecache und kontrollierte CPU-/I/O-/Speicher-
+Vergleiche beschreibt [helios-performance.md](helios-performance.md).
+
 ## Zusätzliche Absicherung der Pakete und Treiberquellen
 
 Neu exportierte `helios-build.json`-Belege enthalten die Treiberversion und den
