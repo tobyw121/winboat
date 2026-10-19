@@ -32,7 +32,9 @@ typedef struct DisplaySurface { GLuint texture; uint8_t pixels[64]; int width,he
 typedef int QemuGLShader;
 typedef struct DisplayGLCtx { QemuGLShader *gls; } DisplayGLCtx;
 typedef struct DisplayChangeListener { void *con; } DisplayChangeListener;
-typedef struct QemuDmaBuf { uint64_t modifier,allocation; bool optimal; unsigned width,height; } QemuDmaBuf;
+typedef struct QemuDmaBuf { uint64_t modifier,allocation; bool optimal,top; unsigned width,height; GLuint texture; } QemuDmaBuf;
+typedef struct egl_fb { int width,height,x,y;GLuint texture,framebuffer;bool delete_texture;QemuDmaBuf *dmabuf; } egl_fb;
+#define EGL_FB_INIT {0}
 typedef struct HeliosVulkanReadback {int unused;} HeliosVulkanReadback;
 typedef struct HeliosVulkanReadbackCache {HeliosVulkanReadback image;QemuDmaBuf *active;} HeliosVulkanReadbackCache;
 typedef struct DBusDisplayListener {
@@ -46,7 +48,7 @@ typedef struct DBusDisplayListener {
     HeliosVulkanReadbackCache *vk_cache;
     HeliosVulkanReadback *vk_readback;
     DisplaySurface *vk_surface;
-    bool vk_announced,vk_failed;
+    bool vk_announced,vk_failed,copy_requested,copy_active;
 #ifdef CONFIG_PIXMAN
     pixman_region32_t gl_damage;
 #else
@@ -89,6 +91,13 @@ static DisplaySurface *qemu_create_displaysurface(unsigned w,unsigned h) {
 static void qemu_free_displaysurface(DisplaySurface *s) {g_free(s);}
 static uint32_t qemu_dmabuf_get_width(QemuDmaBuf *b) {return b->width?b->width:4;}
 static uint32_t qemu_dmabuf_get_height(QemuDmaBuf *b) {return b->height?b->height:4;}
+static uint32_t qemu_dmabuf_get_backing_width(QemuDmaBuf *b) {return qemu_dmabuf_get_width(b);}
+static uint32_t qemu_dmabuf_get_backing_height(QemuDmaBuf *b) {return qemu_dmabuf_get_height(b);}
+static uint32_t qemu_dmabuf_get_x(QemuDmaBuf *b) {(void)b;return 0;}
+static uint32_t qemu_dmabuf_get_y(QemuDmaBuf *b) {(void)b;return 0;}
+static bool qemu_dmabuf_get_y0_top(QemuDmaBuf *b) {return b->top;}
+static void egl_dmabuf_import_texture(QemuDmaBuf *b) {(void)b;}
+static GLuint qemu_dmabuf_get_texture(QemuDmaBuf *b) {return b->texture;}
 static uint64_t qemu_dmabuf_get_modifier(QemuDmaBuf *b) {return b->modifier;}
 static uint64_t qemu_dmabuf_get_allocation_size(QemuDmaBuf *b) {return b->allocation;}
 static HeliosVulkanReadbackCache *helios_vulkan_readback_cache_new(void) {return g_new0(HeliosVulkanReadbackCache,1);}
@@ -276,6 +285,32 @@ int main(void) {
     dbus_release_dmabuf(&listener.dcl,&replacement);
     assert(listener.active_dmabuf==&explicit_linear);
     dbus_call_update_gl(&listener.dcl,0,0,4,4);assert(dma_updates==previous_updates+1);
+    /* A copy preference never guesses the native opaque layout. */
+    listener.copy_requested=true;
+    QemuDmaBuf invalid_layout={.modifier=DRM_FORMAT_MOD_INVALID,.allocation=64,.optimal=false};
+    dbus_scanout_dmabuf(&listener.dcl,&invalid_layout);
+    assert(!listener.copy_active && !listener.vk_readback);
+    /* Real EGL framebuffer readback, both orientations; protocol alone is mocked. */
+    GLuint copy_texture;glGenTextures(1,&copy_texture);glBindTexture(GL_TEXTURE_2D,copy_texture);
+    uint8_t rows[4][4][4];
+    for(int y=0;y<4;y++)for(int x=0;x<4;x++) {
+        rows[y][x][0]=y*60;rows[y][x][1]=0;rows[y][x][2]=255-y*60;rows[y][x][3]=255;
+    }
+    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,4,4,0,GL_RGBA,GL_UNSIGNED_BYTE,rows);glFinish();
+    explicit_linear.texture=copy_texture;
+    for(int top=0;top<=1;top++) {
+        explicit_linear.top=top;
+        dbus_scanout_dmabuf(&listener.dcl,&explicit_linear);
+        assert(listener.copy_active && !listener.vk_readback);
+        dbus_call_update_gl(&listener.dcl,0,0,4,4);
+        copy=g_variant_get_fixed_array(last_pixels,&n,1);
+        assert(n==64 && copy[0]==(top?75:255) && copy[48]==(top?255:75));
+        assert(last_block);pending_callback(NULL,NULL,pending_opaque);assert(!last_block);
+    }
+    previous_updates=software_updates;explicit_linear.texture=0;
+    dbus_call_update_gl(&listener.dcl,0,0,4,4);
+    assert(software_updates==previous_updates && listener.vk_failed && !last_block);
+    glDeleteTextures(1,&copy_texture);listener.copy_requested=false;
     g_clear_pointer(&last_pixels,g_variant_unref);g_free(listener.vk_cache);listener.vk_cache=NULL;
     dbus_scanout_dmabuf(&listener.dcl,&first);
     dbus_gl_gfx_switch(&listener.dcl,NULL);

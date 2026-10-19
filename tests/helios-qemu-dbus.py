@@ -19,6 +19,7 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 HASHES = {
+    'egl-helpers.c': '9a9cdb21ea8130ed6e464d68319ae2ba171a67d0419cdd7a952a87a31f1c4d2a',
     'vulkan-readback.c': '0b08ad67b459334087406fa9fda4ab985003998236d294db8bfab292ac1a6a8d',
     'console-gl.c': 'f5c12fbc74aacf7e919b55b0a807d104235291cefab42b55bd76f1b3827bfb05',
     'dbus-console.c': 'f5528db4780d5eaf6de94a990af103f42b98528df2230d1bd89760923c501e1a',
@@ -90,7 +91,14 @@ with tempfile.TemporaryDirectory(prefix='winboat-qemu-dbus-') as temporary:
     for name in ['dbus_create_texture', 'dbus_update_texture', 'dbus_destroy_texture']:
         callbacks += function((source / 'ui/dbus.c').read_text(), name)
     listener = (source / 'ui/dbus-listener.c').read_text()
-    for name in ['dbus_helios_readback_clear', 'dbus_helios_readback_select', 'dbus_helios_frame_done', 'dbus_helios_readback_update', 'dbus_scanout_disable', 'dbus_call_update_gl', 'dbus_scanout_dmabuf', 'dbus_scanout_texture', 'dbus_release_dmabuf', 'dbus_gl_gfx_update', 'dbus_gl_gfx_switch', 'dbus_gl_refresh']:
+    helpers = (source / 'ui/egl-helpers.c').read_text()
+    # QEMU's unchanged EGL helper uses unsigned GL coordinates with int sizes;
+    # its normal build does not enable sign-compare. Keep our callbacks strict.
+    callbacks += '#pragma GCC diagnostic push\n#pragma GCC diagnostic ignored "-Wsign-compare"\n'
+    for name in ['egl_fb_delete_texture','egl_fb_destroy','egl_fb_setup_for_tex','egl_fb_setup_new_tex','egl_fb_blit','egl_fb_read']:
+        callbacks += function(helpers, name)
+    callbacks += '#pragma GCC diagnostic pop\n'
+    for name in ['dbus_helios_readback_clear', 'dbus_helios_readback_select', 'dbus_helios_frame_done', 'dbus_helios_copy_capture', 'dbus_helios_readback_update', 'dbus_scanout_disable', 'dbus_call_update_gl', 'dbus_scanout_dmabuf', 'dbus_scanout_texture', 'dbus_release_dmabuf', 'dbus_gl_gfx_update', 'dbus_gl_gfx_switch', 'dbus_gl_refresh']:
         callbacks += function(listener, name)
     (source / 'callbacks.inc').write_text(callbacks)
     flags = shlex.split(subprocess.check_output(['pkg-config', '--cflags', '--libs', 'gio-2.0', 'epoxy', 'pixman-1'], text=True))

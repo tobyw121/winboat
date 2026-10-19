@@ -55,6 +55,10 @@ int main(void) {
  g_assert_cmpint(gdk_gl_context_get_api(gtk_gl_area_get_context(GTK_GL_AREA(area))),==,expected_api);
  g_assert_true(eglGetCurrentDisplay()!=EGL_NO_DISPLAY);
  Viewer v={0};g_assert_true(initialize_gl(&v));
+ GVariant *caps=property(NULL,NULL,NULL,NULL,NULL,NULL,&v);
+ g_assert_cmpuint(g_variant_n_children(caps),==,1);g_variant_ref_sink(caps);g_variant_unref(caps);
+ v.prefer_copy=TRUE;caps=property(NULL,NULL,NULL,NULL,NULL,NULL,&v);
+ g_assert_cmpuint(g_variant_n_children(caps),==,2);g_variant_ref_sink(caps);g_variant_unref(caps);
  GLuint target,fbo;glGenTextures(1,&target);glBindTexture(GL_TEXTURE_2D,target);
  glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,4,4,0,GL_RGBA,GL_UNSIGNED_BYTE,NULL);
  glGenFramebuffers(1,&fbo);glBindFramebuffer(GL_FRAMEBUFFER,fbo);

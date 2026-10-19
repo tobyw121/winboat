@@ -39,7 +39,7 @@ static const char xml[] =
  "<interface name='" IFACE "Listener.Unix.ScanoutDMABUF2'><method name='ScanoutDMABUF2'>"
  "<arg type='ah' direction='in'/><arg type='u' direction='in'/><arg type='u' direction='in'/><arg type='u' direction='in'/><arg type='u' direction='in'/>"
  "<arg type='au' direction='in'/><arg type='au' direction='in'/><arg type='u' direction='in'/><arg type='u' direction='in'/><arg type='u' direction='in'/><arg type='u' direction='in'/><arg type='t' direction='in'/><arg type='b' direction='in'/>"
- "</method></interface></node>";
+ "</method></interface><interface name='org.winboat.Display1.SoftwareCopy'/></node>";
 
 typedef struct Viewer Viewer;
 struct Viewer {
@@ -74,6 +74,8 @@ struct Viewer {
  char *console_path;
  guint console_id, pending_consoles, reconnect_timer;
  gboolean accelerated, seen_update, cursor_visible, awaiting_scanout;
+ gboolean prefer_copy;
+ guint dma_failures;
  gboolean has_basic_console, driver_confirmed;
  guint display_mode; /* 0 automatic, 1 VGA/Basic, 2 Helios; window-local choice */
  guint recovery_attempt;
@@ -537,7 +539,7 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
   gint x,y,w,h;g_variant_get(params,"(iiii)",&x,&y,&w,&h);
   g_snprintf(v->frame_problem,sizeof(v->frame_problem),"UpdateDMABUF region=%d,%d %dx%d, scanout=%ux%u, imported=%s",x,y,w,h,v->width,v->height,(v->source || v->source_renderbuffer)?"yes":"no");
   ok=region(v,x,y,w,h) && copy_dma(v);
-  if (ok) {v->dma_frames++;v->last_dma=TRUE;}
+  if (ok) {v->dma_frames++;v->last_dma=TRUE;v->dma_failures=0;}
  } else if (!strcmp(name,"Disable")) {
   discard_source(v);v->width=v->height=0;v->cache_valid=FALSE;v->seen_update=FALSE;v->awaiting_scanout=TRUE;release_input(v);
  } else if (!strcmp(name,"MouseSet")) {
@@ -576,6 +578,10 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
   g_dbus_method_invocation_return_value(inv,NULL);
  }
  else {
+  if (strstr(name,"DMABUF") && !v->prefer_copy && ++v->dma_failures>=2) {
+   v->prefer_copy=TRUE;
+   g_print("{\"event\":\"display-transport\",\"console\":%u,\"transport\":\"validated-copy-requested\"}\n",v->console_id);fflush(stdout);
+  }
   char *detail=g_strdup_printf("Console %u %s: %s; GL=0x%04x; requesting fresh scanout.",v->console_id,name,v->frame_problem,frame_error);
   g_dbus_method_invocation_return_dbus_error(inv,"org.winboat.Helios.DisplayError",detail);
   g_printerr("%s\n",detail);g_free(detail);
@@ -595,8 +601,9 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
  }
 }
 static GVariant *property(GDBusConnection *conn,const gchar *sender,const gchar *path,const gchar *iface,const gchar *name,GError **err,gpointer data) {
- (void)conn;(void)sender;(void)path;(void)iface;(void)name;(void)err;(void)data;
- const char *interfaces[]={IFACE "Listener.Unix.ScanoutDMABUF2",NULL};return g_variant_new_strv(interfaces,-1);
+ (void)conn;(void)sender;(void)path;(void)iface;(void)name;(void)err;
+ Viewer *v=data;
+ const char *interfaces[]={IFACE "Listener.Unix.ScanoutDMABUF2",v->prefer_copy?"org.winboat.Display1.SoftwareCopy":NULL,NULL};return g_variant_new_strv(interfaces,-1);
 }
 static const GDBusInterfaceVTable vtable={.method_call=method,.get_property=property};
 static void maybe_ready(Viewer *v) {
@@ -781,6 +788,7 @@ static void console_ids_ready(GObject *object,GAsyncResult *result,gpointer data
   d->parent=v;d->area=v->area;d->bus=v->bus;d->info=v->info;d->qemu_uid=v->qemu_uid;
   d->program=v->program;d->external_program=v->external_program;d->vao=v->vao;d->fbo=v->fbo;
   d->image=EGL_NO_IMAGE_KHR;d->display=EGL_NO_DISPLAY;d->cursor_visible=TRUE;
+  d->prefer_copy=!g_strcmp0(g_getenv("HELIOS_VIEWER_COPY"),"1");
   d->console_path=g_strdup_printf(CONSOLE_PREFIX "%u",id);d->console_id=id;
   g_dbus_proxy_new(v->bus,G_DBUS_PROXY_FLAGS_DO_NOT_CONNECT_SIGNALS,NULL,"org.qemu",d->console_path,IFACE "Console",NULL,console_ready,d);
  }

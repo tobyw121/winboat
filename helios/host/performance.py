@@ -29,7 +29,7 @@ def number(env, key, maximum):
 
 def options(args, env, huge_free=None):
     args = list(args)
-    if env.get('HELIOS_RESCUE') == '1':
+    if env.get('HELIOS_RESCUE') == '1' or inspection(args):
         return args
     devices = [(i,v.split(',')) for i,v in enumerate(args) if i and args[i-1] == '-device']
     queues = number(env,'HELIOS_NET_QUEUES',8)
@@ -84,6 +84,12 @@ def options(args, env, huge_free=None):
     return args
 
 
+def inspection(args):
+    return args in (['--version'],['-version'],['--help'],['-help']) or (
+        len(args)==2 and args[0] in ('-device','-machine','-accel','-cpu') and
+        (args[1]=='help' or args[0]=='-device' and args[1].endswith(',help')))
+
+
 def cache_environment(env, storage, fingerprint):
     cache = Path(storage)/'.winboat-cache'/'graphics'/hashlib.sha256(fingerprint).hexdigest()[:24]
     for path in (cache.parent.parent,cache.parent,cache):
@@ -99,7 +105,7 @@ def cache_environment(env, storage, fingerprint):
 def main():
     env = dict(os.environ)
     args = options(sys.argv[2:],env)
-    if env.get('HELIOS_RESCUE') != '1':
+    if env.get('HELIOS_RESCUE') != '1' and not inspection(args):
         if env.get('HELIOS_CPU_AFFINITY'):
             cpus = cpu_set(env['HELIOS_CPU_AFFINITY'])
             if not cpus <= os.sched_getaffinity(0):

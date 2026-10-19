@@ -1,0 +1,157 @@
+--- a/ui/dbus-listener.c
++++ b/ui/dbus-listener.c
+@@ -100,6 +100,8 @@
+     DisplaySurface *vk_surface;
+     bool vk_announced;
+     bool vk_failed;
++    bool copy_requested;
++    bool copy_active;
+ #endif
+ #endif
+ #endif
+@@ -141,12 +143,14 @@
+     g_clear_pointer(&ddl->vk_surface, qemu_free_displaysurface);
+     ddl->vk_announced = false;
+     ddl->vk_failed = false;
++    ddl->copy_active = false;
+ }
+
+ static bool dbus_helios_readback_select(DBusDisplayListener *ddl,
+                                        QemuDmaBuf *dmabuf)
+ {
+-    bool was_readback = ddl->vk_readback != NULL;
++    bool was_readback = ddl->vk_readback != NULL || ddl->copy_active;
++    ddl->copy_active = false;
+     uint32_t width = qemu_dmabuf_get_width(dmabuf);
+     uint32_t height = qemu_dmabuf_get_height(dmabuf);
+     g_auto(DBusGLContextScope) scope = { 0 };
+@@ -170,7 +174,11 @@
+         ddl->vk_readback = helios_vulkan_readback_cache_activate(
+             ddl->vk_cache, dmabuf, true);
+     }
+-    if (!ddl->vk_readback) {
++    if (ddl->copy_requested &&
++        qemu_dmabuf_get_modifier(dmabuf) != DRM_FORMAT_MOD_INVALID) {
++        ddl->copy_active = true;
++    }
++    if (!ddl->vk_readback && !ddl->copy_active) {
+         dbus_helios_readback_clear(ddl);
+         return false;
+     }
+@@ -182,7 +190,8 @@
+     }
+     if (!was_readback) {
+         ddl->vk_announced = false;
+-        error_report("dbus: using validated OPTIMAL Vulkan readback %ux%u",
++        error_report(ddl->copy_active ? "dbus: using EGL software-copy %ux%u"
++                                      : "dbus: using validated OPTIMAL Vulkan readback %ux%u",
+                      width, height);
+     }
+     ddl->vk_failed = false;
+@@ -205,6 +214,61 @@
+     g_object_unref(ddl);
+ }
+
++/* This fallback reads only an explicitly described, successfully EGL-imported
++ * image. An unknown modifier/undersized native OPTIMAL blob is never guessed.
++ * Source reads finish before the listener ACK releases the producer. */
++static bool dbus_helios_copy_capture(DBusDisplayListener *ddl)
++{
++    QemuDmaBuf *buf = ddl->active_dmabuf;
++    egl_fb src = EGL_FB_INIT, dst = EGL_FB_INIT;
++    g_auto(DBusGLContextScope) scope = { 0 };
++    GLint previous_read, previous_draw, previous_texture, viewport[4];
++    bool ok;
++    if (!buf || qemu_dmabuf_get_modifier(buf) == DRM_FORMAT_MOD_INVALID ||
++        !qemu_dmabuf_get_width(buf) || !qemu_dmabuf_get_height(buf) ||
++        qemu_dmabuf_get_num_planes(buf) != 1 ||
++        qemu_dmabuf_get_width(buf) > 8192 || qemu_dmabuf_get_height(buf) > 8192 ||
++        (uint64_t)qemu_dmabuf_get_width(buf) * qemu_dmabuf_get_height(buf) > 33554432 ||
++        (uint64_t)qemu_dmabuf_get_x(buf) + qemu_dmabuf_get_width(buf) > qemu_dmabuf_get_backing_width(buf) ||
++        (uint64_t)qemu_dmabuf_get_y(buf) + qemu_dmabuf_get_height(buf) > qemu_dmabuf_get_backing_height(buf) ||
++        !dbus_gl_context_bind(&scope)) {
++        return false;
++    }
++    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previous_read);
++    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previous_draw);
++    glGetIntegerv(GL_VIEWPORT, viewport);
++    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
++    GLboolean scissor = glIsEnabled(GL_SCISSOR_TEST);
++    glDisable(GL_SCISSOR_TEST);
++    egl_dmabuf_import_texture(buf);
++    GLuint texture = qemu_dmabuf_get_texture(buf);
++    ok = texture && glGetError() == GL_NO_ERROR;
++    if (ok) {
++        egl_fb_setup_for_tex(&src, qemu_dmabuf_get_backing_width(buf),
++                            qemu_dmabuf_get_backing_height(buf), texture, false);
++        src.dmabuf = buf;
++        ok = glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
++    }
++    if (ok) {
++        egl_fb_setup_new_tex(&dst, surface_width(ddl->vk_surface),
++                            surface_height(ddl->vk_surface));
++        ok = glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
++    }
++    if (ok) {
++        egl_fb_blit(&dst, &src, qemu_dmabuf_get_y0_top(buf));
++        egl_fb_read(ddl->vk_surface, &dst);
++        ok = glGetError() == GL_NO_ERROR;
++    }
++    egl_fb_destroy(&src);
++    egl_fb_destroy(&dst);
++    glBindFramebuffer(GL_READ_FRAMEBUFFER, previous_read);
++    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, previous_draw);
++    glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
++    glBindTexture(GL_TEXTURE_2D, previous_texture);
++    if (scissor) { glEnable(GL_SCISSOR_TEST); }
++    return ok;
++}
++
+ static bool dbus_helios_readback_update(DBusDisplayListener *ddl)
+ {
+     GVariant *data;
+@@ -212,7 +276,7 @@
+     uint32_t width, height, stride;
+     size_t bytes;
+
+-    if (!ddl->vk_readback) {
++    if (!ddl->vk_readback && !ddl->copy_active) {
+         return false;
+     }
+     width = surface_width(ddl->vk_surface);
+@@ -221,10 +285,12 @@
+     /* Complete the Vulkan external-ownership round trip before acknowledging
+      * the producer. An unsuccessful capture must never publish stale pixels
+      * or fall through to UpdateDMABUF without a DMA-BUF baseline. */
+-    if (!helios_vulkan_readback_flush(ddl->vk_readback, ddl->vk_surface,
+-                                      0, 0, width, height)) {
++    bool captured = ddl->copy_active ? dbus_helios_copy_capture(ddl)
++        : helios_vulkan_readback_flush(ddl->vk_readback, ddl->vk_surface,
++                                      0, 0, width, height);
++    if (!captured) {
+         if (!ddl->vk_failed) {
+-            error_report("dbus: OPTIMAL Vulkan readback failed; keeping last frame");
++            error_report("dbus: validated readback failed; keeping last frame");
+         }
+         ddl->vk_failed = true;
+         return true;
+@@ -929,7 +995,7 @@
+         dbus_call_update_gl(dcl, box->x1, box->y1,
+                             box->x2 - box->x1, box->y2 - box->y1);
+ #if defined(CONFIG_GBM) && defined(CONFIG_LINUX)
+-        if (ddl->vk_readback) {
++        if (ddl->vk_readback || ddl->copy_active) {
+             /* Readback sends the full frame. One ACK must own one GL block,
+              * even when damage contains several disjoint rectangles. */
+             break;
+@@ -1392,6 +1458,10 @@
+
+ static void dbus_display_listener_setup_scanout_dmabuf_v2(DBusDisplayListener *ddl)
+ {
++#if defined(CONFIG_GBM) && defined(CONFIG_LINUX)
++    ddl->copy_requested = dbus_display_listener_implements(
++        ddl, "org.winboat.Display1.SoftwareCopy");
++#endif
+ #ifndef WIN32
+     g_autoptr(GError) err = NULL;
+

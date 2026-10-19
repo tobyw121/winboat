@@ -27,11 +27,17 @@ def main():
     parser.add_argument('--net-queues',type=int,choices=range(0,9),default=0)
     parser.add_argument('--hugepages',choices=('off','2M','1G'),default='off')
     parser.add_argument('--preallocate',action='store_true')
+    parser.add_argument('--shader-cache',action='store_true')
+    parser.add_argument('--io-thread',action='store_true')
     args = parser.parse_args()
     if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}',args.service):
         parser.error('Invalid Compose service name')
     try:
         env=profile(args.profile,args.cpu_affinity,args.net_queues,args.hugepages,args.preallocate)
+        if args.shader_cache or args.io_thread:
+            if args.profile != 'custom': raise ValueError('Use custom to combine options')
+            env['HELIOS_SHADER_CACHE']=str(int(args.shader_cache))
+            env['HELIOS_IO_THREAD']=str(int(args.io_thread))
         # Validate CPU syntax with the same production parser, without changing affinity.
         import importlib.util
         path=Path(__file__).resolve().parents[2]/'helios/host/performance.py'

@@ -15,6 +15,8 @@ class PerformanceTests(unittest.TestCase):
     def test_default_and_rescue_preserve_every_argument(self):
         self.assertEqual(perf.options(BASE,{}),BASE)
         self.assertEqual(perf.options(BASE,{'HELIOS_RESCUE':'1','HELIOS_NET_QUEUES':'invalid'}),BASE)
+        for query in [['--version'],['-device','virtio-gpu-gl-pci,help'],['-cpu','help']]:
+            self.assertEqual(perf.options(query,{'HELIOS_IO_THREAD':'1','HELIOS_HUGEPAGES':'2M'}),query)
 
     def test_io_and_network_keep_disk_flush_policy_and_qmp(self):
         result = perf.options(BASE,{'HELIOS_NET_QUEUES':'4','HELIOS_IO_THREAD':'1'})
