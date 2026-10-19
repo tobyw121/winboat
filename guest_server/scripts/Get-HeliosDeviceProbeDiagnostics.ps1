@@ -11,12 +11,12 @@ function Get-HeliosDeviceProbeDiagnostics {
         $start=[DateTimeOffset]::Parse([string]$data.startedAtUtc).ToUniversalTime().ToString('o')
         $finish=[DateTimeOffset]::Parse([string]$data.finishedAtUtc).ToUniversalTime().ToString('o')
         $arms=@(foreach ($arm in @($data.arms | Select-Object -First 4)) {
-            if ($arm.mode -notin @(0,1,2) -or $arm.timedOut -isnot [bool]) {throw 'Invalid arm'}
+            if ($arm.mode -notin @(0,1,2) -or $arm.timedOut -isnot [bool] -or $arm.exited -isnot [bool]) {throw 'Invalid arm'}
             $rows=@(foreach ($row in @($arm.results | Select-Object -First 6)) {
                 if ($row.schema -ne 1 -or $row.warp -ne $false -or $row.warp -isnot [bool]) {throw 'Invalid probe backend'}
                 [ordered]@{requested=[uint32]$row.requested;achieved=[uint32]$row.achieved;flags=[uint32]$row.flags;hr=[uint32]$row.hr}
             })
-            [ordered]@{mode=[int]$arm.mode;processId=[uint32]$arm.processId;timedOut=$arm.timedOut;exitCode=[int]$arm.exitCode;results=$rows}
+            [ordered]@{mode=[int]$arm.mode;processId=[uint32]$arm.processId;timedOut=$arm.timedOut;exited=$arm.exited;exitCode=$(if ($arm.exited) {[int]$arm.exitCode} else {$null});results=$rows}
         })
         return [ordered]@{schema=1;profileScope='child-process';boundDriverVersion=[string]$data.boundDriverVersion;probeVersion=[string]$data.probeVersion;probeSha256=[string]$data.probeSha256;
             startedAtUtc=$start;finishedAtUtc=$finish;registryRestored=$data.registryRestored;arms=$arms}

@@ -316,7 +316,7 @@
     "packaging/windows/Helios-PackageCommon.ps1": "b76da6667fc1117cbe562a8004c641509b303d2eb3da153208700124c248201f",
     "packaging/windows/Install-Helios.ps1": "f8eadd2da8b405261073c1c02541d3fa4823c73c3cc6d56272528131f6b9410a",
     "packaging/windows/README.md": "6fb7805c2689bb577be675d9262c0b90fc0b71829d5ef656dc0513931cf6785f",
-    "packaging/windows/Test-HeliosDeviceProfiles.ps1": "5895477b4656da6564416d472ff33bb004d09b47b184b0d6d019a7928cbf0bde",
+    "packaging/windows/Test-HeliosDeviceProfiles.ps1": "5d01d06fab0bfe3c0ac4ccaa602c953531f535115e0bce3c5fd96de5556225bd",
     "packaging/windows/Test-HeliosRegistrySnapshots.ps1": "1418630d6533ce95ced0ac59436897202d6f9ad2cdb0e2b0d1586c67a831d256",
     "packaging/windows/Uninstall-Helios.ps1": "e45183190e0aa9850b8fec818aca9c39dcfdd40c0a3e041ea87b0bb7c4ef21c9",
     "packaging/windows/Verify-Helios.ps1": "10ee65983698d5fda02301979e4e2da2e831f8eeda9fd69cae1017c2a8c1998a",
@@ -589,7 +589,7 @@
     "umd/src/forward/deferred.rs": "92f042c2d3a8104584c9cbeece3ea0a571b19d52017c44a66612f814b9565b9a",
     "umd/src/forward/format_caps.rs": "1073201c0c840c77297fff9cacea644451ab9602951c3e793415987dd84dba96",
     "umd/src/forward/handles.rs": "9382134b75d4c066d2235b49e312d24d51edfe76b26d28b7e645410c6fa9956c",
-    "umd/src/forward/layout.rs": "3f22a6472e3853747b0ea1dbf153ebd0a8da02837ddb4d3d7bff4160e90e93f5",
+    "umd/src/forward/layout.rs": "d94fe148ef217bcd2ce9cfbe6cb855e5805546ffe48eaa3d271229786bb2043c",
     "umd/src/forward/pipeline.rs": "aed3cac5ab911fce6ca998bdd2da0fa21446bbc7374084a0878fe74d58223a84",
     "umd/src/forward/present.rs": "259ecf300e09f5968ccf2ee8973a5d466c8297e007f6a601fedba12b255b7db0",
     "umd/src/forward/queries.rs": "7b10d99d32828c97d8db91fb22624f729f3029f7731f9310abf5e7080cf3077d",
@@ -723,7 +723,8 @@
       "diagnostic-build-296-running-qemu-config-audit",
       "child-process-only-capability-profiles",
       "adapter-selection-preserves-helios-branding",
-      "require-matching-bound-diagnostic-driver"
+      "require-matching-bound-diagnostic-driver",
+      "context-correct-variant-failure-bounded-probe-teardown"
     ],
     "addedFiles": [
       "kmd_logic/src/display_modes.rs",

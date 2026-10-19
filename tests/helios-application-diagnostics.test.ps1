@@ -75,7 +75,7 @@ try {
         $probeFile=Join-Path $root 'Helios/device-probe-result.json'
         @{schema=1;profileScope='child-process';boundDriverVersion='22.22.296.0';probeVersion='22.22.296.0';probeSha256=('a'*64);registryRestored=$true;
           startedAtUtc=[DateTime]::UtcNow.ToString('o');finishedAtUtc=[DateTime]::UtcNow.ToString('o');private='secret';
-          arms=@(@{mode=1;processId=1234;timedOut=$false;exitCode=1;results=@(@{schema=1;warp=$false;requested=45056;achieved=0;flags=0;hr=2289696772;private='secret'})})} |
+          arms=@(@{mode=1;processId=1234;timedOut=$false;exited=$true;exitCode=1;results=@(@{schema=1;warp=$false;requested=45056;achieved=0;flags=0;hr=2289696772;private='secret'})})} |
             ConvertTo-Json -Depth 8 | Set-Content $probeFile
         $before=$env:ProgramData; $env:ProgramData=$root
         try {$probe=Get-HeliosDeviceProbeDiagnostics} finally {$env:ProgramData=$before}

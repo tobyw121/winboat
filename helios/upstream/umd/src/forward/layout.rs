@@ -607,7 +607,12 @@ pub(crate) unsafe fn create_vs_input_variant(
     );
     let raw = match result {
         Ok(raw) => raw,
-        Err(hr) => { set_runtime_error(h, hr); 0 }
+        Err(hr) => {
+            // This helper has no recording-context handle. Its caller can
+            // legally retain the original shader; do not fail another context.
+            log_error!("VS input-class variant backend hr=0x{:08x}", hr as u32);
+            0
+        }
     };
     log_error!(
         "VS input-class variant: vs=0x{vp:x} classes={:?} -> raw=0x{raw:x}",

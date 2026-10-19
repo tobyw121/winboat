@@ -45,7 +45,7 @@ angemeldeten Windows-Konsole** ausgeführt werden:
 
 Der Helfer verlangt einen aktiven Helios-Adapter und eine zum Paket passende
 gebundene Treiberversion. Er prüft die Test-EXE gegen das gespeicherte
-Paketmanifest und verweigert parallele Installer-/Wartungsaktionen. Er aktiviert
+Paketmanifest und verwendet den vorhandenen WinBoat-Wartungsmutex. Er aktiviert
 keinen Adapter, ändert die Anzeigeanordnung nicht und startet weder DWM noch
 Windows neu. Bei unbenutzbarer Konsole genügt zunächst das neue Gerätejournal;
 die Diagnose ist kein Grund, einen deaktivierten Treiber wiederholt zu aktivieren.
@@ -61,7 +61,9 @@ Die native Probe ruft Windows' echtes `D3D11CreateDevice` mit BGRA-/Single-Threa
 Flags auf und erfasst den **äußeren** HRESULT, das angefragte und das erreichte
 Feature Level. Es gibt keinen automatischen WARP-Fallback. Die vier Test-PIDs
 erlauben die Zuordnung zu den jeweiligen UMD-Protokollen. Ein Prozess wird nach
-30 Sekunden als Timeout beendet; es wird kein fremder Prozess beendet.
+30 Sekunden als Timeout zum Beenden aufgefordert; der Helfer wartet danach
+höchstens weitere fünf Sekunden. `exited=false` und `exitCode=null` kennzeichnen
+einen nicht beendeten Prozess. Es wird kein fremder Prozess beendet.
 
 Das Ergebnis liegt unter `C:\ProgramData\Helios\device-probe-result.json`.
 `registryRestored=true` bedeutet beim Standardtest mit

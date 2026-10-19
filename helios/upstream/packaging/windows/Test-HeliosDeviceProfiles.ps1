@@ -80,9 +80,15 @@ try {
             $stdout=$process.StandardOutput.ReadToEndAsync()
             $stderr=$process.StandardError.ReadToEndAsync()
             $timeout=-not $process.WaitForExit(30000)
-            if ($timeout) {$process.Kill(); $process.WaitForExit()}
-            $rows=@($stdout.Result -split '\r?\n' | Where-Object {$_ -match '^\{"schema":1,'} | ForEach-Object {$_ | ConvertFrom-Json})
-            [ordered]@{mode=$mode;processId=$process.Id;timedOut=$timeout;exitCode=$process.ExitCode;results=$rows}
+            $exited=-not $timeout
+            if ($timeout) {
+                try {$process.Kill()} catch {} # It may have exited during the timeout race.
+                $exited=$process.WaitForExit(5000)
+            }
+            $output=if ($stdout.IsCompleted) {$stdout.GetAwaiter().GetResult()} else {''}
+            $exitCode=if ($exited) {$process.ExitCode} else {$null}
+            $rows=@($output -split '\r?\n' | Where-Object {$_ -match '^\{"schema":1,'} | ForEach-Object {$_ | ConvertFrom-Json})
+            [ordered]@{mode=$mode;processId=$process.Id;timedOut=$timeout;exited=$exited;exitCode=$exitCode;results=$rows}
         } finally {$process.Dispose()}
     })
     $report=[ordered]@{schema=1;profileScope='child-process';boundDriverVersion=$boundVersion;probeVersion=[string]$manifest.version;probeSha256=(Get-HeliosSha256 $probe);
