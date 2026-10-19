@@ -49,6 +49,10 @@ typedef struct DBusDisplayListener {
     HeliosVulkanReadback *vk_readback;
     DisplaySurface *vk_surface;
     bool vk_announced,vk_failed,copy_requested,copy_active;
+    uint64_t frame_sequence;
+    uint32_t frame_source;
+    int64_t frame_send_us;
+    bool frame_software;
 #ifdef CONFIG_PIXMAN
     pixman_region32_t gl_damage;
 #else
@@ -64,7 +68,12 @@ static int software_baselines,software_updates,vulkan_imports;
 static GVariant *last_pixels;
 static GAsyncReadyCallback pending_callback;
 static gpointer pending_opaque;
-static void error_report(const char *format, ...) { diagnostics++; }
+static int update_rect[4];
+static char diagnostic_line[512];
+static void error_report(const char *format, ...) {
+    diagnostics++;va_list args;va_start(args,format);
+    g_vsnprintf(diagnostic_line,sizeof(diagnostic_line),format,args);va_end(args);
+}
 static const char *qemu_egl_get_error_string(void) { return "fixture EGL error"; }
 static int qemu_egl_make_context_current(void *unused, EGLContext context) {
     if (bind_failure) return -1;
@@ -73,11 +82,17 @@ static int qemu_egl_make_context_current(void *unused, EGLContext context) {
 static void qemu_console_hw_gl_block(void *con, bool block) {last_block=block;}
 static bool qemu_console_is_gl_blocked(void *con) {return last_block;}
 static void qemu_console_hw_update(void *con) { }
-static void dbus_update_gl_cb(void) { }
 static void ddl_discard_display_messages(DBusDisplayListener *ddl) { }
 static void qemu_dbus_display1_listener_call_disable(void *proxy,...) { disables++; }
-static void qemu_dbus_display1_listener_call_update_dmabuf(void *proxy,...) {
+static void qemu_dbus_display1_listener_call_update_dmabuf(void *proxy,int x,int y,int w,int h,
+    GDBusCallFlags flags,int timeout,GCancellable *cancel,GAsyncReadyCallback cb,gpointer opaque) {
     assert(eglGetCurrentContext()!=EGL_NO_CONTEXT);dma_updates++;
+    update_rect[0]=x;update_rect[1]=y;update_rect[2]=w;update_rect[3]=h;
+    pending_callback=cb;pending_opaque=opaque;
+}
+static bool qemu_dbus_display1_listener_call_update_dmabuf_finish(void *proxy,GAsyncResult *result,GError **error) {
+    if(reply_failure) {g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_FAILED,"fixture reply error");return false;}
+    return true;
 }
 static int surface_width(DisplaySurface *s) {return s->width?s->width:4;}
 static int surface_height(DisplaySurface *s) {return s->height?s->height:4;}
@@ -91,6 +106,7 @@ static DisplaySurface *qemu_create_displaysurface(unsigned w,unsigned h) {
 static void qemu_free_displaysurface(DisplaySurface *s) {g_free(s);}
 static uint32_t qemu_dmabuf_get_width(QemuDmaBuf *b) {return b->width?b->width:4;}
 static uint32_t qemu_dmabuf_get_height(QemuDmaBuf *b) {return b->height?b->height:4;}
+static uint32_t qemu_dmabuf_get_source_id(QemuDmaBuf *b) {(void)b;return 4;}
 static uint32_t qemu_dmabuf_get_backing_width(QemuDmaBuf *b) {return qemu_dmabuf_get_width(b);}
 static uint32_t qemu_dmabuf_get_backing_height(QemuDmaBuf *b) {return qemu_dmabuf_get_height(b);}
 static uint32_t qemu_dmabuf_get_x(QemuDmaBuf *b) {(void)b;return 0;}
@@ -227,6 +243,21 @@ int main(void) {
     dbus_scanout_dmabuf(&listener.dcl,&second);
     dbus_release_dmabuf(&listener.dcl,&first);
     assert(disables==0 && listener.active_dmabuf==&second);
+#ifndef HELIOS_TEST_OLD_NATIVE_ROUTING
+    last_block=false;
+    int before_damage=dma_updates;
+    uint64_t before_sequence=listener.frame_sequence;
+    dbus_gl_gfx_update(&listener.dcl,0,0,1,1);
+    dbus_gl_gfx_update(&listener.dcl,3,3,1,1);
+    dbus_gl_refresh(&listener.dcl);
+    assert(dma_updates==before_damage+1 && listener.frame_sequence==before_sequence+1);
+    assert(!listener.frame_software && listener.frame_source==4 && last_block);
+    assert(update_rect[0]==0 && update_rect[1]==0 && update_rect[2]==4 && update_rect[3]==4);
+    g_setenv("HELIOS_FRAME_TRACE","1",true);
+    pending_callback(NULL,NULL,pending_opaque);assert(!last_block);
+    assert(strstr(diagnostic_line,"frame-ack source=4") && strstr(diagnostic_line,"transport=dmabuf"));
+    g_unsetenv("HELIOS_FRAME_TRACE");
+#endif
     dbus_scanout_dmabuf(&listener.dcl,&third);
     dbus_release_dmabuf(&listener.dcl,&second);
     assert(disables==0 && listener.active_dmabuf==&third);
@@ -275,7 +306,7 @@ int main(void) {
     dbus_call_update_gl(&listener.dcl,0,0,4,4);
     int previous_diagnostics=diagnostics;
     reply_failure=true;pending_callback(NULL,NULL,pending_opaque);reply_failure=false;
-    assert(!listener.vk_announced && !last_block && diagnostics==previous_diagnostics+1);
+    assert(!listener.vk_announced && !last_block && diagnostics>=previous_diagnostics+1);
     dbus_call_update_gl(&listener.dcl,0,0,4,4);assert(software_baselines==2);
     pending_callback(NULL,NULL,pending_opaque);
     QemuDmaBuf explicit_linear={.allocation=64,.optimal=true};

@@ -1,0 +1,132 @@
+--- a/ui/dbus-listener.c
++++ b/ui/dbus-listener.c
+@@ -102,6 +102,10 @@
+     bool vk_failed;
+     bool copy_requested;
+     bool copy_active;
++    uint64_t frame_sequence;
++    uint32_t frame_source;
++    int64_t frame_send_us;
++    bool frame_software;
+ #endif
+ #endif
+ #endif
+@@ -198,6 +202,26 @@
+     return true;
+ }
+
++static void dbus_helios_frame_sent(DBusDisplayListener *ddl, bool software)
++{
++    ddl->frame_sequence++;
++    ddl->frame_source = ddl->active_dmabuf
++        ? qemu_dmabuf_get_source_id(ddl->active_dmabuf) : UINT32_MAX;
++    ddl->frame_send_us = g_get_monotonic_time();
++    ddl->frame_software = software;
++}
++
++static void dbus_helios_frame_ack(DBusDisplayListener *ddl, bool success)
++{
++    int64_t wait_us = g_get_monotonic_time() - ddl->frame_send_us;
++    if (!g_strcmp0(g_getenv("HELIOS_FRAME_TRACE"), "1") || wait_us > 50000) {
++        error_report("dbus: frame-ack source=%u sequence=%" PRIu64
++                     " wait_us=%" PRId64 " success=%d in_flight=1 transport=%s",
++                     ddl->frame_source, ddl->frame_sequence, wait_us,
++                     success, ddl->frame_software ? "copy" : "dmabuf");
++    }
++}
++
+ static void dbus_helios_frame_done(GObject *source, GAsyncResult *result,
+                                   gpointer opaque)
+ {
+@@ -210,6 +234,7 @@
+         error_report("dbus: failed to send Helios frame: %s", err->message);
+         ddl->vk_announced = false;
+     }
++    dbus_helios_frame_ack(ddl, reply != NULL);
+     qemu_console_hw_gl_block(ddl->dcl.con, false);
+     g_object_unref(ddl);
+ }
+@@ -302,6 +327,7 @@
+     pixels = g_bytes_new(surface_data(ddl->vk_surface), bytes);
+     data = g_variant_new_from_bytes(G_VARIANT_TYPE("ay"), pixels, true);
+     g_bytes_unref(pixels);
++    dbus_helios_frame_sent(ddl, true);
+     qemu_console_hw_gl_block(ddl->dcl.con, true);
+     if (!ddl->vk_announced) {
+         ddl_discard_display_messages(ddl);
+@@ -454,6 +480,9 @@
+     }
+ #endif
+
++#if defined(CONFIG_GBM) && defined(CONFIG_LINUX)
++    dbus_helios_frame_ack(ddl, success);
++#endif
+     qemu_console_hw_gl_block(ddl->dcl.con, false);
+     g_object_unref(ddl);
+ }
+@@ -482,6 +511,9 @@
+     }
+ #endif
+
++#if defined(CONFIG_GBM) && defined(CONFIG_LINUX)
++    dbus_helios_frame_sent(ddl, false);
++#endif
+     glFlush();
+ #ifdef CONFIG_GBM
+     qemu_console_hw_gl_block(ddl->dcl.con, true);
+@@ -972,6 +1004,7 @@
+ {
+     DBusDisplayListener *ddl = container_of(dcl, DBusDisplayListener, dcl);
+     DisplaySurface *surface;
++    uint32_t width, height;
+
+     qemu_console_hw_update(dcl->con);
+     surface = ddl->ds;
+@@ -981,32 +1014,34 @@
+     }
+ #endif
+
+-    if (!surface || qemu_console_is_gl_blocked(ddl->dcl.con)) {
++    width = surface ? surface_width(surface) : 0;
++    height = surface ? surface_height(surface) : 0;
++#if defined(CONFIG_GBM)
++    if (ddl->active_dmabuf) {
++        width = qemu_dmabuf_get_width(ddl->active_dmabuf);
++        height = qemu_dmabuf_get_height(ddl->active_dmabuf);
++    }
++#endif
++    if (!width || !height || width > INT_MAX || height > INT_MAX ||
++        qemu_console_is_gl_blocked(ddl->dcl.con)) {
+         return;
+     }
+
+ #ifdef CONFIG_PIXMAN
+     int n_rects = pixman_region32_n_rects(&ddl->gl_damage);
+
+-    for (int i = 0; i < n_rects; i++) {
+-        pixman_box32_t *box;
+-        box = pixman_region32_rectangles(&ddl->gl_damage, NULL) + i;
+-        /* TODO: Add a UpdateList call to send multiple updates at once */
++    if (n_rects) {
++        const pixman_box32_t *box = pixman_region32_extents(&ddl->gl_damage);
++        /* A single bounding rectangle preserves all damage and owns one ACK.
++         * The producer remains blocked until that one source read completes. */
+         dbus_call_update_gl(dcl, box->x1, box->y1,
+                             box->x2 - box->x1, box->y2 - box->y1);
+-#if defined(CONFIG_GBM) && defined(CONFIG_LINUX)
+-        if (ddl->vk_readback || ddl->copy_active) {
+-            /* Readback sends the full frame. One ACK must own one GL block,
+-             * even when damage contains several disjoint rectangles. */
+-            break;
+-        }
+-#endif
+     }
+     pixman_region32_clear(&ddl->gl_damage);
+ #else
+     if (ddl->gl_damage) {
+         dbus_call_update_gl(dcl, 0, 0,
+-                            surface_width(surface), surface_height(surface));
++                            width, height);
+         ddl->gl_damage = 0;
+     }
+ #endif

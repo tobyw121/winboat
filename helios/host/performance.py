@@ -31,6 +31,9 @@ def options(args, env, huge_free=None):
     args = list(args)
     if env.get('HELIOS_RESCUE') == '1' or inspection(args):
         return args
+    if number(env,'HELIOS_FRAME_TRACE',1):
+        if '-trace' in args: raise ValueError('Existing QEMU trace configuration must be preserved')
+        args += ['-trace','enable=helios_vulkan_capture']
     devices = [(i,v.split(',')) for i,v in enumerate(args) if i and args[i-1] == '-device']
     queues = number(env,'HELIOS_NET_QUEUES',8)
     if queues > 1:
@@ -86,7 +89,7 @@ def options(args, env, huge_free=None):
 
 def inspection(args):
     return args in (['--version'],['-version'],['--help'],['-help']) or (
-        len(args)==2 and args[0] in ('-device','-machine','-accel','-cpu') and
+        len(args)==2 and args[0] in ('-device','-machine','-accel','-cpu','-trace') and
         (args[1]=='help' or args[0]=='-device' and args[1].endswith(',help')))
 
 

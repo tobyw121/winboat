@@ -98,7 +98,7 @@ with tempfile.TemporaryDirectory(prefix='winboat-qemu-dbus-') as temporary:
     for name in ['egl_fb_delete_texture','egl_fb_destroy','egl_fb_setup_for_tex','egl_fb_setup_new_tex','egl_fb_blit','egl_fb_read']:
         callbacks += function(helpers, name)
     callbacks += '#pragma GCC diagnostic pop\n'
-    for name in ['dbus_helios_readback_clear', 'dbus_helios_readback_select', 'dbus_helios_frame_done', 'dbus_helios_copy_capture', 'dbus_helios_readback_update', 'dbus_scanout_disable', 'dbus_call_update_gl', 'dbus_scanout_dmabuf', 'dbus_scanout_texture', 'dbus_release_dmabuf', 'dbus_gl_gfx_update', 'dbus_gl_gfx_switch', 'dbus_gl_refresh']:
+    for name in ['dbus_helios_readback_clear', 'dbus_helios_readback_select', 'dbus_helios_frame_sent', 'dbus_helios_frame_ack', 'dbus_helios_frame_done', 'dbus_helios_copy_capture', 'dbus_helios_readback_update', 'dbus_scanout_disable', 'dbus_update_gl_cb', 'dbus_call_update_gl', 'dbus_scanout_dmabuf', 'dbus_scanout_texture', 'dbus_release_dmabuf', 'dbus_gl_gfx_update', 'dbus_gl_gfx_switch', 'dbus_gl_refresh']:
         callbacks += function(listener, name)
     (source / 'callbacks.inc').write_text(callbacks)
     flags = shlex.split(subprocess.check_output(['pkg-config', '--cflags', '--libs', 'gio-2.0', 'epoxy', 'pixman-1'], text=True))
@@ -138,8 +138,10 @@ with tempfile.TemporaryDirectory(prefix='winboat-qemu-dbus-') as temporary:
     # The unused selector is expected when reproducing the old routing.
     (source / 'callbacks.inc').write_text(missing_native)
     binary = source / 'test-missing-native-readback'
+    # Isolate this negative routing control from the later ACK/union test:
+    # the old callback did not establish the active surface those require.
     subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter', '-Wno-unused-function',
-                    '-I', str(source), str(ROOT / 'tests/helios-qemu-dbus.c'), *flags, '-o', str(binary)], check=True)
+                    '-DHELIOS_TEST_OLD_NATIVE_ROUTING', '-I', str(source), str(ROOT / 'tests/helios-qemu-dbus.c'), *flags, '-o', str(binary)], check=True)
     missing = subprocess.run([str(binary)], env={**os.environ, 'EGL_PLATFORM': 'surfaceless', 'LIBGL_ALWAYS_SOFTWARE': '1'}, capture_output=True, text=True)
     assert missing.returncode < 0 and 'vulkan_imports==1' in missing.stderr, missing.stderr
     print('Original native scanout routing bypasses the required Vulkan classification as expected.', flush=True)

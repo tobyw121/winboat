@@ -24,6 +24,17 @@ class Opener:
         return contextlib.closing(io.BytesIO(b'x' * 131073))
 
 class TestGraphicsCollector(unittest.TestCase):
+    def test_frame_metrics_are_fixed_fields_and_do_not_invent_fps(self):
+        text='dbus: frame-ack source=4 sequence=8 wait_us=123 success=1 in_flight=1 transport=copy\n'
+        text+='helios_vulkan_capture ino 99 seq 8 publish 1 1280x800 submit_ns 100 wait_ns 200 cpu_ns 300\n'
+        text+='PRIVATE-PATH SECRET\n'
+        result=graphics.parse_frame_metrics(text)
+        self.assertEqual(len(result),2)
+        self.assertEqual(result[0]['waitMicroseconds'],123)
+        self.assertEqual(result[1]['cpuNanoseconds'],300)
+        self.assertEqual(graphics.parse_transport_errors('import-held source=4 ino=99 attempts=2 delay_ns=500000000')[0]['kind'],'import-backoff')
+        self.assertNotIn('PRIVATE',json.dumps(result))
+        self.assertEqual(graphics.parse_frame_metrics('frame-ack source=4 sequence=1 wait_us=-1 success=1 in_flight=1 transport=copy'),[])
     def test_old_host_runtime_is_reported_separately_from_guest_driver(self):
         inspect='"winboat/helios:test"\n"sha256:abc"\n"running"\n'
         with patch.object(graphics.subprocess, 'check_output', side_effect=[inspect, 'glvnd-v4\ndbus-v8\n']), \

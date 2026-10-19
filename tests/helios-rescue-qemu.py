@@ -23,7 +23,8 @@ def run(image):
     with tempfile.TemporaryDirectory(prefix='helios-rescue-qemu-') as temporary:
         folder = Path(temporary)
         mounts = []
-        for source, target in [('display.sh', '/run/display.sh'), ('qemu.sh', '/usr/local/bin/qemu-system-x86_64')]:
+        for source, target in [('display.sh', '/run/display.sh'), ('qemu.sh', '/usr/local/bin/qemu-system-x86_64'),
+                               ('performance.py','/opt/helios/performance.py')]:
             destination = folder / source
             shutil.copyfile(ROOT / 'helios/host' / source, destination)
             destination.chmod(0o755)

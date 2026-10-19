@@ -5,3 +5,4 @@ dd744aae29795afef7074cec89e85c088f7f61ca08e94eb22b50c813f15e3836  0004-dbus-nati
 c5d9c48b2143d5545084ccf714bb8dbd63b0c59db75f4feb4c44df47af00533c  0005-vulkan-readback-drm-device.patch
 c4a858dc5e7f3483c6a0d5e7a2e6845054dc4531774f31d21291a5c983dfea22  0006-readback-retry-and-correlation.patch
 7a78473806d729099a232b1f6848fd03245c8757cec01c5dcdd0c5f5a11cb83b  0007-dbus-validated-copy-fallback.patch
+6faefbbbf31b82c43c483d7eaac69716d747328e8feeec73cf41afd16121907c  0008-dbus-frame-ack-metrics.patch

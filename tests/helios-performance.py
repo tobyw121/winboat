@@ -54,5 +54,9 @@ class PerformanceTests(unittest.TestCase):
         for value in ['','5-3','0-999999','1;reboot','-1']:
             with self.assertRaises(ValueError): perf.cpu_set(value)
 
+    def test_frame_trace_is_explicit_and_preserves_existing_policy(self):
+        self.assertEqual(perf.options(BASE,{'HELIOS_FRAME_TRACE':'1'})[-2:],['-trace','enable=helios_vulkan_capture'])
+        with self.assertRaises(ValueError): perf.options(BASE+['-trace','events=custom'],{'HELIOS_FRAME_TRACE':'1'})
+
 
 if __name__ == '__main__': unittest.main()

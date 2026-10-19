@@ -25,6 +25,7 @@ def parse_transport_errors(text):
         ('egl-import-error', r'EGL DMA-BUF import failed for fourcc=(0x[0-9a-fA-F]+) modifier=(0x[0-9a-fA-F]+)', ('fourcc', 'modifier')),
         ('memory-accounting-error', r'invalid device-local memory accounting: release=(\d+) used=(\d+)', ('releasedBytes', 'usedBytes')),
         ('device-selection-mismatch', r'no unique Vulkan device matches DRM render node (\d+):(\d+)', ('drmMajor', 'drmMinor')),
+        ('import-backoff', r'import-held source=(\d+) ino=(\d+) attempts=(\d+) delay_ns=(\d+)', ('source','inode','attempts','delayNanoseconds')),
     )
     # Capture fixed numeric fields only, never arbitrary container log messages.
     for line in text.splitlines():
@@ -38,6 +39,24 @@ def parse_transport_errors(text):
     return events[-32:]
 
 
+def parse_frame_metrics(text):
+    records=[]
+    patterns=(
+        ('ack',r'frame-ack source=(\d+) sequence=(\d+) wait_us=(\d+) success=([01]) in_flight=(\d+) transport=(copy|dmabuf)',
+         ('source','sequence','waitMicroseconds','success','inFlight','transport')),
+        ('capture',r'helios_vulkan_capture ino (\d+) seq (\d+) publish ([01]) (\d+)x(\d+) submit_ns (\d+) wait_ns (\d+) cpu_ns (\d+)',
+         ('inode','sequence','published','width','height','submitNanoseconds','waitNanoseconds','cpuNanoseconds')),
+    )
+    for line in text.splitlines():
+        for kind,pattern,names in patterns:
+            match=re.search(pattern,line)
+            if match:
+                record={'kind':kind}
+                record.update({key:value if key=='transport' else int(value) for key,value in zip(names,match.groups())})
+                if all(type(v) is not int or 0<=v<2**64 for v in record.values()): records.append(record)
+    return records[-64:]
+
+
 def collect_host(container):
     result = {}
     try:
@@ -46,6 +65,8 @@ def collect_host(container):
         result.update(zip(('image', 'imageId', 'containerState'), map(json.loads, fields)))
         logs = subprocess.run(['docker', 'logs', '--tail', '300', container], capture_output=True, text=True, timeout=10, check=True)
         result['transportErrors'] = parse_transport_errors((logs.stdout + '\n' + logs.stderr)[-262144:])
+        result['frameMetrics'] = parse_frame_metrics((logs.stdout + '\n' + logs.stderr)[-262144:])
+        result['frameMetricsScope'] = 'Bounded log tail; ACK wall time and Vulkan capture phases, not guest FPS or end-to-end input latency. Frame tracing is optional.'
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         result['error'] = type(error).__name__ + ': host graphics details unavailable'
     root = pathlib.Path(__file__).resolve().parents[2]
