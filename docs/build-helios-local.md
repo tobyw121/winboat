@@ -96,7 +96,7 @@ Details: [Local Desktop](helios-local-display.md#startauflösung-und-zoom-viewer
 ### Kein Bild während Windows Setup oder AME
 
 `Display output is not active` kann auftreten, wenn nur die Helios-GPU vorhanden
-ist, deren Windows-Treiber erst später installiert wird. Die Runtime `glvnd-v4`
+ist, deren Windows-Treiber erst später installiert wird. Die aktuelle Runtime `glvnd-v5`
 fügt deshalb wie der upstream Helios-Installer einen Standard-VGA-Adapter vor
 der Helios-GPU hinzu. noVNC und der GTK-Viewer zeigen während der Einrichtung
 dessen Konsole 0. Die Helios-GPU bleibt angeschlossen.

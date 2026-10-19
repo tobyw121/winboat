@@ -845,7 +845,9 @@ unterscheidet gesendete Wünsche von tatsächlich angewendeten Größen. Die neu
 Windows-Modusauswahl macht einen QEMU-Hinweis nicht automatisch zu einem
 bestätigten Windows-Moduswechsel.
 
-Startauflösung und Zoom benötigen den Host-Runtime-Stand `glvnd-v4` und Viewer 13.
+Startauflösung und Zoom benötigen mindestens `glvnd-v4` und Viewer 13.
+Der aktuelle Host-Stand ist `glvnd-v5`; er ergänzt die Auswahl des zum DRM-Node
+passenden Vulkan-Geräts für den Readback.
 Zum Aktualisieren `./scripts/build-helios.sh` ohne `--skip-host` ausführen.
 Die Prüfungen in der Cloud decken Modus-Policy, die echte Commit-Funktion mit
 simulierten OS-Callbacks, native WDK-Kompilation und die vorhandene
