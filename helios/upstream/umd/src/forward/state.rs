@@ -521,16 +521,22 @@ pub(crate) unsafe fn store_com<T: Interface>(h: impl ComHandle, obj: T) {
     }
 }
 
-/// Map a DXVK create failure onto an HRESULT the invoking API is documented to
-/// return. Every `Create*` DDI this is used from documents exactly
-/// `E_OUTOFMEMORY` and `E_INVALIDARG`; an HRESULT outside that set is itself
-/// logged by the runtime as a driver bug, so a DXVK code outside it is
-/// substituted rather than passed through.
-pub(crate) fn create_error_hr(e: &windows::core::Error) -> i32 {
-    match e.code().0 {
-        hr @ (E_OUTOFMEMORY | E_INVALIDARG) => hr,
-        _ => E_OUTOFMEMORY,
+/// Translate public DXGI device-loss codes to the driver callback's code.
+/// Unknown failures remain critical: do not disguise invalid backend operations
+/// as memory exhaustion. This does not make an unsupported DDI succeed.
+pub(crate) fn create_callback_hr(hr: i32) -> i32 {
+    match hr as u32 {
+        // DXGI_ERROR_DEVICE_REMOVED / HUNG / RESET / DRIVER_INTERNAL_ERROR.
+        0x887a0005 | 0x887a0006 | 0x887a0007 | 0x887a0020 => crate::hr::D3DDDIERR_DEVICEREMOVED,
+        _ if hr >= 0 => E_FAIL, // Successful HRESULT with no created object.
+        _ => hr,
     }
+}
+
+pub(crate) fn create_error_hr(e: &windows::core::Error) -> i32 {
+    let raw = e.code().0;
+    log_error!("DDI Create backend hr=0x{:08x} callback=0x{:08x}", raw as u32, create_callback_hr(raw) as u32);
+    create_callback_hr(raw)
 }
 
 /// Reject a null runtime descriptor before dereferencing it in a Create DDI.
@@ -567,7 +573,7 @@ pub(crate) unsafe fn finish_create<T: Interface>(
     match result {
         Ok(()) => match obj {
             Some(o) => store(o),
-            None => set_runtime_error(h, E_OUTOFMEMORY),
+            None => set_runtime_error(h, create_callback_hr(0)),
         },
         Err(e) => set_runtime_error(h, create_error_hr(&e)),
     }

@@ -104,7 +104,7 @@ pub(crate) unsafe extern "system" fn create_vertex_shader(
             .insert(raw, bytes.to_vec());
     } else {
         log_error!("DDI create_vertex_shader failed");
-        set_runtime_error(h, result.err().unwrap_or(E_FAIL));
+        set_runtime_error(h, create_callback_hr(result.err().unwrap_or(E_FAIL)));
     }
 }
 
@@ -138,7 +138,7 @@ pub(crate) unsafe extern "system" fn create_pixel_shader(
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_pixel_shader failed");
-        set_runtime_error(h, result.err().unwrap_or(E_FAIL));
+        set_runtime_error(h, create_callback_hr(result.err().unwrap_or(E_FAIL)));
     }
 }
 
@@ -597,7 +597,7 @@ pub(crate) unsafe fn create_shader_11_1_common(
         }
     } else {
         log_error!("DDI {name} failed");
-        set_runtime_error(h, result.err().unwrap_or(E_FAIL));
+        set_runtime_error(h, create_callback_hr(result.err().unwrap_or(E_FAIL)));
     }
 }
 
@@ -658,7 +658,7 @@ pub(crate) unsafe extern "system" fn create_geometry_shader(
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_geometry_shader failed");
-        set_runtime_error(h, result.err().unwrap_or(E_FAIL));
+        set_runtime_error(h, create_callback_hr(result.err().unwrap_or(E_FAIL)));
     }
 }
 
@@ -710,7 +710,7 @@ pub(crate) unsafe extern "system" fn create_geometry_shader_so(
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_geometry_shader_so failed");
-        set_runtime_error(h, result.err().unwrap_or(E_FAIL));
+        set_runtime_error(h, create_callback_hr(result.err().unwrap_or(E_FAIL)));
     }
 }
 
@@ -771,7 +771,7 @@ pub(crate) unsafe extern "system" fn create_hull_shader(
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_hull_shader failed");
-        set_runtime_error(h, result.err().unwrap_or(E_FAIL));
+        set_runtime_error(h, create_callback_hr(result.err().unwrap_or(E_FAIL)));
     }
 }
 
@@ -818,7 +818,7 @@ pub(crate) unsafe extern "system" fn create_hull_shader_11_1(
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_hull_shader_11_1 failed");
-        set_runtime_error(h, result.err().unwrap_or(E_FAIL));
+        set_runtime_error(h, create_callback_hr(result.err().unwrap_or(E_FAIL)));
     }
 }
 
@@ -863,7 +863,7 @@ pub(crate) unsafe extern "system" fn create_domain_shader(
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_domain_shader failed");
-        set_runtime_error(h, result.err().unwrap_or(E_FAIL));
+        set_runtime_error(h, create_callback_hr(result.err().unwrap_or(E_FAIL)));
     }
 }
 
@@ -910,7 +910,7 @@ pub(crate) unsafe extern "system" fn create_domain_shader_11_1(
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_domain_shader_11_1 failed");
-        set_runtime_error(h, result.err().unwrap_or(E_FAIL));
+        set_runtime_error(h, create_callback_hr(result.err().unwrap_or(E_FAIL)));
     }
 }
 
@@ -940,7 +940,7 @@ pub(crate) unsafe extern "system" fn create_compute_shader(
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_compute_shader failed");
-        set_runtime_error(h, result.err().unwrap_or(E_FAIL));
+        set_runtime_error(h, create_callback_hr(result.err().unwrap_or(E_FAIL)));
     }
 }
 

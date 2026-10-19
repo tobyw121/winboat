@@ -22,6 +22,13 @@ with tempfile.TemporaryDirectory(prefix='helios-selector-') as directory:
 #include <cstring>
 #include <string>
 #include "helios_branding.h"
+#include "adapter_selection.h"
+struct Luid { int value; };
+struct Instance {
+    int devices[2] = {1, 2}; int count = 1;
+    int* findAdapterByLuid(Luid* id) { return id->value == 1 && count ? &devices[0] : nullptr; }
+    int* enumAdapters(unsigned index) { return index < unsigned(count) ? &devices[index] : nullptr; }
+};
 static std::string filter;
 static int _putenv_s(const char* key, const char* value) {
     assert(std::strcmp(key, "DXVK_FILTER_DEVICE_NAME") == 0);
@@ -41,10 +48,21 @@ int main() {
         assert(std::strstr(device_name, filter.c_str()) != nullptr);
     }
     assert(std::strstr("Unrelated Vulkan ICD", filter.c_str()) == nullptr);
+    Instance instance; Luid expected{1}, missing{9};
+    assert(select_helios_adapter(instance, &expected) == &instance.devices[0]);
+    assert(select_helios_adapter(instance, &missing) == nullptr);
+    assert(select_helios_adapter(instance, static_cast<Luid*>(nullptr)) == &instance.devices[0]);
+    instance.count = 2;
+    assert(select_helios_adapter(instance, &expected) == &instance.devices[0]);
+    assert(select_helios_adapter(instance, static_cast<Luid*>(nullptr)) == nullptr);
+    instance.count = 0;
+    assert(select_helios_adapter(instance, static_cast<Luid*>(nullptr)) == nullptr);
 }
 ''')
     executable = temp / 'selector'
     subprocess.run(['g++', '-std=c++17', '-Wall', '-Wextra', '-Werror',
-                    '-I' + str(UPSTREAM / 'metadata'), str(source), '-o', str(executable)], check=True)
+                    '-I' + str(UPSTREAM / 'metadata'), '-I' + str(UPSTREAM / 'umd/bridge'),
+                    str(source), '-o', str(executable)], check=True)
     subprocess.run([str(executable)], check=True)
-print('Production DXVK selector matches the branded Mesa adapter; unrelated ICD excluded.')
+assert 'select_helios_adapter(*d.instance, has_luid ? &luid : nullptr)' in bridge
+print('Production DXVK selector: branded filter, exact LUID, unique legacy fallback, ambiguity/missing rejection passed.')

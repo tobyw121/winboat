@@ -19,6 +19,9 @@ fn main() {
         .join("../../helios/upstream/umd/src/forward/state.rs");
     println!("cargo:rerun-if-changed={}", source.display());
     let text = fs::read_to_string(source).unwrap();
+    let start = text.find("pub(crate) fn create_callback_hr").unwrap();
+    let end = text[start..].find("pub(crate) fn create_error_hr").unwrap() + start;
+    fs::write(PathBuf::from(env::var("OUT_DIR").unwrap()).join("create_error.rs"), &text[start..end]).unwrap();
     let start = text.find("pub(crate) unsafe fn checked_create_arg").unwrap();
     let end = text[start..].find("/// The only way a VOID-returning").unwrap() + start;
     fs::write(PathBuf::from(env::var("OUT_DIR").unwrap()).join("create_args.rs"), &text[start..end]).unwrap();

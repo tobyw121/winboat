@@ -4,6 +4,8 @@
 #![cfg(all(test, windows))]
 #![allow(non_snake_case, non_camel_case_types, non_upper_case_globals)]
 use std::{ffi::c_void, mem::ManuallyDrop, sync::atomic::{AtomicUsize, Ordering}};
+#[path = "../../../helios/upstream/umd_common/src/hr.rs"]
+mod hr;
 use windows::{core::Interface, Win32::{Foundation::{HMODULE, RECT}, Graphics::{
     Direct3D::{D3D_DRIVER_TYPE_WARP, D3D_FEATURE_LEVEL_11_0}, Direct3D11::*, Dxgi::Common::*}}};
 

@@ -29,6 +29,7 @@
 #include "bridge_util.h"
 
 #include "bridge_dxbc.h"
+#include "adapter_selection.h"
 #include "../../metadata/helios_branding.h"
 
 #include <algorithm>
@@ -1798,20 +1799,14 @@ std::unique_ptr<HeliosDxvkDevice> helios_dxvk_create_device(
 
       d.instance = new dxvk::DxvkInstance(dxvk::DxvkInstanceFlags());
 
-      if (luid_low != 0 || luid_high != 0) {
-        LUID luid;
-        luid.LowPart  = luid_low;
-        luid.HighPart = luid_high;
-        d.adapter = d.instance->findAdapterByLuid(&luid);
-        if (d.adapter == nullptr)
-          umd_log("findAdapterByLuid found nothing; falling back to adapter 0");
-      }
-
-      if (d.adapter == nullptr)
-        d.adapter = d.instance->enumAdapters(0);
-
+      LUID luid{};
+      luid.LowPart = luid_low;
+      luid.HighPart = luid_high;
+      const bool has_luid = luid_low != 0 || luid_high != 0;
+      d.adapter = select_helios_adapter(*d.instance, has_luid ? &luid : nullptr);
       if (d.adapter == nullptr) {
-        umd_log("no Vulkan adapter enumerated (venus ICD not present?)");
+        umd_log(has_luid ? "REFUSING Vulkan adapter: requested LUID not found"
+                        : "REFUSING Vulkan adapter: no unique Helios device");
         return nullptr;
       }
 

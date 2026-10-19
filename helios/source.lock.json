@@ -568,11 +568,12 @@
     "umd/Cargo.lock": "d68e029fe6d647d58bc1bc649cb71fda38fbf2afb6c562861098dd7f84bc2b9c",
     "umd/Cargo.toml": "7c5225b1e302d1df18a1fee8367e32e7787e3d7b516a14ad943ffafa489ef0b8",
     "umd/bindgen/d3d10umddi_wrapper.h": "d997ea291d9b6d8913f4ea565b91c1d67fa868ef9c162dff4e638bf9627f384e",
+    "umd/bridge/adapter_selection.h": "d94d6b5e3a15faeea861873dab25d9aa13c1fdf098076534b631ebdc301f8a82",
     "umd/bridge/bridge_dxbc.cpp": "f9703b8c18c4debaa90f4d7acfbbb97c9a4ab86caf66b65098f5b7a58bdb74be",
     "umd/bridge/bridge_dxbc.h": "7ac577330a0f53d866041d5ef8ca22e7f7b09a22eeab439f395dce4d0d3b6c2f",
     "umd/bridge/bridge_icd_exports.cpp": "9f9fcee8e41a2edb8244eee4c32ec3915b4610bb597819a093aef30e0f712965",
     "umd/bridge/bridge_icd_exports.h": "fa993c4fce07766dc09e9051b6fc8d0ac9e68f6971a23470ece7b5353414dda6",
-    "umd/bridge/dxvk_bridge.cpp": "405d1f787fddb6ffa8138f45ba441175bfbe5dc7e62d380a964ad5ddac049a82",
+    "umd/bridge/dxvk_bridge.cpp": "8863ccc26b28c595e08c5adc0f77fdcf0a2423b55683ccfce9e0e73c4f487078",
     "umd/bridge/dxvk_bridge.h": "5618db6d69c873f55d78a01f69210d97034c49f8be14c107b5bf76797297e476",
     "umd/build-support/dxvk_c_compat.h": "affc48258a9d1437396e1d95ea872585bea80d043a9347a0306f09a38518d9b2",
     "umd/build-support/typed_tables.rs": "66a96356829c65705432a00ff96d65112a55477dd1253a57e2a1ca8b9992e521",
@@ -595,9 +596,9 @@
     "umd/src/forward/queries.rs": "7b10d99d32828c97d8db91fb22624f729f3029f7731f9310abf5e7080cf3077d",
     "umd/src/forward/query_contract.rs": "11ba6966bc2035828afe4af9fd705584caea5c9831d224f7c260c838d4529fae",
     "umd/src/forward/resource.rs": "ef95342eb270bcf96f51269716e04009cf8ac2a8246d768845829ef811647550",
-    "umd/src/forward/shaders.rs": "8c8291a21f18e408def66c5fa75956fe52bd5790b6605d655fe55cbcf7ac3474",
+    "umd/src/forward/shaders.rs": "92b507854828136c701e47827713789e4c62994f0b522a408d657191c3f113bf",
     "umd/src/forward/snapshot.rs": "91511f63ec6e5486f3ecd473915e4fbc7e8351242c0c09f0215b99145019de6a",
-    "umd/src/forward/state.rs": "377688ed656d3a0266850d34062e4db93d97621cfe4b6dba684cd95e6064ba04",
+    "umd/src/forward/state.rs": "5a11cb49d987c1915a602c238be5826431e91d834366d6d427f78129680720b1",
     "umd/src/forward/state_objects.rs": "855fc17ecddd773288b240219c51f6fa57e91fa557408b69ac8d69ff6576f99b",
     "umd/src/forward/tables.rs": "983204254198b81a8b41f69c84871bb2be8a0be976b504089cc7fd98377e6b72",
     "umd/src/forward/tiles.rs": "e26bd97d95fb406c0ce75eec15a1403e8bc0a6082b2207ffdab97797e28ed215",
@@ -726,7 +727,8 @@
       "require-matching-bound-diagnostic-driver",
       "context-correct-variant-failure-bounded-probe-teardown",
       "real-native-probe-drain-and-timeout-tests",
-      "shader-hresult-cxx-signature-validation"
+      "shader-hresult-cxx-signature-validation",
+      "Exact LUID or unique-adapter selection and loss-aware D3D11 creation errors"
     ],
     "addedFiles": [
       "kmd_logic/src/display_modes.rs",
@@ -736,7 +738,8 @@
       "packaging/windows/Clear-HeliosDriverStore.ps1",
       "umd/src/diagnostics.rs",
       "packaging/windows/Test-HeliosDeviceProfiles.ps1",
-      "packaging/windows/probes/d3d11-device-probe.cpp"
+      "packaging/windows/probes/d3d11-device-probe.cpp",
+      "umd/bridge/adapter_selection.h"
     ],
     "validationWorkflows": [
       ".github/workflows/test-helios-game-compatibility.yml",
