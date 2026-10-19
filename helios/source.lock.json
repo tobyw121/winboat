@@ -67,13 +67,13 @@
     "ci/patches/clspv/0001-lower-pointer-array-alloca.patch": "2ef181b0ac0b95d51f0a88a4217520455d5b7af97b87fb3c653c3be09a212864",
     "ci/patches/clspv/0002-type-pointer-undefs-per-use.patch": "e75df15a6650700e8d858d288d35ae7ffdf8e236118d76726435138d6665c66e",
     "ci/patches/mesa/0001-guest-device-features-and-branding.patch": "30fe79ffbaea3132c41f425dab276d813aa5825d9419cc35c6b49b8ff03086ed",
-    "ci/windows/Assemble-Package.ps1": "7e446b57d52bd29696d6e7b9bd6ffb9878c1ec6268dee006cc3700d6ae95aba0",
+    "ci/windows/Assemble-Package.ps1": "65a5486daa35399dfd1c68b2b55a0f90a6f6dce66937734968115fc1550953d5",
     "ci/windows/Build-CompatibilityShims.ps1": "883fb3ac61c3b3ab39b385f842cef83b957eb4fd17bd41c380fa8068ab3a6199",
     "ci/windows/Build-Driver.ps1": "cf46d48dbad10544d1b45f8465d66dea13ce90e05b84728900349a46e5cdea4a",
     "ci/windows/Build-Installer.ps1": "e8cf321bbfd42144c736e67978b0c7651563f879271910b47942264c0ff8c95c",
     "ci/windows/Build-KhronosLoaders.ps1": "1efa0a42f8dc8d8d493d5a033a3406a314a529f026604a144a7e364f730b2aa0",
     "ci/windows/Build-OpenCL.ps1": "a6f698e803dd30b9b510df40a41847ad8608e3079be56d6e0384cb9ac60942f7",
-    "ci/windows/Build-SmokeTests.ps1": "a7e685bd4d890467e0fd3c02b7dbd0c06882d7aa44508d5ff0e954789fac546c",
+    "ci/windows/Build-SmokeTests.ps1": "6a80775bf0624c01d7e5a98a947020dc44aa917f525e721f3a90f7c28ee2ba8a",
     "ci/windows/Build-Umd.ps1": "9578769e92e4d54cf6d7bd75cae0ebd5e932dcfb6ca90c9a1f32b16dea5a19aa",
     "ci/windows/Initialize-HeliosBuild.ps1": "4e6e5632eafcd7b45bbc5f3bbfb0378f07c76bca430a743f9b2c7a85204b1853",
     "ci/windows/Install-VulkanSdk.ps1": "f5e2e8ac50b38ac6421f4c920fe36b85b413651c60f535b4587e5a94665aaebb",
@@ -314,8 +314,9 @@
     "nix/windows-dependencies.nix": "5db34f398a22bc9f424fa061a58f4f40dfc3fadd6fa28a81823b7b14ce2fcd69",
     "packaging/windows/Clear-HeliosDriverStore.ps1": "d4f1f801bcdd0d19a2c544025fe5cf77fef3d045313c0964c68368f1a250d663",
     "packaging/windows/Helios-PackageCommon.ps1": "b76da6667fc1117cbe562a8004c641509b303d2eb3da153208700124c248201f",
-    "packaging/windows/Install-Helios.ps1": "eb34765bcebafdce86092204b71293d599add24f3a00ea528cec0cd084099f56",
+    "packaging/windows/Install-Helios.ps1": "f8eadd2da8b405261073c1c02541d3fa4823c73c3cc6d56272528131f6b9410a",
     "packaging/windows/README.md": "6fb7805c2689bb577be675d9262c0b90fc0b71829d5ef656dc0513931cf6785f",
+    "packaging/windows/Test-HeliosDeviceProfiles.ps1": "8d5fa2f8b792536083e57a7f4b87c98b5f99941ad60d0bf852779c43d94c898f",
     "packaging/windows/Test-HeliosRegistrySnapshots.ps1": "1418630d6533ce95ced0ac59436897202d6f9ad2cdb0e2b0d1586c67a831d256",
     "packaging/windows/Uninstall-Helios.ps1": "e45183190e0aa9850b8fec818aca9c39dcfdd40c0a3e041ea87b0bb7c4ef21c9",
     "packaging/windows/Verify-Helios.ps1": "10ee65983698d5fda02301979e4e2da2e831f8eeda9fd69cae1017c2a8c1998a",
@@ -327,6 +328,7 @@
     "packaging/windows/compat/resolve-compatibility/Resolve-CompatibilityCommon.ps1": "eb418675aa7eb6ed34c81f034f53a1ecf8f03f6d6321df1794a99f699f42b899",
     "packaging/windows/compat/resolve-compatibility/Test-Resolve-CompatibilityLifecycle.ps1": "e575dabadf6e1718b1f1ab1bc3b33a83ad9c9f90ec359c78e43149297e4d21db",
     "packaging/windows/compat/resolve-compatibility/Uninstall-Resolve-Compatibility.ps1": "b04a01f92674e582f1bb494e6f53317109157b490e304e2aa6051c1ad05c08a7",
+    "packaging/windows/probes/d3d11-device-probe.cpp": "17fe9b9cac00ea42136ce973c8eaa0ea9fc53347feb7b624dbbc2d02bb0f1e7f",
     "packaging/windows/probes/d3d11-render-checks.h": "796543781b0485b1221236d9b2985874c703825627266a73fc859b35168c8d6a",
     "packaging/windows/probes/d3d11-smoke.cpp": "8f5ed780017dd650c2c4fb6fe80ee1a5e5d836995c524e1a07fb2bf0feeec4ab",
     "packaging/windows/probes/opencl-gl-sharing-smoke.cpp": "f5578e7074ab5c8775b723cad3b2504dbbea628d7e6a4e59440d969876323f28",
@@ -710,7 +712,8 @@
       "Match D3D11 DXVK adapter selection to the shared Windows Venus product branding (22.22.294.0).",
       "Embed explicit VGA-only DriverStore recovery in installer GUI and CLI (22.22.295.0), never automatic repair.",
       "bounded-per-device-capability-journal",
-      "preserve-shader-backend-hresults"
+      "preserve-shader-backend-hresults",
+      "outer-runtime-probe-interleaved-profiles"
     ],
     "addedFiles": [
       "kmd_logic/src/display_modes.rs",
@@ -718,7 +721,9 @@
       "packaging/windows/probes/d3d11-render-checks.h",
       "tools/vulkan_features_probe.c",
       "packaging/windows/Clear-HeliosDriverStore.ps1",
-      "umd/src/diagnostics.rs"
+      "umd/src/diagnostics.rs",
+      "packaging/windows/Test-HeliosDeviceProfiles.ps1",
+      "packaging/windows/probes/d3d11-device-probe.cpp"
     ],
     "validationWorkflows": [
       ".github/workflows/test-helios-game-compatibility.yml",

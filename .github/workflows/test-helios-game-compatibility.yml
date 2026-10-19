@@ -6,6 +6,8 @@ on:
     paths:
       - '.github/workflows/test-helios-game-compatibility.yml'
       - 'tests/helios-adapter-selection.py'
+      - 'tests/helios-device-profiles.test.ps1'
+      - 'helios/upstream/packaging/windows/Test-HeliosDeviceProfiles.ps1'
       - 'tests/helios-journal.rs'
       - 'helios/upstream/umd/src/diagnostics.rs'
       - 'helios/upstream/umd/bridge/dxvk_bridge.cpp'
@@ -28,6 +30,8 @@ on:
   pull_request:
     paths:
       - 'tests/helios-adapter-selection.py'
+      - 'tests/helios-device-profiles.test.ps1'
+      - 'helios/upstream/packaging/windows/Test-HeliosDeviceProfiles.ps1'
       - 'tests/helios-journal.rs'
       - 'helios/upstream/umd/src/diagnostics.rs'
       - 'helios/upstream/umd/bridge/dxvk_bridge.cpp'
@@ -92,12 +96,14 @@ jobs:
           ./tests/game-compatibility.test.ps1
           ./tests/opengl-game-probe.test.ps1
           ./tests/helios-adapter-vulkan.test.ps1
+          ./tests/helios-device-profiles.test.ps1
       - name: Check profiles and OpenGL probe on Windows PowerShell
         shell: powershell
         run: |
           ./tests/game-compatibility.test.ps1
           ./tests/opengl-game-probe.test.ps1
           ./tests/helios-adapter-vulkan.test.ps1
+          ./tests/helios-device-profiles.test.ps1
       - name: Check 32-bit OpenGL probe
         shell: pwsh
         run: |
@@ -125,10 +131,14 @@ jobs:
             'if errorlevel 1 exit /b 1'
             'cl /nologo /W4 /EHsc /std:c++17 /MT tests/helios-game-clearview.cpp /Fe:helios-clearview-${{ matrix.arch }}.exe /link d3d11.lib dxgi.lib'
             'if errorlevel 1 exit /b 1'
+            'cl /nologo /W4 /EHsc /std:c++17 /MT helios/upstream/packaging/windows/probes/d3d11-device-probe.cpp /Fe:helios-device-${{ matrix.arch }}.exe /link d3d11.lib dxgi.lib'
+            'if errorlevel 1 exit /b 1'
             'cl /nologo /W4 /EHsc /std:c++17 /MT helios/upstream/packaging/windows/probes/d3d11-smoke.cpp /Fe:helios-render-${{ matrix.arch }}.exe /link d3d11.lib dxgi.lib d3dcompiler.lib'
           ) | Set-Content -LiteralPath $script -Encoding ascii
           & $env:ComSpec /d /c $script
           if ($LASTEXITCODE -ne 0) { throw 'Helios acceptance probe compilation failed.' }
+          & ./helios-device-${{ matrix.arch }}.exe --warp
+          if ($LASTEXITCODE -ne 0) { throw 'WARP control: outer device creation failed.' }
           & ./helios-render-${{ matrix.arch }}.exe --warp
           if ($LASTEXITCODE -ne 0) { throw 'WARP control: compute/draw/depth/MSAA readback failed.' }
       - uses: actions/upload-artifact@v4
@@ -137,4 +147,5 @@ jobs:
           path: |
             helios-clearview-${{ matrix.arch }}.exe
             helios-render-${{ matrix.arch }}.exe
+            helios-device-${{ matrix.arch }}.exe
           if-no-files-found: error

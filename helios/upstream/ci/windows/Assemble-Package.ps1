@@ -76,7 +76,7 @@ $packageSource = Join-Path $RepoRoot "packaging\windows"
 # Only the scripts the installer runs after extraction are embedded. The
 # human-facing README is placed next to the final exe, not inside it, and the
 # old Install-Helios.cmd launcher is gone now that the exe is the entry point.
-foreach ($script in @("Install-Helios.ps1", "Uninstall-Helios.ps1", "Verify-Helios.ps1", "Helios-PackageCommon.ps1", "Clear-HeliosDriverStore.ps1")) {
+foreach ($script in @("Install-Helios.ps1", "Uninstall-Helios.ps1", "Verify-Helios.ps1", "Helios-PackageCommon.ps1", "Clear-HeliosDriverStore.ps1", "Test-HeliosDeviceProfiles.ps1")) {
     Copy-Required (Join-Path $packageSource $script) (Join-Path $stagingRoot $script)
 }
 # The Rust skeleton is NOT copied into the payload; it is the template the
@@ -141,6 +141,7 @@ foreach ($probe in @(
     "vulkan-features.exe",
     "vulkan-wsi-probe.exe",
     "d3d11-smoke.exe",
+    "d3d11-device-probe.exe",
     "d3d12-smoke.exe",
     "d3d12-clear.exe",
     "opengl-smoke.exe",
@@ -149,7 +150,7 @@ foreach ($probe in @(
 )) {
     Copy-Required (Join-Path $LoadersArtifact "smoke\$probe") (Join-Path $payload "smoke\$probe")
 }
-foreach ($probe in @("vulkan-features.exe", "vulkan-smoke.exe", "vulkan-wsi-probe.exe", "opengl-smoke.exe", "d3d11-smoke.exe", "d3d12-smoke.exe", "d3d12-clear.exe")) {
+foreach ($probe in @("d3d11-device-probe.exe", "vulkan-features.exe", "vulkan-smoke.exe", "vulkan-wsi-probe.exe", "opengl-smoke.exe", "d3d11-smoke.exe", "d3d12-smoke.exe", "d3d12-clear.exe")) {
     Copy-Required (Join-Path $LoadersArtifact "smoke\x86\$probe") (Join-Path $payload "smoke\x86\$probe")
 }
 

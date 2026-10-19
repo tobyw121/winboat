@@ -30,6 +30,8 @@ if ($LASTEXITCODE -ne 0) { throw "Vulkan feature probe compilation failed." }
 if ($LASTEXITCODE -ne 0) { throw "Vulkan WSI probe compilation failed." }
 & cl.exe /nologo /O2 /W4 /MT (Join-Path $source "opengl-smoke.c") "/Fe:$(Join-Path $OutputDir 'opengl-smoke.exe')" /link opengl32.lib gdi32.lib user32.lib
 if ($LASTEXITCODE -ne 0) { throw "OpenGL smoke probe compilation failed." }
+& cl.exe /nologo /O2 /W4 /MT /EHsc (Join-Path $source "d3d11-device-probe.cpp") "/Fe:$(Join-Path $OutputDir 'd3d11-device-probe.exe')" /link d3d11.lib dxgi.lib
+if ($LASTEXITCODE -ne 0) { throw "D3D11 device probe compilation failed." }
 & cl.exe /nologo /O2 /W4 /MT /EHsc (Join-Path $source "d3d11-smoke.cpp") "/Fe:$(Join-Path $OutputDir 'd3d11-smoke.exe')" /link d3d11.lib dxgi.lib d3dcompiler.lib
 if ($LASTEXITCODE -ne 0) { throw "D3D11 smoke probe compilation failed." }
 & cl.exe /nologo /O2 /W4 /MT /EHsc `
