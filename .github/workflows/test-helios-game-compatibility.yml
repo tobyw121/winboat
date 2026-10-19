@@ -6,6 +6,8 @@ on:
     paths:
       - '.github/workflows/test-helios-game-compatibility.yml'
       - 'tests/helios-adapter-selection.py'
+      - 'tests/helios-journal.rs'
+      - 'helios/upstream/umd/src/diagnostics.rs'
       - 'helios/upstream/umd/bridge/dxvk_bridge.cpp'
       - 'helios/upstream/metadata/helios_branding.h'
       - 'helios/upstream/ci/patches/mesa/0001-guest-device-features-and-branding.patch'
@@ -26,6 +28,8 @@ on:
   pull_request:
     paths:
       - 'tests/helios-adapter-selection.py'
+      - 'tests/helios-journal.rs'
+      - 'helios/upstream/umd/src/diagnostics.rs'
       - 'helios/upstream/umd/bridge/dxvk_bridge.cpp'
       - 'helios/upstream/metadata/helios_branding.h'
       - 'helios/upstream/ci/patches/mesa/0001-guest-device-features-and-branding.patch'
@@ -53,6 +57,10 @@ jobs:
         with:
           persist-credentials: false
       - run: python3 tests/helios-adapter-selection.py
+      - name: Execute production bounded GPU journal tests
+        run: |
+          rustc --edition=2021 --test tests/helios-journal.rs -o /tmp/helios-journal
+          /tmp/helios-journal
   clear-view:
     runs-on: windows-2022
     timeout-minutes: 10

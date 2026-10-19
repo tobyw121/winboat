@@ -441,6 +441,7 @@ pub(crate) unsafe fn ctx_bindings<'a>(h: Hdevice) -> Option<&'a crate::device_fu
 /// (`hRTCoreLayer` + callbacks from `D3D11DDIARG_CREATEDEFERREDCONTEXT`), per
 /// the WDK contract — never to the parent device's.
 pub(crate) unsafe fn set_runtime_error(h: Hdevice, hr: i32) {
+    crate::diagnostics::note(h, "runtime-error", [hr as u32 as u64, 0, 0, 0, 0, 0]);
     let (core_layer, um_callbacks) = match drv_handle(h) {
         Some(DrvHandle::Device(dev)) => (dev.h_rt_core_layer, dev.um_callbacks),
         Some(DrvHandle::Deferred(dc)) => (dc.dc_core_layer, dc.dc_um_callbacks),

@@ -168,3 +168,7 @@ mod caps {
 mod msaa;
 
 mod create_args;
+
+// Only handle lookup/logging is a fixture; backend MSAA queries remain real.
+mod diagnostics { pub unsafe fn note<T>(_: T, _: &str, _: [u64; 6]) {} }
+fn feature_level_mode() -> u32 { if caps::SINGLE.get() { 0 } else { 1 } }

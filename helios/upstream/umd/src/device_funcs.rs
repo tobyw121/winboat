@@ -360,6 +360,7 @@ pub struct HeliosDevice {
     /// declared before `dxvk`. See [`BridgeOwned`] for why the position and
     /// the explicit `release()` both exist.
     pub owned: BridgeOwned,
+    pub diagnostics: crate::diagnostics::DeviceDiagnostics,
     pub dxvk: bridge::BridgeDevice,
     pub h_rt_device: ddi::HANDLE,
     /// The kernel context and its buffer windows, validated at construction.
@@ -969,6 +970,8 @@ pub(crate) unsafe extern "system" fn ddi_destroy_device(h_device: ddi::D3D10DDI_
             return;
         }
     }
+    // SAFETY: tag and non-null handle were checked above; runtime owns lifetime.
+    unsafe { &*(h_device.pDrvPrivate as *const HeliosDevice) }.diagnostics.dump();
     log_error!("DDI: DestroyDevice");
     // R911: the nine refusal counters, once per device teardown. Process-global
     // rather than per-device, so this is a running total; the point is that

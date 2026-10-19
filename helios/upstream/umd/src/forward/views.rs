@@ -13,6 +13,7 @@ pub(crate) unsafe extern "system" fn create_rtv(
     h_rtv: ddi::D3D10DDI_HRENDERTARGETVIEW,
     _h_rt: ddi::D3D10DDI_HRTRENDERTARGETVIEW,
 ) {
+    crate::diagnostics::note(h, "view", [0, 0, 0, 0, 0, 0]);
     clear_handle(h_rtv);
     let Some(device) = d3d11_device(h) else {
         set_runtime_error(h, E_OUTOFMEMORY);
@@ -219,6 +220,7 @@ pub(crate) unsafe extern "system" fn create_dsv(
     h_dsv: ddi::D3D10DDI_HDEPTHSTENCILVIEW,
     _h_rt: ddi::D3D10DDI_HRTDEPTHSTENCILVIEW,
 ) {
+    crate::diagnostics::note(h, "view", [1, 0, 0, 0, 0, 0]);
     clear_handle(h_dsv);
     let Some(device) = d3d11_device(h) else {
         set_runtime_error(h, E_OUTOFMEMORY);
@@ -442,6 +444,7 @@ pub(crate) unsafe extern "system" fn create_srv(
     h_srv: ddi::D3D10DDI_HSHADERRESOURCEVIEW,
     _hrt: ddi::D3D10DDI_HRTSHADERRESOURCEVIEW,
 ) {
+    crate::diagnostics::note(h, "view", [2, 0, 0, 0, 0, 0]);
     clear_handle(h_srv);
     let Some(device) = d3d11_device(h) else {
         set_runtime_error(h, E_OUTOFMEMORY);
@@ -685,6 +688,7 @@ pub(crate) unsafe extern "system" fn create_uav(
     h_uav: ddi::D3D11DDI_HUNORDEREDACCESSVIEW,
     _hrt: ddi::D3D11DDI_HRTUNORDEREDACCESSVIEW,
 ) {
+    crate::diagnostics::note(h, "view", [3, 0, 0, 0, 0, 0]);
     clear_handle(h_uav);
     let Some(device) = d3d11_device(h) else {
         set_runtime_error(h, E_OUTOFMEMORY);
@@ -982,6 +986,7 @@ pub(crate) unsafe extern "system" fn create_sampler(
     h_sampler: ddi::D3D10DDI_HSAMPLER,
     _hrt: ddi::D3D10DDI_HRTSAMPLER,
 ) {
+    crate::diagnostics::note(h, "view", [4, 0, 0, 0, 0, 0]);
     clear_handle(h_sampler);
     let Some(device) = d3d11_device(h) else {
         set_runtime_error(h, E_OUTOFMEMORY);

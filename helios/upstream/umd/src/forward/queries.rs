@@ -493,7 +493,10 @@ pub(crate) unsafe fn helios_multisample_quality_levels(
                 device2.CheckMultisampleQualityLevels1(DXGI_FORMAT(fmt as i32), sample_count, flags))
         }
     };
+    let hr = result.as_ref().err().map_or(0, |e| e.code().0 as u32);
     let val = result.unwrap_or(0);
+    crate::diagnostics::note(h, "msaa", [fmt as u64, sample_count as u64, flags as u64,
+        val as u64, hr as u64, crate::feature_level_mode() as u64]);
     if MSAA_LOG_COUNT.first_n_then_every(256, 4096).is_some() {
         trace_line!("MSAA backend fmt={fmt} c={sample_count} flags={flags:#x} -> {val}");
     }

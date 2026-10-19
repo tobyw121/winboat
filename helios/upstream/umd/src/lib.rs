@@ -33,6 +33,7 @@ mod bridge;
 pub(crate) mod caps;
 mod ddi;
 mod device_funcs;
+mod diagnostics;
 mod forward;
 mod knobs;
 

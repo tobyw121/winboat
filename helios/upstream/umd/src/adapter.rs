@@ -392,6 +392,7 @@ unsafe extern "system" fn create_device(
                 // bridge device rather than three of the four dropping after
                 // it. R807.
                 owned: device_funcs::BridgeOwned::new(),
+                diagnostics: crate::diagnostics::DeviceDiagnostics::new(),
                 dxvk,
                 h_rt_device: create.hRTDevice.handle,
                 // Populated by create_runtime_context below; CreateDevice
@@ -546,6 +547,7 @@ impl Drop for DeviceUnderConstruction {
         // runtime does not see the handle until `defuse()` runs — so no other
         // reference exists during teardown.
         unsafe {
+            (*self.dev).diagnostics.dump();
             // The CreateDevice rollback path is the second place BridgeOwned
             // must be released explicitly (R807): reaching it means the bridge
             // device exists but the runtime never saw the handle, and letting
