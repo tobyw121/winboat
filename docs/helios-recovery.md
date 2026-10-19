@@ -76,6 +76,41 @@ Installationen werden weiterhin nicht unterbrochen. Die Geräte-Reaktivierung
 startet diese alten Aufgaben nicht automatisch; eine nötige Paket-Reparatur
 bleibt eine separate ausdrückliche Aktion.
 
+## Helios-Pakete gezielt aus dem DriverStore entfernen
+
+Für die ausdrücklich gewünschte vollständige Entfernung der Helios-Treiberpakete
+gibt es `scripts/helios/Clear-HeliosDriverStore.ps1`. Zunächst WinBoat schließen
+und auf dem Host `python3 scripts/helios/rescue-graphics.py --rescue-boot`
+ausführen. Im Gast muss das Helios-PCI-Gerät vollständig abwesend sein;
+ein nur deaktiviertes Gerät reicht für diesen Helfer nicht.
+
+Das Skript auf den Windows-Desktop kopieren und in einer nativen 64-Bit-PowerShell
+als Administrator ausführen:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\Desktop\Clear-HeliosDriverStore.ps1"
+```
+
+Der Helfer setzt die dauerhafte Rettungssperre und deaktiviert bekannte untätige
+Installationsaufgaben. Bei laufender Installation bricht er ab. Er prüft alle
+Kandidaten vor der ersten Entfernung: Anbieter WinBoat, Display-Klasse,
+`helios_kmd_render.inf`, nicht bootkritisch und die Helios-Hardware-ID im
+veröffentlichten INF. Unbekannte WinBoat-Pakete führen zum Abbruch statt zu einer
+pauschalen Anbieter-Löschung. Microsoft-VGA, VirtIO-Netzwerk und Speichertreiber
+werden nicht entfernt.
+
+Alle verifizierten Pakete werden zunächst mit `pnputil /export-driver` unter
+`C:\ProgramData\WinBoat\DriverStoreBackup` gesichert und danach mit
+`/delete-driver <oemN.inf> /uninstall /force` entfernt. Windows kann `/force`
+zusammen mit `/uninstall` ignorieren; das Skript prüft deshalb Exitcode und den
+anschließend erneut abgefragten DriverStore. Ein nötiger Neustart wird separat
+als `restart-required` gemeldet. Ein leerer Store ergibt `already-clean`.
+Runtimedateien, Paketbelege, Zertifikate und geteilte Khronos-Loader werden hier
+nicht manuell gelöscht. Der Helfer entfernt keine Dateien direkt aus FileRepository.
+Windows anschließend regulär neu starten und bis zur bestätigten Bereinigung im
+VGA-Rettungsstart bleiben. Die alte Host-Konfiguration nicht automatisch
+wiederherstellen lassen.
+
 ## Hintergrundabfragen
 
 Der Gastdienst liest den normalen PnP-Status über Windows SetupAPI und

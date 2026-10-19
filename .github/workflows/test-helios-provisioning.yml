@@ -13,6 +13,8 @@ on:
       - 'guest_server/scripts/Initialize-DisplayRecoveryKey.ps1'
       - 'tests/helios-rescue.test.*'
       - 'scripts/helios/rescue-graphics.py'
+      - 'scripts/helios/Clear-HeliosDriverStore.ps1'
+      - 'tests/helios-driverstore.test.ps1'
       - 'helios/host/display.sh'
       - 'helios/host/qemu.sh'
       - 'guest_server/graphics_desktop*'
@@ -49,6 +51,8 @@ on:
       - 'guest_server/scripts/Initialize-DisplayRecoveryKey.ps1'
       - 'tests/helios-rescue.test.*'
       - 'scripts/helios/rescue-graphics.py'
+      - 'scripts/helios/Clear-HeliosDriverStore.ps1'
+      - 'tests/helios-driverstore.test.ps1'
       - 'helios/host/display.sh'
       - 'helios/host/qemu.sh'
       - 'guest_server/graphics_desktop*'
@@ -100,6 +104,7 @@ jobs:
           ./tests/vcredist-provisioning.test.ps1
           ./tests/display-adapters.test.ps1
           ./tests/helios-rescue.test.ps1
+          ./tests/helios-driverstore.test.ps1
           ./tests/helios-diagnostics.test.ps1
           ./tests/helios-application-diagnostics.test.ps1
           ./tests/helios-provisioning.test.ps1
@@ -111,6 +116,7 @@ jobs:
           ./tests/vcredist-provisioning.test.ps1
           ./tests/display-adapters.test.ps1
           ./tests/helios-rescue.test.ps1
+          ./tests/helios-driverstore.test.ps1
           ./tests/helios-diagnostics.test.ps1
           ./tests/helios-application-diagnostics.test.ps1
           ./tests/helios-provisioning.test.ps1
