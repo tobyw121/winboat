@@ -23,11 +23,14 @@ function Write-HeliosValidationJson([string]$Name,$Data) {
     if ($Name -notmatch '^(acceptance|transaction|last-good)\.json$') {throw 'Unknown validation state.'}
     $root=Initialize-HeliosValidationRoot
     $path=Join-Path $root $Name
-    foreach($target in @($path,"$path.tmp")) {
+    $temporary=Join-Path $root ([guid]::NewGuid().ToString('N')+'.tmp')
+    foreach($target in @($path,$temporary)) {
         if ((Test-Path -LiteralPath $target) -and ((Get-Item -LiteralPath $target -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {throw 'Validation file is a reparse point.'}
     }
-    $Data | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath "$path.tmp" -Encoding UTF8
-    Move-Item -LiteralPath "$path.tmp" -Destination $path -Force
+    try {
+        $Data | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $temporary -Encoding UTF8
+        Move-Item -LiteralPath $temporary -Destination $path -Force
+    } finally {Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue}
 }
 function Get-HeliosValidationIdentity {
     $state=Read-HeliosValidationJson (Join-Path $env:ProgramData 'Helios\install-state.json')
@@ -48,7 +51,20 @@ function Invoke-HeliosValidationProcess([string]$Exe,[string[]]$Arguments=@(),[i
             return [ordered]@{status='timeout';exitCode=$null}
         }
         $process.Refresh()
-        return [ordered]@{status=$(if($process.ExitCode -eq 0){'passed'}else{'failed'});exitCode=$process.ExitCode}
+        $text=''
+        foreach($file in @($out,$err)) {
+            $stream=[IO.File]::Open($file,'Open','Read','ReadWrite')
+            try {
+                [void]$stream.Seek([Math]::Max(0,$stream.Length-32768),'Begin')
+                $bytes=New-Object byte[] 32768;$count=$stream.Read($bytes,0,$bytes.Length)
+                $text += [Text.Encoding]::UTF8.GetString($bytes,0,$count)
+            } finally {$stream.Dispose()}
+        }
+        $signals=@()
+        if ($text -match 'Direct3D 11 clear/copy/readback: all 527 pixels match') {$signals+='d3d11-readback-527'}
+        if ($text -match 'MSAA format=\d+ samples=\d+ quality=\d+') {$signals+='msaa-query-observed'}
+        $codes=@([regex]::Matches($text,'\b(?:VK_ERROR_[A-Z0-9_]{1,64}|0x[0-9a-fA-F]{8})\b') | ForEach-Object {$_.Value} | Sort-Object -Unique | Select-Object -First 16)
+        return [ordered]@{status=$(if($process.ExitCode -eq 0){'passed'}else{'failed'});exitCode=$process.ExitCode;signals=$signals;codes=$codes}
     } finally {
         if ($null -ne $process) {$process.Dispose()}
         Remove-Item -LiteralPath $out,$err -Force -ErrorAction SilentlyContinue

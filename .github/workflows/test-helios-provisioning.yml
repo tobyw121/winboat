@@ -171,6 +171,7 @@ jobs:
           ./tests/helios-provisioning.test.ps1
           ./tests/helios-validation.test.ps1
           ./tests/helios-transaction.test.ps1
+          ./guest_server/scripts/Show-HeliosControlPanel.ps1 -CheckUI
           ./tests/atlas-helios-handoff.test.ps1
       - name: Test provisioning and handoff (Windows PowerShell 5.1)
         shell: powershell

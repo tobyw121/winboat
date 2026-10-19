@@ -316,6 +316,7 @@ func main() {
 	r.HandleFunc("/apps", getApps).Methods("GET")
 	r.HandleFunc("/health", getHealth).Methods("GET")
 	r.HandleFunc("/graphics/helios", getHeliosStatus).Methods("GET")
+	r.HandleFunc("/graphics/validation", graphicsValidationStatus(os.Getenv("ProgramData"))).Methods("GET")
 	r.HandleFunc("/provisioning/atlas", getAtlasStatus).Methods("GET")
 	r.HandleFunc("/provisioning/vcredist", getVCRedistStatus).Methods("GET")
 	r.HandleFunc("/provisioning/atlas/diagnostics", atlasDiagnosticsHandler(collectAtlasDiagnostics)).Methods("GET")

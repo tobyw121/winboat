@@ -28,6 +28,14 @@ def compare(reports):
     scopes={r.get('comparisonKey') for r in reports}
     if len(scopes)!=1 or None in scopes:
         raise ValueError('Reports require the same explicit workload/settings comparisonKey')
+    if all('tests' in r and 'identity' in r for r in reports):
+        versions=[r['identity']['version'] for r in reports]
+        if versions[0]!=versions[2] or versions[1]!=versions[3]: raise ValueError('Driver version changed within a comparison arm')
+        signatures=[{t['name']:t.get('sha256') for t in r['tests']} for r in reports]
+        equal=all(s==signatures[0] for s in signatures) and all(signatures[0].values())
+        return {'schema':1,'comparisonKey':reports[0]['comparisonKey'],'driverVersions':versions,'sameProbeBytes':bool(equal),
+                'runs':[{'label':r['label'],'automatedPassed':r['automatedPassed'],'tests':r['tests']} for r in reports],
+                'scope':'Different probe hashes limit attribution to the driver. Manual visual and recovery checks remain separate.'}
     summaries=[r.get('summary',{}) for r in reports]
     pairs=[]
     for a,b in ((0,1),(2,3)):

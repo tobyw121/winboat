@@ -160,6 +160,8 @@ try {
     Write-Log "Extracting update files to clean directory..."
     Expand-Archive -Path $UpdateFilePath -DestinationPath $AppPath -Force
     Write-Log "Files extracted successfully"
+    $controlPanel=Join-Path $AppPath 'scripts\Install-HeliosControlPanel.ps1'
+    if (Test-Path -LiteralPath $controlPanel) {& $controlPanel}
     
     # Start service
     Write-Log "Starting service '$ServiceName'..."

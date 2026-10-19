@@ -12,6 +12,7 @@ if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 
 :: Copy files from OEM to install directory
 xcopy "%OEM_DIR%\*" "%INSTALL_DIR%\" /Y /E
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%INSTALL_DIR%\scripts\Install-HeliosControlPanel.ps1"
 
 :: Install the service with NSSM
 "%NSSM_PATH%" install WinBoatGuestServer "%EXE_PATH%"

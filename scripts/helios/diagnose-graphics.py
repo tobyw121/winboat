@@ -148,7 +148,7 @@ def collect(container, opener=None, samples=1, interval=5, sleeper=None):
                              'scope': 'Cached native monitor samples; no extra PowerShell polling'}
     # Slow collectors run once after sampling. Older guests retain explicit 404s.
     for endpoint in ('version', 'graphics/diagnostics', 'graphics/helios', 'graphics/history',
-                     'graphics/diagnostics/journals', 'graphics/diagnostics/runtime'):
+                     'graphics/diagnostics/journals', 'graphics/diagnostics/runtime','graphics/validation'):
         started=datetime.datetime.now(datetime.timezone.utc).isoformat()
         result[endpoint] = read_endpoint(opener, base, endpoint)
         result['requestTiming'][endpoint]={'startUtc':started,'endUtc':datetime.datetime.now(datetime.timezone.utc).isoformat()}

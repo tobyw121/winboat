@@ -1,4 +1,5 @@
-param([ValidatePattern('^[a-zA-Z0-9_.-]{1,48}$')][string]$Label='manual',[switch]$LibraryOnly)
+param([ValidatePattern('^[a-zA-Z0-9_.-]{1,48}$')][string]$Label='manual',
+    [ValidatePattern('^[a-zA-Z0-9_.-]{1,96}$')][string]$ComparisonKey='graphics-suite-v1',[switch]$LibraryOnly)
 . (Join-Path $PSScriptRoot 'Helios-ValidationCommon.ps1')
 function Get-HeliosAcceptancePlan {
     return @(
@@ -17,7 +18,7 @@ function Invoke-HeliosAcceptance([string]$RunLabel) {
     $runId=[guid]::NewGuid().ToString('N');$rows=@()
     foreach($test in @(Get-HeliosAcceptancePlan)) {
         $path=Join-Path ([string]$state.installRoot) ('runtime\smoke\'+$test.exe)
-        $result=[ordered]@{name=$test.name;coverage=$test.coverage;status='missing';sha256=$null;exitCode=$null}
+        $result=[ordered]@{name=$test.name;coverage=$test.coverage;status='missing';sha256=$null;exitCode=$null;signals=@();codes=@()}
         if (Test-Path -LiteralPath $path -PathType Leaf) {
             $actual=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
             $expected=@($state.runtimeFiles | Where-Object {$_.path -ieq $path -and $_.sha256 -ieq $actual})
@@ -25,6 +26,7 @@ function Invoke-HeliosAcceptance([string]$RunLabel) {
             $result.sha256=$actual
             $execution=Invoke-HeliosValidationProcess $path $test.arguments
             $result.status=$execution.status;$result.exitCode=$execution.exitCode
+            if ($execution.Contains('signals')) {$result.signals=$execution.signals;$result.codes=$execution.codes}
         }
         $rows+=$result
     }
@@ -35,7 +37,7 @@ function Invoke-HeliosAcceptance([string]$RunLabel) {
     $resets=@($runtime.displayResets | Where-Object {[DateTime]::Parse($_.timeUtc).ToUniversalTime() -ge $start})
     $passed=@($rows | Where-Object {$_.status -ne 'passed'}).Count -eq 0 -and
         $crashes.Count -eq 0 -and $resets.Count -eq 0 -and @($runtime.errors).Count -eq 0
-    $report=[ordered]@{schema=1;runId=$runId;label=$RunLabel;identity=$identity;startedAtUtc=$start.ToString('o');
+    $report=[ordered]@{schema=1;runId=$runId;label=$RunLabel;comparisonKey=$ComparisonKey;identity=$identity;startedAtUtc=$start.ToString('o');
         finishedAtUtc=[DateTime]::UtcNow.ToString('o');automatedPassed=$passed;tests=$rows;
         dwmCrashes=$crashes;displayResets=$resets;observationErrors=@($runtime.errors);
         manualChecks=@{visibleColors=$false;windowSwitch=$false;resolutionChange=$false;deviceRecovery=$false};

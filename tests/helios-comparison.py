@@ -42,5 +42,13 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual(result['guestMinusHostClockRange'],{'minimumSeconds':58,'maximumSeconds':60})
         self.assertIsNone(correlation.correlate({})['guestMinusHostClockRange'])
 
+    def test_driver_comparison_exposes_different_probe_bytes(self):
+        reports=[{'label':label,'comparisonKey':'same','automatedPassed':False,'identity':{'version':version},
+                  'tests':[{'name':'D3D11','sha256':sha,'status':'failed'}]}
+                 for label,version,sha in zip(('A1','B1','A2','B2'),('291','294','291','294'),('a','b','a','b'))]
+        self.assertFalse(comparison.compare(reports)['sameProbeBytes'])
+        reports[2]['identity']['version']='296'
+        with self.assertRaises(ValueError): comparison.compare(reports)
+
 
 if __name__=='__main__': unittest.main()
