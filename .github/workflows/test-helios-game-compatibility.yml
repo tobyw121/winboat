@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/test-helios-game-compatibility.yml'
       - 'tests/helios-adapter-selection.py'
+      - 'tests/helios-shader-hresult.py'
       - 'tests/helios-device-profiles.test.ps1'
       - 'tests/helios-native-probe-process.test.ps1'
       - 'tests/helios-probe-timeout.cpp'
@@ -32,6 +33,7 @@ on:
   pull_request:
     paths:
       - 'tests/helios-adapter-selection.py'
+      - 'tests/helios-shader-hresult.py'
       - 'tests/helios-device-profiles.test.ps1'
       - 'tests/helios-native-probe-process.test.ps1'
       - 'tests/helios-probe-timeout.cpp'
@@ -65,6 +67,7 @@ jobs:
         with:
           persist-credentials: false
       - run: python3 tests/helios-adapter-selection.py
+      - run: python3 tests/helios-shader-hresult.py
       - name: Execute production bounded GPU journal tests
         run: |
           rustc --edition=2021 --test tests/helios-journal.rs -o /tmp/helios-journal
