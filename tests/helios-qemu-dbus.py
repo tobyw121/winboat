@@ -62,6 +62,16 @@ with tempfile.TemporaryDirectory(prefix='winboat-qemu-dbus-') as temporary:
     subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-I', str(source),
                     str(ROOT / 'tests/helios-qemu-device.c'), '-o', str(selection_binary)], check=True)
     subprocess.run([str(selection_binary)], check=True)
+    readback = (source / 'ui/vulkan-readback.c').read_text()
+    start = readback.index('typedef struct HeliosImportFailure')
+    end = readback.index('\n};', readback.index('struct HeliosVulkanReadbackCache', start)) + 3
+    helper = readback.index('static HeliosImportFailure *helios_import_failure')
+    helper_end = readback.index('\n}\n', helper) + 3
+    (source / 'import-cache.inc').write_text(readback[start:end] + '\n' + readback[helper:helper_end])
+    cache_binary = source / 'test-import-cache'
+    subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-I', str(source),
+                    str(ROOT / 'tests/helios-qemu-import-cache.c'), '-o', str(cache_binary)], check=True)
+    subprocess.run([str(cache_binary)], check=True)
     print('Host patches apply to the checksum-verified pinned QEMU sources.', flush=True)
     # Use QEMU's actual Error prototype: substituting a GError-taking fixture
     # previously hid a production compile failure in the native frame callback.

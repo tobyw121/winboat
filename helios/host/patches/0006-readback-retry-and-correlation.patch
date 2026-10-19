@@ -1,0 +1,178 @@
+--- a/ui/vulkan-readback.c
++++ b/ui/vulkan-readback.c
+@@ -5,6 +5,7 @@
+ #include "ui/vulkan-readback.h"
+ #include "ui/egl-helpers.h"
+ #include "ui/vulkan-device-select.h"
++#include "ui/helios-retry.h"
+ #include <sys/sysmacros.h>
+ #include "standard-headers/drm/drm_fourcc.h"
+ #include "trace.h"
+@@ -74,6 +75,7 @@
+
+ struct HeliosVulkanReadback {
+     QemuDmaBuf *dmabuf;
++    uint32_t source_id;
+     VkInstance instance;
+     VkDebugUtilsMessengerEXT debug_messenger;
+     PFN_vkDestroyDebugUtilsMessengerEXT destroy_debug_messenger;
+@@ -131,7 +133,17 @@
+
+ #define HELIOS_VK_READBACK_CACHE_SIZE 8
+
++typedef struct HeliosImportFailure {
++    int fd; /* Hold the failed object's identity; fd-number reuse is not identity. */
++    dev_t dev;
++    ino_t ino;
++    uint64_t shape[14];
++    HeliosRetry retry;
++} HeliosImportFailure;
++
+ struct HeliosVulkanReadbackCache {
++    HeliosImportFailure failures[HELIOS_VK_READBACK_CACHE_SIZE];
++    uint32_t failed_next;
+     HeliosVulkanReadback *entries[HELIOS_VK_READBACK_CACHE_SIZE];
+     HeliosVulkanReadback *active;
+     QemuDmaBuf *active_dmabuf;
+@@ -140,7 +152,11 @@
+
+ HeliosVulkanReadbackCache *helios_vulkan_readback_cache_new(void)
+ {
+-    return g_new0(HeliosVulkanReadbackCache, 1);
++    HeliosVulkanReadbackCache *cache = g_new0(HeliosVulkanReadbackCache, 1);
++    for (size_t i = 0; i < ARRAY_SIZE(cache->failures); i++) {
++        cache->failures[i].fd = -1;
++    }
++    return cache;
+ }
+
+ void helios_vulkan_readback_cache_free(HeliosVulkanReadbackCache *cache)
+@@ -151,7 +167,56 @@
+     for (size_t i = 0; i < ARRAY_SIZE(cache->entries); i++) {
+         g_clear_pointer(&cache->entries[i], helios_vulkan_readback_free);
+     }
++    for (size_t i = 0; i < ARRAY_SIZE(cache->failures); i++) {
++        if (cache->failures[i].fd >= 0) {
++            close(cache->failures[i].fd);
++        }
++    }
+     g_free(cache);
++}
++
++/* Cache only one-fd identities. Never guess a multi-plane layout. A changed
++ * shape or new kernel object starts fresh; bounded retained fds prevent ABA. */
++static HeliosImportFailure *helios_import_failure(
++    HeliosVulkanReadbackCache *cache, QemuDmaBuf *dmabuf, bool optimal)
++{
++    int nfds, noffsets, nstrides;
++    const uint32_t *offsets = qemu_dmabuf_get_offsets(dmabuf, &noffsets);
++    const uint32_t *strides = qemu_dmabuf_get_strides(dmabuf, &nstrides);
++    const int *fds = qemu_dmabuf_get_fds(dmabuf, &nfds);
++    struct stat st;
++    if (noffsets != 1 || nstrides != 1) {
++        return NULL;
++    }
++    uint64_t shape[] = {qemu_dmabuf_get_width(dmabuf),
++        qemu_dmabuf_get_height(dmabuf), qemu_dmabuf_get_backing_width(dmabuf),
++        qemu_dmabuf_get_backing_height(dmabuf), qemu_dmabuf_get_x(dmabuf),
++        qemu_dmabuf_get_y(dmabuf), qemu_dmabuf_get_fourcc(dmabuf),
++        qemu_dmabuf_get_modifier(dmabuf), qemu_dmabuf_get_allocation_size(dmabuf),
++        qemu_dmabuf_get_source_id(dmabuf), optimal,
++        qemu_dmabuf_get_num_planes(dmabuf), offsets[0], strides[0]};
++    if (nfds != 1 || fds[0] < 0 || fstat(fds[0], &st)) {
++        return NULL;
++    }
++    for (size_t i = 0; i < ARRAY_SIZE(cache->failures); i++) {
++        HeliosImportFailure *f = &cache->failures[i];
++        if (f->fd >= 0 && f->dev == st.st_dev && f->ino == st.st_ino &&
++            !memcmp(f->shape, shape, sizeof(shape))) {
++            return f;
++        }
++    }
++    int held = fcntl(fds[0], F_DUPFD_CLOEXEC, 0);
++    if (held < 0) {
++        return NULL;
++    }
++    HeliosImportFailure *f = &cache->failures[
++        cache->failed_next++ % ARRAY_SIZE(cache->failures)];
++    if (f->fd >= 0) {
++        close(f->fd);
++    }
++    *f = (HeliosImportFailure){.fd = held, .dev = st.st_dev, .ino = st.st_ino};
++    memcpy(f->shape, shape, sizeof(shape));
++    return f;
+ }
+
+ HeliosVulkanReadback *helios_vulkan_readback_cache_activate(
+@@ -171,6 +236,7 @@
+         readback = cache->entries[i];
+         if (helios_vulkan_readback_matches(readback, dmabuf,
+                                            direct_optimal)) {
++            readback->source_id = qemu_dmabuf_get_source_id(dmabuf);
+             cache->active = readback;
+             cache->active_dmabuf = dmabuf;
+             trace_helios_vulkan_readback_bind(
+@@ -181,9 +247,25 @@
+         }
+     }
+
++    HeliosImportFailure *failure = helios_import_failure(cache, dmabuf,
++                                                       direct_optimal);
++    int64_t now = qemu_clock_get_ns(QEMU_CLOCK_REALTIME);
++    if (failure && !helios_retry_ready(&failure->retry, now)) {
++        return NULL;
++    }
+     readback = helios_vulkan_readback_new(dmabuf, direct_optimal);
+     if (!readback) {
++        if (failure) {
++            helios_retry_failed(&failure->retry, now);
++            error_report("vulkan-readback: import-held source=%u ino=%" PRIu64
++                         " attempts=%u delay_ns=%" PRId64,
++                         qemu_dmabuf_get_source_id(dmabuf), (uint64_t)failure->ino,
++                         failure->retry.attempts, failure->retry.next_ns - now);
++        }
+         return NULL;
++    }
++    if (failure) {
++        failure->retry = (HeliosRetry){0};
+     }
+
+     slot = cache->next++ % ARRAY_SIZE(cache->entries);
+@@ -378,6 +460,7 @@
+
+     readback = g_new0(HeliosVulkanReadback, 1);
+     readback->dmabuf = dmabuf;
++    readback->source_id = qemu_dmabuf_get_source_id(dmabuf);
+     readback->backing_width = qemu_dmabuf_get_backing_width(dmabuf);
+     readback->backing_height = qemu_dmabuf_get_backing_height(dmabuf);
+     readback->visible_width = qemu_dmabuf_get_width(dmabuf);
+@@ -1019,6 +1102,11 @@
+         submit_ns - start_ns, wait_ns - submit_ns, copy_ns - wait_ns);
+     if (readback->flushes == 1 || copy_ns - start_ns > 50000000 ||
+         (readback->flushes % 4096) == 0) {
++        error_report("vulkan-readback: frame source=%u ino=%" PRIu64
++                     " sequence=%" PRIu64 " bytes=%" PRIu64,
++                     readback->source_id,
++                     (uint64_t)readback->dmabuf_ino, readback->flushes,
++                     readback->dmabuf_size);
+         error_report("vulkan-readback: capture #%" PRIu64
+                      " publish #%" PRIu64 " %ux%u submit=%.3f ms "
+                      "wait=%.3f ms cpu=%.3f ms total=%.3f ms",
+--- /dev/null
++++ b/ui/helios-retry.h
+@@ -0,0 +1,15 @@
++/* SPDX-License-Identifier: MIT */
++#ifndef HELIOS_RETRY_H
++#define HELIOS_RETRY_H
++#include <stdint.h>
++#include <stdbool.h>
++typedef struct HeliosRetry { int64_t next_ns; unsigned attempts; } HeliosRetry;
++static inline bool helios_retry_ready(const HeliosRetry *r, int64_t now)
++{ return now >= r->next_ns; }
++static inline void helios_retry_failed(HeliosRetry *r, int64_t now)
++{
++    unsigned shift = r->attempts < 5 ? r->attempts : 5;
++    if (r->attempts < 6) { r->attempts++; }
++    r->next_ns = now + (INT64_C(250000000) << shift);
++}
++#endif
