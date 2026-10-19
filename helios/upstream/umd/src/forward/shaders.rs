@@ -89,7 +89,8 @@ pub(crate) unsafe extern "system" fn create_vertex_shader(
     }
     let bytes = core::slice::from_raw_parts(code as *const u8, len);
     let dxvk = &dev.dxvk;
-    let raw = dxvk.create_vertex_shader(bytes.as_ptr(), bytes.len());
+    let result = dxvk.create_vertex_shader(bytes.as_ptr(), bytes.len());
+    let raw = result.as_ref().copied().unwrap_or(0);
     if raw != 0 {
         if SHADER_BIND_LOG_COUNT.first_n(128).is_some() {
             log_error!("DDI create_vertex_shader ok: raw=0x{raw:x} len={len}");
@@ -103,7 +104,7 @@ pub(crate) unsafe extern "system" fn create_vertex_shader(
             .insert(raw, bytes.to_vec());
     } else {
         log_error!("DDI create_vertex_shader failed");
-        set_runtime_error(h, E_OUTOFMEMORY);
+        set_runtime_error(h, result.err().unwrap_or(E_FAIL));
     }
 }
 
@@ -128,7 +129,8 @@ pub(crate) unsafe extern "system" fn create_pixel_shader(
     }
     let bytes = core::slice::from_raw_parts(code as *const u8, len);
     let dxvk = &dev.dxvk;
-    let raw = dxvk.create_pixel_shader(bytes.as_ptr(), bytes.len());
+    let result = dxvk.create_pixel_shader(bytes.as_ptr(), bytes.len());
+    let raw = result.as_ref().copied().unwrap_or(0);
     if raw != 0 {
         if SHADER_BIND_LOG_COUNT.first_n(128).is_some() {
             log_error!("DDI create_pixel_shader ok: raw=0x{raw:x} len={len}");
@@ -136,7 +138,7 @@ pub(crate) unsafe extern "system" fn create_pixel_shader(
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_pixel_shader failed");
-        set_runtime_error(h, E_OUTOFMEMORY);
+        set_runtime_error(h, result.err().unwrap_or(E_FAIL));
     }
 }
 
@@ -568,13 +570,14 @@ pub(crate) unsafe fn create_shader_11_1_common(
         }
         log_error!("{dump}");
     }
-    let raw = dxvk.create_shader_sig(
+    let result = dxvk.create_shader_sig(
         kind,
         bytes.as_ptr(),
         bytes.len(),
         sig_words.as_ptr(),
         sig_words.len(),
     );
+    let raw = result.as_ref().copied().unwrap_or(0);
     if raw != 0 {
         if SHADER_BIND_LOG_COUNT.first_n(128).is_some() {
             log_error!(
@@ -594,7 +597,7 @@ pub(crate) unsafe fn create_shader_11_1_common(
         }
     } else {
         log_error!("DDI {name} failed");
-        set_runtime_error(h, E_OUTOFMEMORY);
+        set_runtime_error(h, result.err().unwrap_or(E_FAIL));
     }
 }
 
@@ -649,12 +652,13 @@ pub(crate) unsafe extern "system" fn create_geometry_shader(
     }
     let bytes = core::slice::from_raw_parts(code as *const u8, len);
     let dxvk = &dev.dxvk;
-    let raw = dxvk.create_geometry_shader(bytes.as_ptr(), bytes.len());
+    let result = dxvk.create_geometry_shader(bytes.as_ptr(), bytes.len());
+    let raw = result.as_ref().copied().unwrap_or(0);
     if raw != 0 {
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_geometry_shader failed");
-        set_runtime_error(h, E_OUTOFMEMORY);
+        set_runtime_error(h, result.err().unwrap_or(E_FAIL));
     }
 }
 
@@ -700,12 +704,13 @@ pub(crate) unsafe extern "system" fn create_geometry_shader_so(
     // nothing. Counted so that failure has a name. R911.
     note_ddi_refusal(&DDI_REFUSALS.gs_so_declaration_dropped);
     let dxvk = &dev.dxvk;
-    let raw = dxvk.create_geometry_shader(bytes.as_ptr(), bytes.len());
+    let result = dxvk.create_geometry_shader(bytes.as_ptr(), bytes.len());
+    let raw = result.as_ref().copied().unwrap_or(0);
     if raw != 0 {
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_geometry_shader_so failed");
-        set_runtime_error(h, E_OUTOFMEMORY);
+        set_runtime_error(h, result.err().unwrap_or(E_FAIL));
     }
 }
 
@@ -748,23 +753,25 @@ pub(crate) unsafe extern "system" fn create_hull_shader(
     let dxvk = &dev.dxvk;
     let sig_words = flatten_tess_io_signatures(sig);
     log_tess_sig_summary("create_hull_shader", &sig_words);
-    let mut raw = dxvk.create_tess_shader_sig(
+    let mut result = dxvk.create_tess_shader_sig(
         0,
         bytes.as_ptr(),
         bytes.len(),
         sig_words.as_ptr(),
         sig_words.len(),
     );
+    let mut raw = result.as_ref().copied().unwrap_or(0);
     if raw == 0 {
         note_ddi_refusal(&DDI_REFUSALS.tess_sig_fallback);
         log_error!("DDI create_hull_shader signature path failed; falling back to raw bytecode");
-        raw = dxvk.create_hull_shader(bytes.as_ptr(), bytes.len());
+        result = dxvk.create_hull_shader(bytes.as_ptr(), bytes.len());
+        raw = result.as_ref().copied().unwrap_or(0);
     }
     if raw != 0 {
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_hull_shader failed");
-        set_runtime_error(h, E_OUTOFMEMORY);
+        set_runtime_error(h, result.err().unwrap_or(E_FAIL));
     }
 }
 
@@ -791,25 +798,27 @@ pub(crate) unsafe extern "system" fn create_hull_shader_11_1(
     let dxvk = &dev.dxvk;
     let sig_words = flatten_tess_io_signatures_11_1(sig);
     log_tess_sig_summary("create_hull_shader_11_1", &sig_words);
-    let mut raw = dxvk.create_tess_shader_sig(
+    let mut result = dxvk.create_tess_shader_sig(
         0,
         bytes.as_ptr(),
         bytes.len(),
         sig_words.as_ptr(),
         sig_words.len(),
     );
+    let mut raw = result.as_ref().copied().unwrap_or(0);
     if raw == 0 {
         note_ddi_refusal(&DDI_REFUSALS.tess_sig_fallback);
         log_error!(
             "DDI create_hull_shader_11_1 signature path failed; falling back to raw bytecode"
         );
-        raw = dxvk.create_hull_shader(bytes.as_ptr(), bytes.len());
+        result = dxvk.create_hull_shader(bytes.as_ptr(), bytes.len());
+        raw = result.as_ref().copied().unwrap_or(0);
     }
     if raw != 0 {
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_hull_shader_11_1 failed");
-        set_runtime_error(h, E_OUTOFMEMORY);
+        set_runtime_error(h, result.err().unwrap_or(E_FAIL));
     }
 }
 
@@ -836,23 +845,25 @@ pub(crate) unsafe extern "system" fn create_domain_shader(
     let dxvk = &dev.dxvk;
     let sig_words = flatten_tess_io_signatures(sig);
     log_tess_sig_summary("create_domain_shader", &sig_words);
-    let mut raw = dxvk.create_tess_shader_sig(
+    let mut result = dxvk.create_tess_shader_sig(
         1,
         bytes.as_ptr(),
         bytes.len(),
         sig_words.as_ptr(),
         sig_words.len(),
     );
+    let mut raw = result.as_ref().copied().unwrap_or(0);
     if raw == 0 {
         note_ddi_refusal(&DDI_REFUSALS.tess_sig_fallback);
         log_error!("DDI create_domain_shader signature path failed; falling back to raw bytecode");
-        raw = dxvk.create_domain_shader(bytes.as_ptr(), bytes.len());
+        result = dxvk.create_domain_shader(bytes.as_ptr(), bytes.len());
+        raw = result.as_ref().copied().unwrap_or(0);
     }
     if raw != 0 {
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_domain_shader failed");
-        set_runtime_error(h, E_OUTOFMEMORY);
+        set_runtime_error(h, result.err().unwrap_or(E_FAIL));
     }
 }
 
@@ -879,25 +890,27 @@ pub(crate) unsafe extern "system" fn create_domain_shader_11_1(
     let dxvk = &dev.dxvk;
     let sig_words = flatten_tess_io_signatures_11_1(sig);
     log_tess_sig_summary("create_domain_shader_11_1", &sig_words);
-    let mut raw = dxvk.create_tess_shader_sig(
+    let mut result = dxvk.create_tess_shader_sig(
         1,
         bytes.as_ptr(),
         bytes.len(),
         sig_words.as_ptr(),
         sig_words.len(),
     );
+    let mut raw = result.as_ref().copied().unwrap_or(0);
     if raw == 0 {
         note_ddi_refusal(&DDI_REFUSALS.tess_sig_fallback);
         log_error!(
             "DDI create_domain_shader_11_1 signature path failed; falling back to raw bytecode"
         );
-        raw = dxvk.create_domain_shader(bytes.as_ptr(), bytes.len());
+        result = dxvk.create_domain_shader(bytes.as_ptr(), bytes.len());
+        raw = result.as_ref().copied().unwrap_or(0);
     }
     if raw != 0 {
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_domain_shader_11_1 failed");
-        set_runtime_error(h, E_OUTOFMEMORY);
+        set_runtime_error(h, result.err().unwrap_or(E_FAIL));
     }
 }
 
@@ -921,12 +934,13 @@ pub(crate) unsafe extern "system" fn create_compute_shader(
     }
     let bytes = core::slice::from_raw_parts(code as *const u8, len);
     let dxvk = &dev.dxvk;
-    let raw = dxvk.create_compute_shader(bytes.as_ptr(), bytes.len());
+    let result = dxvk.create_compute_shader(bytes.as_ptr(), bytes.len());
+    let raw = result.as_ref().copied().unwrap_or(0);
     if raw != 0 {
         store_raw_com(h_shader, raw);
     } else {
         log_error!("DDI create_compute_shader failed");
-        set_runtime_error(h, E_OUTOFMEMORY);
+        set_runtime_error(h, result.err().unwrap_or(E_FAIL));
     }
 }
 

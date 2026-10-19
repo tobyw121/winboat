@@ -105,9 +105,9 @@ struct HeliosDxvkDevice {
   // Shader creation wrappers. DXVK may throw dxvk::DxvkError while compiling
   // shader modules; these methods catch it and return 0 so exceptions never
   // cross the D3D UMD ABI.
-  std::size_t create_vertex_shader(const std::uint8_t* code, std::size_t len) const;
-  std::size_t create_pixel_shader(const std::uint8_t* code, std::size_t len) const;
-  std::size_t create_geometry_shader(const std::uint8_t* code, std::size_t len) const;
+  std::size_t create_vertex_shader(const std::uint8_t* code, std::size_t len, std::int32_t* out_hr) const;
+  std::size_t create_pixel_shader(const std::uint8_t* code, std::size_t len, std::int32_t* out_hr) const;
+  std::size_t create_geometry_shader(const std::uint8_t* code, std::size_t len, std::int32_t* out_hr) const;
   // Signature-carrying variant for the >=11.1 DDI, whose typed
   // D3D11_1DDIARG_SIGNATURE_ENTRY2 arrays supply the component types the raw
   // token stream lacks. `kind`: 0 = vertex, 1 = pixel, 2 = geometry.
@@ -119,7 +119,7 @@ struct HeliosDxvkDevice {
       const std::uint8_t* code,
       std::size_t len,
       const std::uint32_t* sig_words,
-      std::size_t sig_words_len) const;
+      std::size_t sig_words_len, std::int32_t* out_hr) const;
   // Signature-carrying tessellation shader create. `kind`: 0 = hull,
   // 1 = domain. `sig_words` = [n_in, n_out, n_patch, then entries for each
   // group as (sysval, register, mask, comptype, stream)]. D3D11 tessellation
@@ -131,7 +131,7 @@ struct HeliosDxvkDevice {
       const std::uint8_t* code,
       std::size_t len,
       const std::uint32_t* sig_words,
-      std::size_t sig_words_len) const;
+      std::size_t sig_words_len, std::int32_t* out_hr) const;
 
   // Flip-model identity rotation (DXGI pfnRotateResourceIdentities): each
   // texture takes the DXVK storage (memory + VkImage + KMT handles) of the
@@ -228,9 +228,9 @@ struct HeliosDxvkDevice {
       std::size_t src_resource_ptr,
       bool windowed_blt_reservation) const;
 
-  std::size_t create_hull_shader(const std::uint8_t* code, std::size_t len) const;
-  std::size_t create_domain_shader(const std::uint8_t* code, std::size_t len) const;
-  std::size_t create_compute_shader(const std::uint8_t* code, std::size_t len) const;
+  std::size_t create_hull_shader(const std::uint8_t* code, std::size_t len, std::int32_t* out_hr) const;
+  std::size_t create_domain_shader(const std::uint8_t* code, std::size_t len, std::int32_t* out_hr) const;
+  std::size_t create_compute_shader(const std::uint8_t* code, std::size_t len, std::int32_t* out_hr) const;
 };
 
 // Create a DXVK instance + logical device on the Helios venus adapter.

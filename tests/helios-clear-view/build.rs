@@ -23,4 +23,11 @@ fn main() {
     let end = text[start..].find("/// The only way a VOID-returning").unwrap() + start;
     fs::write(PathBuf::from(env::var("OUT_DIR").unwrap()).join("create_args.rs"), &text[start..end]).unwrap();
 
+    let source = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
+        .join("../../helios/upstream/umd/src/bridge.rs");
+    println!("cargo:rerun-if-changed={}", source.display());
+    let text = fs::read_to_string(source).unwrap();
+    let start = text.rfind("fn shader_create_result(").unwrap();
+    fs::write(PathBuf::from(env::var("OUT_DIR").unwrap()).join("shader_result.rs"), &text[start..]).unwrap();
+
 }

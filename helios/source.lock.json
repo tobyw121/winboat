@@ -570,13 +570,13 @@
     "umd/bridge/bridge_dxbc.h": "7ac577330a0f53d866041d5ef8ca22e7f7b09a22eeab439f395dce4d0d3b6c2f",
     "umd/bridge/bridge_icd_exports.cpp": "9f9fcee8e41a2edb8244eee4c32ec3915b4610bb597819a093aef30e0f712965",
     "umd/bridge/bridge_icd_exports.h": "fa993c4fce07766dc09e9051b6fc8d0ac9e68f6971a23470ece7b5353414dda6",
-    "umd/bridge/dxvk_bridge.cpp": "b85d84bf542197274a116888660d9d3e48a02d55642b3082e8f3a2d50a5dbc1f",
-    "umd/bridge/dxvk_bridge.h": "7db70045e9a55f45c1d74edf182358b205ffe060e7ce363264e5e945b8625627",
+    "umd/bridge/dxvk_bridge.cpp": "405d1f787fddb6ffa8138f45ba441175bfbe5dc7e62d380a964ad5ddac049a82",
+    "umd/bridge/dxvk_bridge.h": "5618db6d69c873f55d78a01f69210d97034c49f8be14c107b5bf76797297e476",
     "umd/build-support/dxvk_c_compat.h": "affc48258a9d1437396e1d95ea872585bea80d043a9347a0306f09a38518d9b2",
     "umd/build-support/typed_tables.rs": "66a96356829c65705432a00ff96d65112a55477dd1253a57e2a1ca8b9992e521",
     "umd/build.rs": "b28dde791e780b2c59ea08a4c86132a4abf9ce99107113ae79408e109fde87e5",
     "umd/src/adapter.rs": "2d8cddc1e9b3dd22975e2b79f03cbd3ca9a9d34241ebdd54f95f8cbe2cc04dfb",
-    "umd/src/bridge.rs": "b78778f862058845d99a5affb654e0fe30a463ae08cc81d5117bc8a324d560cc",
+    "umd/src/bridge.rs": "e792a68bcf48520b9b894606edf34173d33ad447dc369f0e3208bfd46f2679a2",
     "umd/src/caps.rs": "bbee18410a1a1b76ed27735ad1f85508b7534c7a7b5891134fe50b00ee1e60d5",
     "umd/src/ddi.rs": "9ab6d0167b76a725f31ae664598ab64fbe563795bfbd3ac0f8c3cd0c784c9897",
     "umd/src/device_funcs.rs": "5acb1102291a68261013fc1ed888b7c29ec5250bfeb75c909cbeb6246685a3fa",
@@ -587,13 +587,13 @@
     "umd/src/forward/deferred.rs": "92f042c2d3a8104584c9cbeece3ea0a571b19d52017c44a66612f814b9565b9a",
     "umd/src/forward/format_caps.rs": "1073201c0c840c77297fff9cacea644451ab9602951c3e793415987dd84dba96",
     "umd/src/forward/handles.rs": "9382134b75d4c066d2235b49e312d24d51edfe76b26d28b7e645410c6fa9956c",
-    "umd/src/forward/layout.rs": "a316004e44d88e38dde8e53e8b3359ab25132d135173659679f5c256a6f04097",
+    "umd/src/forward/layout.rs": "3f22a6472e3853747b0ea1dbf153ebd0a8da02837ddb4d3d7bff4160e90e93f5",
     "umd/src/forward/pipeline.rs": "aed3cac5ab911fce6ca998bdd2da0fa21446bbc7374084a0878fe74d58223a84",
     "umd/src/forward/present.rs": "e62bf881de9f81f2b2c6065a8a1b46cedc942177129510ec18f3590cddc8e328",
     "umd/src/forward/queries.rs": "2f1ce23e7b38ee4d556f544b175758da7d042e952fb18cd7c3bf94703990290d",
     "umd/src/forward/query_contract.rs": "11ba6966bc2035828afe4af9fd705584caea5c9831d224f7c260c838d4529fae",
     "umd/src/forward/resource.rs": "ef95342eb270bcf96f51269716e04009cf8ac2a8246d768845829ef811647550",
-    "umd/src/forward/shaders.rs": "db378a3e7e7ef544f0f7d8b3692937dccb54bbcc5f16197a45187d8f9d5f64b4",
+    "umd/src/forward/shaders.rs": "785f02da16f8b2ed3abc8ac4501ccda3dbc3e70d1618fdb6b5444206d04ee7d2",
     "umd/src/forward/snapshot.rs": "91511f63ec6e5486f3ecd473915e4fbc7e8351242c0c09f0215b99145019de6a",
     "umd/src/forward/state.rs": "377688ed656d3a0266850d34062e4db93d97621cfe4b6dba684cd95e6064ba04",
     "umd/src/forward/state_objects.rs": "855fc17ecddd773288b240219c51f6fa57e91fa557408b69ac8d69ff6576f99b",
@@ -692,7 +692,9 @@
       "umd/src/device_funcs.rs": "f143b9cc1f8efb7eb022266287a788e629cea49c2a968a66c91da9522dbade29",
       "umd/src/forward/format_caps.rs": "91cd6f4dbebcf3aac4e8eab0fb797074d7f6fd123d99e51533edb9157fe53d3b",
       "umd/src/forward/resource.rs": "a09ceecd2eafadbf3f9be75a91746d42594fc3cf29f244a6a28422921a23637e",
-      "umd/src/lib.rs": "a22163dee04b974c0270075940d9e1e7d6bf1936c7337b327510cb3b1f71d2a4"
+      "umd/src/lib.rs": "a22163dee04b974c0270075940d9e1e7d6bf1936c7337b327510cb3b1f71d2a4",
+      "umd/bridge/dxvk_bridge.h": "7db70045e9a55f45c1d74edf182358b205ffe060e7ce363264e5e945b8625627",
+      "umd/src/forward/layout.rs": "a316004e44d88e38dde8e53e8b3359ab25132d135173659679f5c256a6f04097"
     },
     "features": [
       "d3d11-uav-clear-view",
@@ -707,7 +709,8 @@
       "Accept empty and legacy-null adapter Vulkan rollback state during first installation",
       "Match D3D11 DXVK adapter selection to the shared Windows Venus product branding (22.22.294.0).",
       "Embed explicit VGA-only DriverStore recovery in installer GUI and CLI (22.22.295.0), never automatic repair.",
-      "bounded-per-device-capability-journal"
+      "bounded-per-device-capability-journal",
+      "preserve-shader-backend-hresults"
     ],
     "addedFiles": [
       "kmd_logic/src/display_modes.rs",

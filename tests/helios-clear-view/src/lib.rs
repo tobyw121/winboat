@@ -172,3 +172,16 @@ mod create_args;
 // Only handle lookup/logging is a fixture; backend MSAA queries remain real.
 mod diagnostics { pub unsafe fn note<T>(_: T, _: &str, _: [u64; 6]) {} }
 fn feature_level_mode() -> u32 { if caps::SINGLE.get() { 0 } else { 1 } }
+
+mod hr { pub const E_FAIL: i32 = 0x80004005u32 as i32; }
+mod shader_result {
+    include!(concat!(env!("OUT_DIR"), "/shader_result.rs"));
+    #[test]
+    fn backend_errors_and_pointer_width_are_preserved() {
+        for hr in [0x80070057u32 as i32, 0x8007000eu32 as i32, 0x887a0005u32 as i32] {
+            assert_eq!(shader_create_result(0, hr), Err(hr));
+        }
+        assert_eq!(shader_create_result(0, 0), Err(crate::hr::E_FAIL));
+        assert_eq!(shader_create_result(usize::MAX - 8, 0), Ok(usize::MAX - 8));
+    }
+}

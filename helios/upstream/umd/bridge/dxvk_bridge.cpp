@@ -370,20 +370,23 @@ namespace {
                                  const char* name,
                                  const std::uint8_t* code,
                                  std::size_t len,
-                                 Create create) {
+                                 Create create, std::int32_t* out_hr) {
+    if (!out_hr) return 0;
+    *out_hr = E_INVALIDARG;
     if (!impl || !impl->d3d11 || !code || !len)
       return 0;
     Iface* shader = nullptr;
+    *out_hr = E_FAIL; // Exceptions have no backend HRESULT.
     return bridge_guard(name, std::size_t(0), [&]() -> std::size_t {
       auto bytecode = prepare_shader_bytecode(code, len);
-      if (!bytecode)
-        return 0;
+      if (!bytecode) { *out_hr = E_INVALIDARG; return 0; }
       dump_shader_bytecode(dump_tag, "raw", code, len);
       dump_shader_bytecode(dump_tag, "wrapped", bytecode.data(), bytecode.len());
       HRESULT hr = create(impl->d3d11, bytecode.data(), bytecode.len(), &shader);
+      *out_hr = hr;
       if (FAILED(hr)) {
         char msg[96];
-        std::snprintf(msg, sizeof(msg), "%s returned failure", name);
+        std::snprintf(msg, sizeof(msg), "%s returned failure hr=0x%08x", name, static_cast<unsigned>(hr));
         umd_log(msg);
         return 0;
       }
@@ -854,28 +857,28 @@ std::size_t HeliosDxvkDevice::create_ddi_scanout_texture2d(
   });
 }
 
-std::size_t HeliosDxvkDevice::create_vertex_shader(const std::uint8_t* code, std::size_t len) const {
+std::size_t HeliosDxvkDevice::create_vertex_shader(const std::uint8_t* code, std::size_t len, std::int32_t* out_hr) const {
   return create_shader_impl<ID3D11VertexShader>(
       impl.get(), "vs", "CreateVertexShader", code, len,
       [](ID3D11Device* d, const void* bc, std::size_t n, ID3D11VertexShader** out) {
         return d->CreateVertexShader(bc, n, nullptr, out);
-      });
+      }, out_hr);
 }
 
-std::size_t HeliosDxvkDevice::create_pixel_shader(const std::uint8_t* code, std::size_t len) const {
+std::size_t HeliosDxvkDevice::create_pixel_shader(const std::uint8_t* code, std::size_t len, std::int32_t* out_hr) const {
   return create_shader_impl<ID3D11PixelShader>(
       impl.get(), "ps", "CreatePixelShader", code, len,
       [](ID3D11Device* d, const void* bc, std::size_t n, ID3D11PixelShader** out) {
         return d->CreatePixelShader(bc, n, nullptr, out);
-      });
+      }, out_hr);
 }
 
-std::size_t HeliosDxvkDevice::create_geometry_shader(const std::uint8_t* code, std::size_t len) const {
+std::size_t HeliosDxvkDevice::create_geometry_shader(const std::uint8_t* code, std::size_t len, std::int32_t* out_hr) const {
   return create_shader_impl<ID3D11GeometryShader>(
       impl.get(), "gs", "CreateGeometryShader", code, len,
       [](ID3D11Device* d, const void* bc, std::size_t n, ID3D11GeometryShader** out) {
         return d->CreateGeometryShader(bc, n, nullptr, out);
-      });
+      }, out_hr);
 }
 
 std::size_t HeliosDxvkDevice::create_shader_sig(
@@ -883,7 +886,9 @@ std::size_t HeliosDxvkDevice::create_shader_sig(
     const std::uint8_t* code,
     std::size_t len,
     const std::uint32_t* sig_words,
-    std::size_t sig_words_len) const {
+    std::size_t sig_words_len, std::int32_t* out_hr) const {
+  if (!out_hr) return 0;
+  *out_hr = E_INVALIDARG;
   if (!impl || !impl->d3d11 || !code || !len || !sig_words || sig_words_len < 2)
     return 0;
   const std::uint32_t n_in = sig_words[0];
@@ -900,11 +905,11 @@ std::size_t HeliosDxvkDevice::create_shader_sig(
   }
   const std::uint32_t* in_entries = sig_words + 2;
   const std::uint32_t* out_entries = in_entries + std::size_t(n_in) * kSigEntryWords;
+  *out_hr = E_FAIL; // Exceptions have no backend HRESULT.
   return bridge_guard("create_shader_sig", std::size_t(0), [&]() -> std::size_t {
       auto bytecode = prepare_shader_bytecode_with_sigs(
           code, len, in_entries, n_in, out_entries, n_out);
-      if (!bytecode)
-        return 0;
+      if (!bytecode) { *out_hr = E_INVALIDARG; return 0; }
       const char* stage = kind == 0 ? "vs-sig" : kind == 1 ? "ps-sig" : "gs-sig";
       dump_shader_bytecode(stage, "raw", code, len);
       dump_shader_bytecode(stage, "wrapped", bytecode.data(), bytecode.len());
@@ -924,11 +929,15 @@ std::size_t HeliosDxvkDevice::create_shader_sig(
                                                  reinterpret_cast<ID3D11GeometryShader**>(&shader));
           break;
         default:
+          *out_hr = E_INVALIDARG;
           umd_log("create_shader_sig: unknown shader kind");
           return 0;
       }
+      *out_hr = hr;
       if (FAILED(hr)) {
-        umd_log("create_shader_sig: shader creation returned failure");
+        char message[96];
+        std::snprintf(message, sizeof(message), "create_shader_sig: hr=0x%08x", static_cast<unsigned>(hr));
+        umd_log(message);
         return 0;
       }
       return reinterpret_cast<std::size_t>(shader);
@@ -940,7 +949,9 @@ std::size_t HeliosDxvkDevice::create_tess_shader_sig(
     const std::uint8_t* code,
     std::size_t len,
     const std::uint32_t* sig_words,
-    std::size_t sig_words_len) const {
+    std::size_t sig_words_len, std::int32_t* out_hr) const {
+  if (!out_hr) return 0;
+  *out_hr = E_INVALIDARG;
   if (!impl || !impl->d3d11 || !code || !len || !sig_words || sig_words_len < 3)
     return 0;
   const std::uint32_t n_in = sig_words[0];
@@ -958,11 +969,11 @@ std::size_t HeliosDxvkDevice::create_tess_shader_sig(
   const std::uint32_t* in_entries = sig_words + 3;
   const std::uint32_t* out_entries = in_entries + std::size_t(n_in) * kSigEntryWords;
   const std::uint32_t* patch_entries = out_entries + std::size_t(n_out) * kSigEntryWords;
+  *out_hr = E_FAIL; // Exceptions have no backend HRESULT.
   return bridge_guard("create_tess_shader_sig", std::size_t(0), [&]() -> std::size_t {
       auto bytecode = prepare_shader_bytecode_with_tess_sigs(
           code, len, in_entries, n_in, out_entries, n_out, patch_entries, n_patch);
-      if (!bytecode)
-        return 0;
+      if (!bytecode) { *out_hr = E_INVALIDARG; return 0; }
       const char* stage = kind == 0 ? "hs-sig" : "ds-sig";
       dump_shader_bytecode(stage, "raw", code, len);
       dump_shader_bytecode(stage, "wrapped", bytecode.data(), bytecode.len());
@@ -978,11 +989,15 @@ std::size_t HeliosDxvkDevice::create_tess_shader_sig(
                                                reinterpret_cast<ID3D11DomainShader**>(&shader));
           break;
         default:
+          *out_hr = E_INVALIDARG;
           umd_log("create_tess_shader_sig: unknown shader kind");
           return 0;
       }
+      *out_hr = hr;
       if (FAILED(hr)) {
-        umd_log("create_tess_shader_sig: shader creation returned failure");
+        char message[96];
+        std::snprintf(message, sizeof(message), "create_tess_shader_sig: hr=0x%08x", static_cast<unsigned>(hr));
+        umd_log(message);
         return 0;
       }
       return reinterpret_cast<std::size_t>(shader);
@@ -1703,28 +1718,28 @@ std::int32_t HeliosDxvkDevice::present_snapshot_copy(
   });
 }
 
-std::size_t HeliosDxvkDevice::create_hull_shader(const std::uint8_t* code, std::size_t len) const {
+std::size_t HeliosDxvkDevice::create_hull_shader(const std::uint8_t* code, std::size_t len, std::int32_t* out_hr) const {
   return create_shader_impl<ID3D11HullShader>(
       impl.get(), "hs", "CreateHullShader", code, len,
       [](ID3D11Device* d, const void* bc, std::size_t n, ID3D11HullShader** out) {
         return d->CreateHullShader(bc, n, nullptr, out);
-      });
+      }, out_hr);
 }
 
-std::size_t HeliosDxvkDevice::create_domain_shader(const std::uint8_t* code, std::size_t len) const {
+std::size_t HeliosDxvkDevice::create_domain_shader(const std::uint8_t* code, std::size_t len, std::int32_t* out_hr) const {
   return create_shader_impl<ID3D11DomainShader>(
       impl.get(), "ds", "CreateDomainShader", code, len,
       [](ID3D11Device* d, const void* bc, std::size_t n, ID3D11DomainShader** out) {
         return d->CreateDomainShader(bc, n, nullptr, out);
-      });
+      }, out_hr);
 }
 
-std::size_t HeliosDxvkDevice::create_compute_shader(const std::uint8_t* code, std::size_t len) const {
+std::size_t HeliosDxvkDevice::create_compute_shader(const std::uint8_t* code, std::size_t len, std::int32_t* out_hr) const {
   return create_shader_impl<ID3D11ComputeShader>(
       impl.get(), "cs", "CreateComputeShader", code, len,
       [](ID3D11Device* d, const void* bc, std::size_t n, ID3D11ComputeShader** out) {
         return d->CreateComputeShader(bc, n, nullptr, out);
-      });
+      }, out_hr);
 }
 
 std::unique_ptr<HeliosDxvkDevice> helios_dxvk_create_device(

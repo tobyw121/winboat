@@ -598,13 +598,17 @@ pub(crate) unsafe fn create_vs_input_variant(
 
     let dxvk = &dev.dxvk;
     let words = words.into_words();
-    let raw = dxvk.create_shader_sig(
+    let result = dxvk.create_shader_sig(
         0,
         bytecode.as_ptr(),
         bytecode.len(),
         words.as_ptr(),
         words.len(),
     );
+    let raw = match result {
+        Ok(raw) => raw,
+        Err(hr) => { set_runtime_error(h, hr); 0 }
+    };
     log_error!(
         "VS input-class variant: vs=0x{vp:x} classes={:?} -> raw=0x{raw:x}",
         classes.iter().map(|c| (c.0, c.1)).collect::<Vec<_>>()

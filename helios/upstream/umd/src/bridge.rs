@@ -137,11 +137,13 @@ mod ffi {
             self: &HeliosDxvkDevice,
             code: *const u8,
             len: usize,
+            out_hr: *mut i32,
         ) -> usize;
         unsafe fn create_pixel_shader(
             self: &HeliosDxvkDevice,
             code: *const u8,
             len: usize,
+            out_hr: *mut i32,
         ) -> usize;
         /// >=11.1 DDI shader create carrying the typed I/O signatures. `kind`:
         /// 0 = vertex, 1 = pixel, 2 = geometry. `sig_words` layout:
@@ -154,6 +156,7 @@ mod ffi {
             len: usize,
             sig_words: *const u32,
             sig_words_len: usize,
+            out_hr: *mut i32,
         ) -> usize;
         /// Tessellation shader create carrying input/output/patch-constant
         /// signatures. `kind`: 0 = hull, 1 = domain. `sig_words` layout:
@@ -166,6 +169,7 @@ mod ffi {
             len: usize,
             sig_words: *const u32,
             sig_words_len: usize,
+            out_hr: *mut i32,
         ) -> usize;
         /// Flip-model identity rotation: texture i takes texture i+1's DXVK
         /// storage (memory + VkImage + KMT handles); the last takes the
@@ -249,6 +253,7 @@ mod ffi {
             self: &HeliosDxvkDevice,
             code: *const u8,
             len: usize,
+            out_hr: *mut i32,
         ) -> usize;
         unsafe fn create_hull_shader(self: &HeliosDxvkDevice, code: *const u8, len: usize)
             -> usize;
@@ -256,11 +261,14 @@ mod ffi {
             self: &HeliosDxvkDevice,
             code: *const u8,
             len: usize,
+            out_hr: *mut i32,
+            out_hr: *mut i32,
         ) -> usize;
         unsafe fn create_compute_shader(
             self: &HeliosDxvkDevice,
             code: *const u8,
             len: usize,
+            out_hr: *mut i32,
         ) -> usize;
 
         /// Create a DXVK instance and logical device on the Helios venus adapter.
@@ -835,44 +843,62 @@ impl BridgeDevice {
 
     /// # Safety
     /// `code` must point at `len` readable bytes.
-    pub(crate) unsafe fn create_vertex_shader(&self, code: *const u8, len: usize) -> usize {
-        self.get()
-            .map_or(0, |d| unsafe { d.create_vertex_shader(code, len) })
+    pub(crate) unsafe fn create_vertex_shader(&self, code: *const u8, len: usize) -> Result<usize, i32> {
+        let mut hr = crate::hr::E_FAIL;
+        let Some(device) = self.get() else { return Err(hr); };
+        // SAFETY: caller owns code/signature slices; hr is live writable stack storage.
+        let raw = unsafe { device.create_vertex_shader(code, len, &mut hr) };
+        shader_create_result(raw, hr)
     }
 
     /// # Safety
     /// `code` must point at `len` readable bytes.
-    pub(crate) unsafe fn create_pixel_shader(&self, code: *const u8, len: usize) -> usize {
-        self.get()
-            .map_or(0, |d| unsafe { d.create_pixel_shader(code, len) })
+    pub(crate) unsafe fn create_pixel_shader(&self, code: *const u8, len: usize) -> Result<usize, i32> {
+        let mut hr = crate::hr::E_FAIL;
+        let Some(device) = self.get() else { return Err(hr); };
+        // SAFETY: caller owns code/signature slices; hr is live writable stack storage.
+        let raw = unsafe { device.create_pixel_shader(code, len, &mut hr) };
+        shader_create_result(raw, hr)
     }
 
     /// # Safety
     /// `code` must point at `len` readable bytes.
-    pub(crate) unsafe fn create_geometry_shader(&self, code: *const u8, len: usize) -> usize {
-        self.get()
-            .map_or(0, |d| unsafe { d.create_geometry_shader(code, len) })
+    pub(crate) unsafe fn create_geometry_shader(&self, code: *const u8, len: usize) -> Result<usize, i32> {
+        let mut hr = crate::hr::E_FAIL;
+        let Some(device) = self.get() else { return Err(hr); };
+        // SAFETY: caller owns code/signature slices; hr is live writable stack storage.
+        let raw = unsafe { device.create_geometry_shader(code, len, &mut hr) };
+        shader_create_result(raw, hr)
     }
 
     /// # Safety
     /// `code` must point at `len` readable bytes.
-    pub(crate) unsafe fn create_hull_shader(&self, code: *const u8, len: usize) -> usize {
-        self.get()
-            .map_or(0, |d| unsafe { d.create_hull_shader(code, len) })
+    pub(crate) unsafe fn create_hull_shader(&self, code: *const u8, len: usize) -> Result<usize, i32> {
+        let mut hr = crate::hr::E_FAIL;
+        let Some(device) = self.get() else { return Err(hr); };
+        // SAFETY: caller owns code/signature slices; hr is live writable stack storage.
+        let raw = unsafe { device.create_hull_shader(code, len, &mut hr) };
+        shader_create_result(raw, hr)
     }
 
     /// # Safety
     /// `code` must point at `len` readable bytes.
-    pub(crate) unsafe fn create_domain_shader(&self, code: *const u8, len: usize) -> usize {
-        self.get()
-            .map_or(0, |d| unsafe { d.create_domain_shader(code, len) })
+    pub(crate) unsafe fn create_domain_shader(&self, code: *const u8, len: usize) -> Result<usize, i32> {
+        let mut hr = crate::hr::E_FAIL;
+        let Some(device) = self.get() else { return Err(hr); };
+        // SAFETY: caller owns code/signature slices; hr is live writable stack storage.
+        let raw = unsafe { device.create_domain_shader(code, len, &mut hr) };
+        shader_create_result(raw, hr)
     }
 
     /// # Safety
     /// `code` must point at `len` readable bytes.
-    pub(crate) unsafe fn create_compute_shader(&self, code: *const u8, len: usize) -> usize {
-        self.get()
-            .map_or(0, |d| unsafe { d.create_compute_shader(code, len) })
+    pub(crate) unsafe fn create_compute_shader(&self, code: *const u8, len: usize) -> Result<usize, i32> {
+        let mut hr = crate::hr::E_FAIL;
+        let Some(device) = self.get() else { return Err(hr); };
+        // SAFETY: caller owns code/signature slices; hr is live writable stack storage.
+        let raw = unsafe { device.create_compute_shader(code, len, &mut hr) };
+        shader_create_result(raw, hr)
     }
 
     /// # Safety
@@ -884,10 +910,12 @@ impl BridgeDevice {
         len: usize,
         sig_words: *const u32,
         sig_words_len: usize,
-    ) -> usize {
-        self.get().map_or(0, |d| unsafe {
-            d.create_shader_sig(kind, code, len, sig_words, sig_words_len)
-        })
+    ) -> Result<usize, i32> {
+        let mut hr = crate::hr::E_FAIL;
+        let Some(device) = self.get() else { return Err(hr); };
+        // SAFETY: caller owns code/signature slices; hr is live writable stack storage.
+        let raw = unsafe { device.create_shader_sig(kind, code, len, sig_words, sig_words_len, &mut hr) };
+        shader_create_result(raw, hr)
     }
 
     /// # Safety
@@ -899,9 +927,16 @@ impl BridgeDevice {
         len: usize,
         sig_words: *const u32,
         sig_words_len: usize,
-    ) -> usize {
-        self.get().map_or(0, |d| unsafe {
-            d.create_tess_shader_sig(kind, code, len, sig_words, sig_words_len)
-        })
+    ) -> Result<usize, i32> {
+        let mut hr = crate::hr::E_FAIL;
+        let Some(device) = self.get() else { return Err(hr); };
+        // SAFETY: caller owns code/signature slices; hr is live writable stack storage.
+        let raw = unsafe { device.create_tess_shader_sig(kind, code, len, sig_words, sig_words_len, &mut hr) };
+        shader_create_result(raw, hr)
     }
+}
+
+// Keep backend failures intact; never turn a null COM result into success.
+fn shader_create_result(raw: usize, hr: i32) -> Result<usize, i32> {
+    if hr < 0 { Err(hr) } else if raw == 0 { Err(crate::hr::E_FAIL) } else { Ok(raw) }
 }
