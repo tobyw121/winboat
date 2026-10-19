@@ -37,6 +37,10 @@ git pull --ff-only origin work
 python3 scripts/atlas/diagnose-vm.py --update-guest
 ```
 
+Auch die WinBoat-App sollte aus dem aktuellen Repository-Stand gebaut sein.
+Eine ältere AppImage kann beim nächsten Start wieder ihren älteren Gastdienst
+einspielen. Der [lokale Build](build-helios-local.md) beschreibt die Aktualisierung.
+
 Die Änderung benötigt keinen neuen Helios-Installer. Das Standardpaket bleibt
 `.291`; für die Gerätejournale muss ein Treiber mit Journal-Unterstützung wie
 `.296` bereits installiert sein. Ohne entsprechende Logeinträge wird `journal`

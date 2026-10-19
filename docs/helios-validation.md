@@ -1,5 +1,34 @@
 # Validation record
 
+## Guest API graphics v10: extended desktop and remote diagnosis, 19 October 2026 (UTC)
+
+- Source commit `e0ff8e35db5b348caf27ec765fcd1c952db85b9a` changes the
+  guest policy to extended output. The native operation targets only the physical
+  Helios GDI adapter, tests the mode before applying it, checks the existing VGA
+  geometry afterward, and never requests primary changes or global clone/reset.
+  Primary-Helios clone layouts are held for an explicit Windows-side change.
+- Policy tests verify one attempt per console session, preservation of existing
+  extended layouts and VGA primary state, no viewer/driver-failure mode cycles,
+  invalid/disabled VGA refusal, and no repeated attempts after failure. The
+  DEVMODEW fixture checks size/offsets and position overflow. Linux Go race tests
+  and Windows AMD64 compilation pass; no physical Helios display mode was
+  changed or verified here.
+- Three new read-only API reports expose a 64-sample native-monitor history,
+  up to 96 journal events per file, and bounded DWM timing/crash/Display-4101
+  observations. Concurrent PowerShell collectors are refused; the history adds
+  no PowerShell polling. Fixed-field, event-count, byte-budget, private-field
+  exclusion and compact-report compatibility tests pass.
+- Windows provisioning CI
+  [39301883886](https://github.com/tobyw121/winboat/actions/runs/39301883886)
+  passed the complete workflow, including both PowerShell versions, native
+  Windows Go tests/build and the actual Windows boot-time query. The previous
+  complete workflow [39301358785](https://github.com/tobyw121/winboat/actions/runs/39301358785)
+  also passed. Local host tests: 59; graphics collector tests: 6.
+- The Windows driver packages and default .291 pin are unchanged. Protection
+  covers WinBoat's automatic operations; a shared DWM or graphics-kernel failure
+  can still disturb VGA. The .292 MSAA-contract regression is not fixed by
+  changing the desktop policy.
+
 ## Helios .296 diagnostics and QEMU render-node selection, 19 October 2026 (UTC)
 
 - Full Windows build, test signing and self-contained assembly passed in
