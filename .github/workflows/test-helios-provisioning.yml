@@ -30,6 +30,14 @@ on:
       - 'tests/graphics-runtime-diagnostics.test.ps1'
       - 'tests/helios-journal-report.test.ps1'
       - 'guest_server/graphics_diagnostics*'
+      - 'guest_server/graphics_validation*'
+      - 'guest_server/scripts/*Helios*Validation*'
+      - 'guest_server/scripts/*Helios*Acceptance*'
+      - 'guest_server/scripts/*Helios*Transaction*'
+      - 'guest_server/scripts/*Helios*Control*'
+      - 'guest_server/scripts/Clear-HeliosDriverStore.ps1'
+      - 'tests/helios-validation.test.ps1'
+      - 'tests/helios-transaction.test.ps1'
       - 'guest_server/scripts/Get-HeliosDiagnostics.ps1'
       - 'guest_server/scripts/Get-HeliosApplicationDiagnostics.ps1'
       - 'guest_server/scripts/Get-HeliosUmdDiagnostics.ps1'
@@ -81,6 +89,14 @@ on:
       - 'tests/graphics-runtime-diagnostics.test.ps1'
       - 'tests/helios-journal-report.test.ps1'
       - 'guest_server/graphics_diagnostics*'
+      - 'guest_server/graphics_validation*'
+      - 'guest_server/scripts/*Helios*Validation*'
+      - 'guest_server/scripts/*Helios*Acceptance*'
+      - 'guest_server/scripts/*Helios*Transaction*'
+      - 'guest_server/scripts/*Helios*Control*'
+      - 'guest_server/scripts/Clear-HeliosDriverStore.ps1'
+      - 'tests/helios-validation.test.ps1'
+      - 'tests/helios-transaction.test.ps1'
       - 'guest_server/scripts/Get-HeliosDiagnostics.ps1'
       - 'guest_server/scripts/Get-HeliosApplicationDiagnostics.ps1'
       - 'guest_server/scripts/Get-HeliosUmdDiagnostics.ps1'
@@ -153,6 +169,8 @@ jobs:
           ./tests/graphics-runtime-diagnostics.test.ps1
           ./tests/helios-journal-report.test.ps1
           ./tests/helios-provisioning.test.ps1
+          ./tests/helios-validation.test.ps1
+          ./tests/helios-transaction.test.ps1
           ./tests/atlas-helios-handoff.test.ps1
       - name: Test provisioning and handoff (Windows PowerShell 5.1)
         shell: powershell
