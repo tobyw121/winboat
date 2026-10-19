@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <cwchar>
 
 int main(int argc, char** argv) {
     bool warp = false, single = false;
@@ -28,7 +29,9 @@ int main(int argc, char** argv) {
             if (FAILED(hr)) { factory->Release(); return 2; }
             DXGI_ADAPTER_DESC1 desc{};
             hr = adapter->GetDesc1(&desc);
-            if (SUCCEEDED(hr) && desc.VendorId == 0x1af4 && desc.DeviceId == 0x1050) {
+            if (SUCCEEDED(hr) && !(desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) &&
+                ((desc.VendorId == 0x1af4 && desc.DeviceId == 0x1050) ||
+                 std::wcsstr(desc.Description, L"Helios"))) {
                 if (selected) { adapter->Release(); selected->Release(); factory->Release(); return 3; }
                 selected = adapter;
             } else { adapter->Release(); }

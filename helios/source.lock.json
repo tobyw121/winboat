@@ -328,7 +328,7 @@
     "packaging/windows/compat/resolve-compatibility/Resolve-CompatibilityCommon.ps1": "eb418675aa7eb6ed34c81f034f53a1ecf8f03f6d6321df1794a99f699f42b899",
     "packaging/windows/compat/resolve-compatibility/Test-Resolve-CompatibilityLifecycle.ps1": "e575dabadf6e1718b1f1ab1bc3b33a83ad9c9f90ec359c78e43149297e4d21db",
     "packaging/windows/compat/resolve-compatibility/Uninstall-Resolve-Compatibility.ps1": "b04a01f92674e582f1bb494e6f53317109157b490e304e2aa6051c1ad05c08a7",
-    "packaging/windows/probes/d3d11-device-probe.cpp": "764ccb0505a3175c79a385389a0e80dcdc56b6448c1cbc8c68f505d5cd6799a2",
+    "packaging/windows/probes/d3d11-device-probe.cpp": "5698aa77d629fbacaf5dcc7e707c2a3de4aa082a0fe9eb6d2d112fd5fb992d0c",
     "packaging/windows/probes/d3d11-render-checks.h": "796543781b0485b1221236d9b2985874c703825627266a73fc859b35168c8d6a",
     "packaging/windows/probes/d3d11-smoke.cpp": "8f5ed780017dd650c2c4fb6fe80ee1a5e5d836995c524e1a07fb2bf0feeec4ab",
     "packaging/windows/probes/opencl-gl-sharing-smoke.cpp": "f5578e7074ab5c8775b723cad3b2504dbbea628d7e6a4e59440d969876323f28",
@@ -721,7 +721,8 @@
       "outer-runtime-probe-interleaved-profiles",
       "guest-api-structured-device-contract-evidence",
       "diagnostic-build-296-running-qemu-config-audit",
-      "child-process-only-capability-profiles"
+      "child-process-only-capability-profiles",
+      "adapter-selection-preserves-helios-branding"
     ],
     "addedFiles": [
       "kmd_logic/src/display_modes.rs",
