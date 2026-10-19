@@ -133,6 +133,13 @@ Die im Branch gebündelte Standardversion bleibt die vom Benutzer nach einer
 vollständigen Bereinigung erfolgreich getestete 22.22.291.0. Ein erneuter Test
 von 22.22.294.0 verwendet dessen unveränderten, bereits gebauten CI-Installer:
 
+Dieser liegt direkt neben dem Standardpaket unter
+`resources/helios-22.22.294.0/HeliosSetup.exe`, zusammen mit Build-Beleg und
+`SHA256SUMS`. Für den Test kann er direkt in die VM kopiert werden. Das
+Standardpaket unter `resources/helios/` bleibt .291.
+
+Optional lässt sich außerdem eine geprüfte Kopie unter `dist/` vorbereiten:
+
 ```bash
 python3 scripts/helios/prepare-test-installer.py --version 22.22.294.0
 ```
