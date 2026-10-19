@@ -8,6 +8,7 @@ on:
       - 'helios/host/**'
       - 'helios/source.lock.json'
       - 'tests/helios-qemu-dbus.*'
+      - 'tests/helios-qemu-device.c'
       - 'scripts/helios/inspect-qemu-backend.py'
       - 'tests/helios-qemu-backend.test.py'
       - 'scripts/helios/capture-display*.py'
@@ -37,6 +38,7 @@ on:
       - 'helios/host/**'
       - 'helios/source.lock.json'
       - 'tests/helios-qemu-dbus.*'
+      - 'tests/helios-qemu-device.c'
       - 'scripts/helios/inspect-qemu-backend.py'
       - 'tests/helios-qemu-backend.test.py'
       - 'scripts/helios/capture-display*.py'
@@ -64,6 +66,21 @@ on:
 permissions:
   contents: read
 jobs:
+  host-build:
+    name: Compile patched production QEMU and host runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build full host stack including native Vulkan readback
+        run: docker build --build-arg HELIOS_BUILD_JOBS=2 --target runtime -f helios/host/Dockerfile -t winboat-helios-test:drm-node .
+      - name: Verify compiled patch provenance
+        run: |
+          docker run --rm --entrypoint cat winboat-helios-test:drm-node /opt/helios/host-patches.sha256 > /tmp/compiled-patches.sha256
+          cmp helios/host/patches/SHA256SUMS /tmp/compiled-patches.sha256
+          test "$(docker image inspect --format '{{index .Config.Labels "org.winboat.helios.runtime"}}' winboat-helios-test:drm-node)" = glvnd-v5
   capture:
     runs-on: ubuntu-24.04
     timeout-minutes: 5

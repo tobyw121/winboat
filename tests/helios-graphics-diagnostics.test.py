@@ -4,6 +4,7 @@ import io
 import json
 import pathlib
 import unittest
+from types import SimpleNamespace
 import urllib.error
 from unittest.mock import patch
 
@@ -23,6 +24,15 @@ class Opener:
         return contextlib.closing(io.BytesIO(b'x' * 131073))
 
 class TestGraphicsCollector(unittest.TestCase):
+    def test_old_host_runtime_is_reported_separately_from_guest_driver(self):
+        inspect='"winboat/helios:test"\n"sha256:abc"\n"running"\n'
+        with patch.object(graphics.subprocess, 'check_output', side_effect=[inspect, 'glvnd-v4\ndbus-v8\n']), \
+             patch.object(graphics.subprocess, 'run', side_effect=[SimpleNamespace(stdout='',stderr=''), SimpleNamespace(stdout='{"backend":"dbus","issues":[]}')]):
+            result=graphics.collect_host('WinBoat')
+        self.assertEqual(result['runtimeVersion'], 'glvnd-v4')
+        self.assertFalse(result['runtimeMatches'])
+        self.assertEqual(result['qemuBackend']['backend'], 'dbus')
+
     def test_transport_contract_errors_are_numeric_and_bounded(self):
         log = ('password=secret command=private\n'
                'qemu: OPTIMAL DMA-BUF shape mismatch required=4587520 fd_size=4096000\n'
@@ -34,6 +44,8 @@ class TestGraphicsCollector(unittest.TestCase):
         self.assertEqual(len(events), 4)
         self.assertNotIn('secret', json.dumps(events))
         self.assertEqual(len(graphics.parse_transport_errors(log * 100)), 32)
+        self.assertEqual(graphics.parse_transport_errors('no unique Vulkan device matches DRM render node 226:128'),
+                         [{'kind':'device-selection-mismatch','drmMajor':226,'drmMinor':128}])
 
     def test_failed_api_keeps_its_structured_reason(self):
         class Failed:

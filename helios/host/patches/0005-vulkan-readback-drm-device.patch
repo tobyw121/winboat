@@ -1,0 +1,140 @@
+--- a/ui/vulkan-readback.c
++++ b/ui/vulkan-readback.c
+@@ -3,10 +3,74 @@
+ #include "qemu/timer.h"
+ #include "ui/console.h"
+ #include "ui/vulkan-readback.h"
++#include "ui/egl-helpers.h"
++#include "ui/vulkan-device-select.h"
++#include <sys/sysmacros.h>
+ #include "standard-headers/drm/drm_fourcc.h"
+ #include "trace.h"
+ 
+ #include <vulkan/vulkan.h>
++
++/* Select the Vulkan device belonging to the EGL render node, never by vendor.
++ * An opaque DMA-BUF import must not guess another GPU's image/memory layout. */
++static int helios_vulkan_readback_device_index(VkPhysicalDevice *devices,
++                                               uint32_t count)
++{
++    int render_fd = -1;
++    struct stat st;
++    HeliosDrmDeviceId *ids;
++    int selected;
++#ifdef CONFIG_GBM
++    render_fd = qemu_egl_rn_fd;
++#endif
++    if (render_fd < 0 || fstat(render_fd, &st) < 0 || !S_ISCHR(st.st_mode)) {
++        error_report("vulkan-readback: cannot identify EGL DRM render node");
++        return -1;
++    }
++    ids = g_new0(HeliosDrmDeviceId, count);
++    for (uint32_t i = 0; i < count; i++) {
++        uint32_t extension_count = 0;
++        VkExtensionProperties *extensions;
++        bool has_drm = false;
++        if (vkEnumerateDeviceExtensionProperties(devices[i], NULL,
++                &extension_count, NULL) != VK_SUCCESS || !extension_count) {
++            continue;
++        }
++        extensions = g_new0(VkExtensionProperties, extension_count);
++        if (vkEnumerateDeviceExtensionProperties(devices[i], NULL,
++                &extension_count, extensions) == VK_SUCCESS) {
++            for (uint32_t j = 0; j < extension_count; j++) {
++                if (!strcmp(extensions[j].extensionName,
++                            VK_EXT_PHYSICAL_DEVICE_DRM_EXTENSION_NAME)) {
++                    has_drm = true;
++                    break;
++                }
++            }
++        }
++        g_free(extensions);
++        if (has_drm) {
++            VkPhysicalDeviceDrmPropertiesEXT drm = {
++                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRM_PROPERTIES_EXT,
++            };
++            VkPhysicalDeviceProperties2 properties = {
++                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
++                .pNext = &drm,
++            };
++            vkGetPhysicalDeviceProperties2(devices[i], &properties);
++            ids[i].has_render = drm.hasRender;
++            ids[i].render_major = drm.renderMajor;
++            ids[i].render_minor = drm.renderMinor;
++        }
++    }
++    selected = helios_vulkan_device_index(ids, count,
++                                         major(st.st_rdev), minor(st.st_rdev));
++    g_free(ids);
++    if (selected < 0) {
++        error_report("vulkan-readback: no unique Vulkan device matches DRM "
++                     "render node %u:%u", major(st.st_rdev), minor(st.st_rdev));
++    }
++    return selected;
++}
+ 
+ struct HeliosVulkanReadback {
+     QemuDmaBuf *dmabuf;
+@@ -423,19 +487,15 @@
+     VK_NEW(vkEnumeratePhysicalDevices(readback->instance,
+                                       &physical_device_count,
+                                       physical_devices));
+-    for (uint32_t i = 0; i < physical_device_count; i++) {
+-        VkPhysicalDeviceProperties properties;
+-
+-        vkGetPhysicalDeviceProperties(physical_devices[i], &properties);
+-        if (!readback->physical_device || properties.vendorID == 0x10de) {
+-            readback->physical_device = physical_devices[i];
+-        }
+-        if (properties.vendorID == 0x10de) {
+-            error_report("vulkan-readback: device: %s",
+-                         properties.deviceName);
+-            break;
+-        }
+-    }
++    int selected = helios_vulkan_readback_device_index(physical_devices,
++                                                       physical_device_count);
++    if (selected < 0) {
++        goto fail;
++    }
++    readback->physical_device = physical_devices[selected];
++    VkPhysicalDeviceProperties properties;
++    vkGetPhysicalDeviceProperties(readback->physical_device, &properties);
++    error_report("vulkan-readback: device: %s", properties.deviceName);
+     g_clear_pointer(&physical_devices, g_free);
+ 
+     vkGetPhysicalDeviceQueueFamilyProperties(readback->physical_device,
+--- /dev/null
++++ b/ui/vulkan-device-select.h
+@@ -0,0 +1,31 @@
++/* Pure selection rule shared by production readback and its regression test. */
++#ifndef HELIOS_VULKAN_DEVICE_SELECT_H
++#define HELIOS_VULKAN_DEVICE_SELECT_H
++#include <stdbool.h>
++#include <stdint.h>
++
++typedef struct HeliosDrmDeviceId {
++    bool has_render;
++    int64_t render_major;
++    int64_t render_minor;
++} HeliosDrmDeviceId;
++
++static inline int helios_vulkan_device_index(const HeliosDrmDeviceId *ids,
++    uint32_t count, uint32_t render_major, uint32_t render_minor)
++{
++    int selected = -1;
++    if (!ids || count > INT32_MAX) {
++        return -1;
++    }
++    for (uint32_t i = 0; i < count; i++) {
++        if (ids[i].has_render && ids[i].render_major == render_major &&
++            ids[i].render_minor == render_minor) {
++            if (selected >= 0) {
++                return -1; /* ambiguous identity is not permission to guess */
++            }
++            selected = (int)i;
++        }
++    }
++    return selected;
++}
++#endif

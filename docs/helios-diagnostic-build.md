@@ -111,3 +111,16 @@ Startparameterprüfung, Software-EGL-Callbacktests und WARP-Kontrollen ersetzen
 weder einen echten NVIDIA-DMA-BUF-Import noch einen sichtbaren Desktop. Nach
 erfolgreicher äußerer Geräteerstellung müssen deshalb stabile VGA-/Helios-Ausgabe,
 aktuelle Present-Zähler, Kaltstart und anschließend die Grafik-API-Tests folgen.
+
+Im Audit wurde außerdem eine reale Schwäche des bisherigen QEMU-Backends
+gefunden: Der Readback bevorzugte pauschal eine NVIDIA-GPU. Der neue Patch
+vergleicht stattdessen die DRM-Render-Node-Kennung aus EGL mit den Vulkan-
+Geräteeigenschaften. Bei fehlender oder mehrdeutiger Zuordnung wird der Import
+mit einer eindeutigen Diagnose verweigert. Für einen Host mit nur einer RTX 2070
+ist damit keine Ursache des Flackerns bewiesen.
+
+Diese Hostkorrektur benötigt einen **neu kompilierten Host-Stack** mit
+Runtime-Kennung `glvnd-v5`; ein Austausch des Windows-Installers reicht dafür
+nicht. `runtimeVersion`, `expectedRuntimeVersion` und `runtimeMatches` im
+Hostbericht zeigen, ob noch das ältere Image läuft. Der gemeinsame lokale Build
+ist in [WinBoat und Helios lokal bauen](build-helios-local.md) beschrieben.

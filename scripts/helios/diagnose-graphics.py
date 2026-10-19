@@ -23,6 +23,7 @@ def parse_transport_errors(text):
         ('egl-image-error', r'glEGLImageTargetTexture2DOES failed: (0x[0-9a-fA-F]+)', ('glError',)),
         ('egl-import-error', r'EGL DMA-BUF import failed for fourcc=(0x[0-9a-fA-F]+) modifier=(0x[0-9a-fA-F]+)', ('fourcc', 'modifier')),
         ('memory-accounting-error', r'invalid device-local memory accounting: release=(\d+) used=(\d+)', ('releasedBytes', 'usedBytes')),
+        ('device-selection-mismatch', r'no unique Vulkan device matches DRM render node (\d+):(\d+)', ('drmMajor', 'drmMinor')),
     )
     # Capture fixed numeric fields only, never arbitrary container log messages.
     for line in text.splitlines():
@@ -47,6 +48,17 @@ def collect_host(container):
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         result['error'] = type(error).__name__ + ': host graphics details unavailable'
     root = pathlib.Path(__file__).resolve().parents[2]
+    try:
+        template = '{{index .Config.Labels "org.winboat.helios.runtime"}}\n{{index .Config.Labels "org.winboat.helios.display"}}'
+        labels = subprocess.check_output(['docker', 'image', 'inspect', '--format', template, result['imageId']], text=True, timeout=10).splitlines()
+        result['runtimeVersion'] = labels[0] if re.fullmatch(r'glvnd-v\d{1,3}', labels[0]) else None
+        result['displayVersion'] = labels[1] if re.fullmatch(r'dbus-v\d{1,3}', labels[1]) else None
+        expected = re.search(r"HELIOS_RUNTIME_VERSION = '(glvnd-v\d+)'", (root / 'src/shared/helios.ts').read_text())
+        if expected:
+            result['expectedRuntimeVersion'] = expected[1]
+            result['runtimeMatches'] = result['runtimeVersion'] == expected[1]
+    except (OSError, KeyError, IndexError, ValueError, subprocess.SubprocessError):
+        result['runtimeError'] = 'Host runtime capability labels unavailable'
     try:
         helper = pathlib.Path(__file__).with_name('inspect-qemu-backend.py').read_text()
         process = subprocess.run(['docker', 'exec', '-i', container, 'python3', '-'], input=helper,

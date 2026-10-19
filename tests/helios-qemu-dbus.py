@@ -19,6 +19,7 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 HASHES = {
+    'vulkan-readback.c': '0b08ad67b459334087406fa9fda4ab985003998236d294db8bfab292ac1a6a8d',
     'console-gl.c': 'f5c12fbc74aacf7e919b55b0a807d104235291cefab42b55bd76f1b3827bfb05',
     'dbus-console.c': 'f5528db4780d5eaf6de94a990af103f42b98528df2230d1bd89760923c501e1a',
     'dbus-display1.xml': 'b611ea1e075e8380611437ba0ca65ee77b970c435530e349fe9b5ef1998ee335',
@@ -57,6 +58,10 @@ with tempfile.TemporaryDirectory(prefix='winboat-qemu-dbus-') as temporary:
             pre_native_listener = (source / 'ui/dbus-listener.c').read_text()
         subprocess.run(['git', '-C', str(source), 'apply', '--check', '--index', str(patch)], check=True)
         subprocess.run(['git', '-C', str(source), 'apply', '--index', str(patch)], check=True)
+    selection_binary = source / 'test-device-selection'
+    subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-I', str(source),
+                    str(ROOT / 'tests/helios-qemu-device.c'), '-o', str(selection_binary)], check=True)
+    subprocess.run([str(selection_binary)], check=True)
     print('Host patches apply to the checksum-verified pinned QEMU sources.', flush=True)
     # Use QEMU's actual Error prototype: substituting a GError-taking fixture
     # previously hid a production compile failure in the native frame callback.
