@@ -1,5 +1,22 @@
 # Validation record
 
+## Exact package identity and guarded D3D11 fallbacks, 19 October 2026
+
+- Source `ab69cce` includes exact-LUID/unique-adapter selection, DXGI-to-DDI
+  device-loss classification without invented OOM, and selected manifest/version
+  checks with an explicit historical-receipt integrity fallback.
+- Game compatibility CI [39320844470](https://github.com/tobyw121/winboat/actions/runs/39320844470)
+  passed all six jobs, including actual production Rust helpers on Windows
+  x64/x86 and the C++ selector/bridge fixtures. Provisioning, rescue-host and
+  installer-maintenance jobs in [39320844396](https://github.com/tobyw121/winboat/actions/runs/39320844396)
+  passed; its unrelated runtime job was still running at this record.
+- Local checks: 59 application tests, three offline identity-reader tests,
+  PowerShell provisioning/export fixtures, 620-file source lock and metadata.
+- Full installer build [39320844465](https://github.com/tobyw121/winboat/actions/runs/39320844465)
+  is still in progress. No new binary was adopted; existing installer bytes and
+  the .291 default are unchanged. Receipt fields were derived from their actual
+  checksummed payloads. Hardware/MSAA-contract acceptance remains outstanding.
+
 ## Guest API graphics v10: extended desktop and remote diagnosis, 19 October 2026 (UTC)
 
 - Source commit `e0ff8e35db5b348caf27ec765fcd1c952db85b9a` changes the

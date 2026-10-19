@@ -116,7 +116,7 @@ but `forward/shaders.rs` also passes those values directly to `set_runtime_error
 The production bridge test confirms that `E_INVALIDARG`, `E_FAIL` on exceptions
 and `0x887a0005` can cross that boundary. Preserving evidence is useful; it does
 not make every public COM HRESULT legal for a driver callback. The existing
-`forward/state.rs::create_error_hr` is not a complete solution either: its
+`forward/state.rs::create_error_hr` at audit baseline `ee60744` is not a complete solution either: its
 comment permits E_INVALIDARG for every Create DDI and its generic fallback
 labels unrelated failures as OOM, losing actual device-loss information.
 
@@ -127,6 +127,16 @@ success or inventing a memory-exhaustion cause. Correlate a journal `shader` or
 `view` event followed by `runtime-error` with the same device birth/sequence
 before attributing the user's flicker to this path. The .296 raw-HRESULT change
 cannot explain the first .292 failure by itself.
+
+Source follow-up `6fa42e4` now translates actual DXGI device-loss codes to
+`D3DDDIERR_DEVICEREMOVED`, preserves OOM only when actually returned, and leaves
+other failures critical rather than disguising them as OOM. Shader bridge logs
+retain the original backend HRESULT. This is error classification, not an
+implementation of a missing shader/capability path; the shipped .296 executable
+predates it. The same follow-up requires an exact LUID match or, for legacy
+callers without a LUID, a unique filtered adapter. New package receipts additionally
+carry the embedded manifest hash/version for exact installed-package verification,
+with an explicit legacy integrity fallback. Neither change fixes the MSAA contract.
 
 ### Package identity and a completion receipt are weaker than visible output
 
