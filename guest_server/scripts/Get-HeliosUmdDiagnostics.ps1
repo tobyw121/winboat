@@ -54,13 +54,14 @@ function Read-HeliosUmdSummary([string]$Path) {
             deviceReadyMeaning='UMD callback only; outer runtime acceptance unknown';journal=(Read-HeliosGpuJournal $text)}
     } finally {$stream.Dispose()}
 }
-function Get-HeliosUmdDiagnostics {
+function Get-HeliosUmdDiagnostics([uint32[]]$PreferredProcessIds=@()) {
     $root=Join-Path $env:ProgramData 'Helios'
     if (-not (Test-Path -LiteralPath $root -PathType Container)) {return @()}
     # File names are fixed by the Helios UMD, not supplied by an API caller.
     $files=@(Get-ChildItem -LiteralPath $root -Filter 'umd*.log' -File |
         Where-Object {$_.Name -match '^umd(?:12)?-\d{1,10}\.log$' -and -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint)} |
-        Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 8)
+        Sort-Object @{Expression={if ($PreferredProcessIds -contains [uint32]($_.BaseName -replace '^umd(?:12)?-','')) {0} else {1}}},
+            @{Expression='LastWriteTimeUtc';Descending=$true} | Select-Object -First 8)
     return @(foreach($file in $files) {
         $summary=Read-HeliosUmdSummary $file.FullName
         $summary.file=$file.Name

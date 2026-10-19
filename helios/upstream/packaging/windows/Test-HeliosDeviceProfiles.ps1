@@ -2,7 +2,11 @@
 param([string]$InstallRoot, [switch]$LibraryOnly)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
-function Invoke-HeliosProfileArms([scriptblock]$RunProbe) {
+function Invoke-HeliosProfileArms([scriptblock]$RunProbe, [switch]$ProcessLocal) {
+    if ($ProcessLocal) {
+        foreach ($mode in @(1,0,2,1)) {& $RunProbe $mode}
+        return
+    }
     $key='HKLM:\SOFTWARE\Helios'
     $existed=Test-Path -LiteralPath $key
     $before=@{}
@@ -61,10 +65,11 @@ try {
     try {$held=$mutex.WaitOne(0)} catch [Threading.AbandonedMutexException] {$held=$true}
     if (-not $held) {throw 'Helios installation or maintenance is active.'}
     $started=[DateTime]::UtcNow.ToString('o')
-    $arms=@(Invoke-HeliosProfileArms {
+    $arms=@(Invoke-HeliosProfileArms -ProcessLocal {
         param($mode)
         $info=New-Object Diagnostics.ProcessStartInfo
-        $info.FileName=$probe; $info.UseShellExecute=$false; $info.CreateNoWindow=$true
+        $info.FileName=$probe; $info.Arguments='--single'; $info.UseShellExecute=$false; $info.CreateNoWindow=$true
+        $info.EnvironmentVariables['HELIOS_DIAGNOSTIC_FEATURE_LEVEL']=[string]$mode
         $info.RedirectStandardOutput=$true; $info.RedirectStandardError=$true
         $process=New-Object Diagnostics.Process
         $process.StartInfo=$info
@@ -75,10 +80,10 @@ try {
             $timeout=-not $process.WaitForExit(30000)
             if ($timeout) {$process.Kill(); $process.WaitForExit()}
             $rows=@($stdout.Result -split '\r?\n' | Where-Object {$_ -match '^\{"schema":1,'} | ForEach-Object {$_ | ConvertFrom-Json})
-            [ordered]@{mode=$mode;timedOut=$timeout;exitCode=$process.ExitCode;results=$rows}
+            [ordered]@{mode=$mode;processId=$process.Id;timedOut=$timeout;exitCode=$process.ExitCode;results=$rows}
         } finally {$process.Dispose()}
     })
-    $report=[ordered]@{schema=1;probeVersion=[string]$manifest.version;probeSha256=(Get-HeliosSha256 $probe);
+    $report=[ordered]@{schema=1;profileScope='child-process';probeVersion=[string]$manifest.version;probeSha256=(Get-HeliosSha256 $probe);
         startedAtUtc=$started;finishedAtUtc=[DateTime]::UtcNow.ToString('o');registryRestored=$true;arms=$arms}
     $path=Join-Path $env:ProgramData 'Helios/device-probe-result.json'
     $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $path -Encoding UTF8

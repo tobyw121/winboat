@@ -4,6 +4,11 @@ use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Mutex, atomic::{AtomicBool, AtomicU64, Ordering}};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
+/// Process-local test override; reject everything outside the three known profiles.
+pub(crate) fn profile_override(value: &str) -> Option<u32> {
+    match value { "0" => Some(0), "1" => Some(1), "2" => Some(2), _ => None }
+}
+
 const LIMIT: usize = 96;
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -81,6 +86,11 @@ pub(crate) unsafe fn note(h: crate::ddi::D3D10DDI_HDEVICE, kind: &'static str, v
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn diagnostic_profiles_are_explicit_and_bounded() {
+        for n in 0..3 { assert_eq!(profile_override(&n.to_string()), Some(n)); }
+        for bad in ["", "3", "-1", "true", " 1"] { assert_eq!(profile_override(bad), None); }
+    }
     #[test]
     fn journal_keeps_last_events_and_first_contract_failure() {
         let mut j = Journal::default();

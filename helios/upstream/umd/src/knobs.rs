@@ -209,7 +209,7 @@ pub(crate) fn resolved_inventory() -> [(&'static str, u32); 11] {
     [
         ("UmdTrace", UMD_TRACE.get() as u32),
         ("UmdTimerRes", UMD_TIMER_RESOLUTION.get() as u32),
-        ("FeatureLevel11", FEATURE_LEVEL_11.get()),
+        ("FeatureLevel11", feature_level_mode()),
         ("VehicleFlipGateUs", VEHICLE_FLIP_GATE_US.get()),
         ("ScanoutAcquire", SCANOUT_ACQUIRE.get() as u32),
         ("ScanoutSnapshot", SCANOUT_SNAPSHOT.get() as u32),
@@ -274,7 +274,10 @@ pub(crate) fn umd_trace_knob() -> bool {
 ///   2 = DIAGNOSTIC: pipeline claims 11_0 but keeps the FL10 MSAA/format caps —
 ///       isolates pipeline-level validation from the later FL11 caps gates.
 pub(crate) fn feature_level_mode() -> u32 {
-    FEATURE_LEVEL_11.get()
+    static OVERRIDE: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
+    let profile = OVERRIDE.get_or_init(|| std::env::var("HELIOS_DIAGNOSTIC_FEATURE_LEVEL")
+        .ok().as_deref().and_then(crate::diagnostics::profile_override));
+    profile.unwrap_or_else(|| FEATURE_LEVEL_11.get())
 }
 
 /// Dcomp-vehicle flip-ordering gate cap in microseconds:

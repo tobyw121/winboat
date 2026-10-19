@@ -29,4 +29,10 @@ if (-not $failed -or $script:values.Count -ne 1 -or $script:values.Unrelated -ne
 $script:values=@{}; $script:exists=$false
 try {Invoke-HeliosProfileArms {throw 'fixture timeout'}} catch {}
 if ($script:exists -or $script:values.Count) {throw 'New empty key not removed after failure'}
+$script:values=@{FeatureLevel11=7;UmdTrace=0;Unrelated=42}
+$arms=@(Invoke-HeliosProfileArms -ProcessLocal {param($mode)
+    if ($script:values.FeatureLevel11 -ne 7 -or $script:values.UmdTrace -ne 0) {throw 'Process-local test changed global registry'}
+    $mode
+})
+if (($arms -join ',') -ne '1,0,2,1') {throw 'Child-process profile ordering failed'}
 Write-Host 'Interleaved profiles, exact registry restoration and failure cleanup passed.'

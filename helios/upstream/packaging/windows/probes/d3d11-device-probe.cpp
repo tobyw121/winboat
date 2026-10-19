@@ -5,10 +5,17 @@
 #include <d3d11.h>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 
 int main(int argc, char** argv) {
-    const bool warp = argc == 2 && !std::strcmp(argv[1], "--warp");
-    if (argc != 1 && !warp) return 64;
+    bool warp = false, single = false;
+    for (int i = 1; i < argc; ++i) {
+        if (!std::strcmp(argv[i], "--warp")) warp = true;
+        else if (!std::strcmp(argv[i], "--single")) single = true;
+        else return 64;
+    }
+    const char* profile = std::getenv("HELIOS_DIAGNOSTIC_FEATURE_LEVEL");
+    const bool fl10 = profile && !std::strcmp(profile, "0");
     IDXGIFactory1* factory = nullptr;
     HRESULT hr = CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&factory));
     if (FAILED(hr)) return 2;
@@ -32,7 +39,9 @@ int main(int argc, char** argv) {
     const D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0};
     const UINT flagsets[] = {0, D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_SINGLETHREADED};
     for (UINT flags : flagsets) {
+        if (single && flags != flagsets[1]) continue;
         for (D3D_FEATURE_LEVEL level : levels) {
+            if (single && level != (fl10 ? D3D_FEATURE_LEVEL_10_0 : D3D_FEATURE_LEVEL_11_0)) continue;
             ID3D11Device* device = nullptr;
             ID3D11DeviceContext* context = nullptr;
             D3D_FEATURE_LEVEL achieved{};

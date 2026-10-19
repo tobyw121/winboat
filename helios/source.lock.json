@@ -316,7 +316,7 @@
     "packaging/windows/Helios-PackageCommon.ps1": "b76da6667fc1117cbe562a8004c641509b303d2eb3da153208700124c248201f",
     "packaging/windows/Install-Helios.ps1": "f8eadd2da8b405261073c1c02541d3fa4823c73c3cc6d56272528131f6b9410a",
     "packaging/windows/README.md": "6fb7805c2689bb577be675d9262c0b90fc0b71829d5ef656dc0513931cf6785f",
-    "packaging/windows/Test-HeliosDeviceProfiles.ps1": "ee14596170e95df64b08f7c8ebc790b12e2a461b2a93ff949730607e44d97038",
+    "packaging/windows/Test-HeliosDeviceProfiles.ps1": "a7e394a5dd43758b495f78b1f0c1431fc0f7df9cfeee114eed815e587224dcee",
     "packaging/windows/Test-HeliosRegistrySnapshots.ps1": "1418630d6533ce95ced0ac59436897202d6f9ad2cdb0e2b0d1586c67a831d256",
     "packaging/windows/Uninstall-Helios.ps1": "e45183190e0aa9850b8fec818aca9c39dcfdd40c0a3e041ea87b0bb7c4ef21c9",
     "packaging/windows/Verify-Helios.ps1": "10ee65983698d5fda02301979e4e2da2e831f8eeda9fd69cae1017c2a8c1998a",
@@ -328,7 +328,7 @@
     "packaging/windows/compat/resolve-compatibility/Resolve-CompatibilityCommon.ps1": "eb418675aa7eb6ed34c81f034f53a1ecf8f03f6d6321df1794a99f699f42b899",
     "packaging/windows/compat/resolve-compatibility/Test-Resolve-CompatibilityLifecycle.ps1": "e575dabadf6e1718b1f1ab1bc3b33a83ad9c9f90ec359c78e43149297e4d21db",
     "packaging/windows/compat/resolve-compatibility/Uninstall-Resolve-Compatibility.ps1": "b04a01f92674e582f1bb494e6f53317109157b490e304e2aa6051c1ad05c08a7",
-    "packaging/windows/probes/d3d11-device-probe.cpp": "17fe9b9cac00ea42136ce973c8eaa0ea9fc53347feb7b624dbbc2d02bb0f1e7f",
+    "packaging/windows/probes/d3d11-device-probe.cpp": "764ccb0505a3175c79a385389a0e80dcdc56b6448c1cbc8c68f505d5cd6799a2",
     "packaging/windows/probes/d3d11-render-checks.h": "796543781b0485b1221236d9b2985874c703825627266a73fc859b35168c8d6a",
     "packaging/windows/probes/d3d11-smoke.cpp": "8f5ed780017dd650c2c4fb6fe80ee1a5e5d836995c524e1a07fb2bf0feeec4ab",
     "packaging/windows/probes/opencl-gl-sharing-smoke.cpp": "f5578e7074ab5c8775b723cad3b2504dbbea628d7e6a4e59440d969876323f28",
@@ -577,12 +577,12 @@
     "umd/build-support/dxvk_c_compat.h": "affc48258a9d1437396e1d95ea872585bea80d043a9347a0306f09a38518d9b2",
     "umd/build-support/typed_tables.rs": "66a96356829c65705432a00ff96d65112a55477dd1253a57e2a1ca8b9992e521",
     "umd/build.rs": "b28dde791e780b2c59ea08a4c86132a4abf9ce99107113ae79408e109fde87e5",
-    "umd/src/adapter.rs": "19ad4c83d2ade726964f029fee8df70c3d98ff210e39f60f93fdfa4d56b037ba",
+    "umd/src/adapter.rs": "a78412e54a87676cc673b39037bb36e4d06c65d17174122fc54f82f88cc0da41",
     "umd/src/bridge.rs": "e792a68bcf48520b9b894606edf34173d33ad447dc369f0e3208bfd46f2679a2",
     "umd/src/caps.rs": "bbee18410a1a1b76ed27735ad1f85508b7534c7a7b5891134fe50b00ee1e60d5",
     "umd/src/ddi.rs": "9ab6d0167b76a725f31ae664598ab64fbe563795bfbd3ac0f8c3cd0c784c9897",
     "umd/src/device_funcs.rs": "5acb1102291a68261013fc1ed888b7c29ec5250bfeb75c909cbeb6246685a3fa",
-    "umd/src/diagnostics.rs": "b8c80978735badaafe4d8707140d5294be7e2aa10c37e962cc1818bf03c11d98",
+    "umd/src/diagnostics.rs": "cb9074e51ade640198e105525916e6bd204a83587d80494c4654434e4b4b5723",
     "umd/src/forward.rs": "fa283758d3cbae1af5ce21a01b9424578bcfbe3726f7e037ac4c4d2cefc44a4d",
     "umd/src/forward/alloc.rs": "7209f94a001b914a4b3f8f7ba5f9471ee2513f578bd9951dc942bf020602bd89",
     "umd/src/forward/bindings.rs": "7ab9b2b06919949b451631412f4d708b0c06d3a1b6b854efd9f4b5c64e4cea63",
@@ -604,7 +604,7 @@
     "umd/src/forward/transfer.rs": "df27a824e016d74a19b3d12d086717bb59be80205acbb260033c7d7bc9416e3f",
     "umd/src/forward/vehicle.rs": "93c3af4f28904a118fb3e15a170d00adc09ff89331d36dc68c36c4b4140211bc",
     "umd/src/forward/views.rs": "b708ab57cf46112ff53085b320738e9cf61887a8cf8fb40dd529d50e5fe7a337",
-    "umd/src/knobs.rs": "2e66052c5d5d6b803c2937aba468e83364427605bfdfe1cf2e4f5c20fd8d5ab5",
+    "umd/src/knobs.rs": "4b28a4f2474d1ac2f56787620816560df0eef596d292cf2248d60d0dd1469787",
     "umd/src/lib.rs": "ea44e77896ef2d78b84a58ec7d2107c41c615ca8b8fec8622fe2787fe5f7af90",
     "umd/src/scanout_acquire.rs": "e2f3e8e8393fba41346acb91202b0bbb3454b079422661a2239aa4cd99aa245a",
     "umd/src/vehicle_exports.rs": "4ac2fc2503f190966f97379d3f199c4d2da47694a87682a6dcb58e8199cb6101",
@@ -699,7 +699,9 @@
       "umd/src/forward/layout.rs": "a316004e44d88e38dde8e53e8b3359ab25132d135173659679f5c256a6f04097",
       "packaging/windows/Test-HeliosDeviceProfiles.ps1": "8d5fa2f8b792536083e57a7f4b87c98b5f99941ad60d0bf852779c43d94c898f",
       "umd/src/diagnostics.rs": "b2b537a586f6b54591a9f0a1ad549bb891996dc41ca8a1b0a2ac5275c9ab5b75",
-      "umd/src/forward/present.rs": "e62bf881de9f81f2b2c6065a8a1b46cedc942177129510ec18f3590cddc8e328"
+      "umd/src/forward/present.rs": "e62bf881de9f81f2b2c6065a8a1b46cedc942177129510ec18f3590cddc8e328",
+      "packaging/windows/probes/d3d11-device-probe.cpp": "17fe9b9cac00ea42136ce973c8eaa0ea9fc53347feb7b624dbbc2d02bb0f1e7f",
+      "umd/src/knobs.rs": "2e66052c5d5d6b803c2937aba468e83364427605bfdfe1cf2e4f5c20fd8d5ab5"
     },
     "features": [
       "d3d11-uav-clear-view",
@@ -718,7 +720,8 @@
       "preserve-shader-backend-hresults",
       "outer-runtime-probe-interleaved-profiles",
       "guest-api-structured-device-contract-evidence",
-      "diagnostic-build-296-running-qemu-config-audit"
+      "diagnostic-build-296-running-qemu-config-audit",
+      "child-process-only-capability-profiles"
     ],
     "addedFiles": [
       "kmd_logic/src/display_modes.rs",

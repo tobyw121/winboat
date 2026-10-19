@@ -75,9 +75,11 @@ function Get-HeliosApplicationDiagnostics {
             $loaded += [ordered]@{ processId=$appProcess.Id; name=$appProcess.ProcessName; modules=$modules }
         }
     } catch { $errors += 'Loaded application modules unavailable' }
-    $umd=@()
-    try {$umd=@(Get-HeliosUmdDiagnostics)} catch {$errors+='Helios UMD log summaries unavailable'}
     $probe=Get-HeliosDeviceProbeDiagnostics
+    $preferred=@()
+    if ($null -ne $probe -and $probe.Contains('arms')) {$preferred=@($probe.arms | ForEach-Object {$_.processId})}
+    $umd=@()
+    try {$umd=@(Get-HeliosUmdDiagnostics -PreferredProcessIds $preferred)} catch {$errors+='Helios UMD log summaries unavailable'}
     $recent=@()
     if ($null -ne $probe -and $probe.Contains('startedAtUtc')) {
         $recent=@($crashes | Where-Object {[DateTimeOffset]::Parse($_.timeUtc) -ge [DateTimeOffset]::Parse($probe.startedAtUtc)})

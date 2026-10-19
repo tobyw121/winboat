@@ -139,6 +139,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Helios acceptance probe compilation failed.' }
           & ./helios-device-${{ matrix.arch }}.exe --warp
           if ($LASTEXITCODE -ne 0) { throw 'WARP control: outer device creation failed.' }
+          & ./helios-device-${{ matrix.arch }}.exe --warp --single
+          if ($LASTEXITCODE -ne 0) { throw 'WARP control: single outer device creation failed.' }
           & ./helios-render-${{ matrix.arch }}.exe --warp
           if ($LASTEXITCODE -ne 0) { throw 'WARP control: compute/draw/depth/MSAA readback failed.' }
       - uses: actions/upload-artifact@v4

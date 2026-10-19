@@ -509,9 +509,11 @@ unsafe extern "system" fn create_device(
         }
     }
 
+    let no_redirection = std::env::var_os("HELIOS_DXGI_NO_REDIRECTION").is_some();
+    let returned = if no_redirection { DXGI_STATUS_NO_REDIRECTION as u32 } else { S_OK as u32 };
     // SAFETY: constructed live device remains runtime-owned through this callback.
-    unsafe { crate::diagnostics::note(create.hDrvDevice, "returned", [0, 0, 0, 0, 0, 0]); }
-    if std::env::var_os("HELIOS_DXGI_NO_REDIRECTION").is_some() {
+    unsafe { crate::diagnostics::note(create.hDrvDevice, "returned", [returned as u64, 0, 0, 0, 0, 0]); }
+    if no_redirection {
         log_error!(
             "  CreateDevice -> DXGI_STATUS_NO_REDIRECTION (env-gated; DXGI desktop fallback)"
         );
