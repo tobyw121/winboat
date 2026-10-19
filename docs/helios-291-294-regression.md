@@ -86,6 +86,88 @@ required format lacks genuine backend support, implement the missing path or
 select a feature contract the complete backend can satisfy. Keep Mesa/QEMU
 changes out of that causal test and retain the verified .291 default.
 
+## Further investigation: error contracts, identity and completion
+
+The additional review finds a second concrete DDI contract problem, independent
+of the MSAA answers. It does not establish that this path caused the supplied
+DWM loop: that log tail contains no matching shader/view failure.
+
+### Shader/view errors can become critical runtime errors
+
+`90bb311` adds direct `E_INVALIDARG` callbacks to shader creation and early view
+creation failures. The .291 versions returned an empty handle on these paths;
+that was also incorrect and must not be restored as a fix. The new callbacks
+make those existing failures visible to the runtime, but use an error contract
+that is too broad for these DDIs.
+
+Microsoft's documentation for
+[CreateVertexShader](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3d10umddi/nc-d3d10umddi-pfnd3d10ddi_createvertexshader),
+[CreatePixelShader](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3d10umddi/nc-d3d10umddi-pfnd3d10ddi_createpixelshader),
+[CreateComputeShader](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3d10umddi/nc-d3d10umddi-pfnd3d11ddi_createcomputeshader)
+and
+[CreateRenderTargetView](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3d10umddi/nc-d3d10umddi-pfnd3d10ddi_createrendertargetview)
+allows `E_OUTOFMEMORY` for actual memory exhaustion or
+`D3DDDIERR_DEVICEREMOVED` for device loss. Other errors are considered critical.
+An invalid descriptor arriving at a driver callback is therefore not equivalent
+to an ordinary invalid argument rejected by the public D3D11 API.
+
+The newer .296 shader bridge correctly preserves backend HRESULTs for diagnosis,
+but `forward/shaders.rs` also passes those values directly to `set_runtime_error`.
+The production bridge test confirms that `E_INVALIDARG`, `E_FAIL` on exceptions
+and `0x887a0005` can cross that boundary. Preserving evidence is useful; it does
+not make every public COM HRESULT legal for a driver callback. The existing
+`forward/state.rs::create_error_hr` is not a complete solution either: its
+comment permits E_INVALIDARG for every Create DDI and its generic fallback
+labels unrelated failures as OOM, losing actual device-loss information.
+
+For a correction, retain the original backend code in diagnostics, validate each
+DDI's own error contract, preserve real device removal, and fix the unsupported
+shader/descriptor path. Do not conceal a critical driver failure by returning
+success or inventing a memory-exhaustion cause. Correlate a journal `shader` or
+`view` event followed by `runtime-error` with the same device birth/sequence
+before attributing the user's flicker to this path. The .296 raw-HRESULT change
+cannot explain the first .292 failure by itself.
+
+### Package identity and a completion receipt are weaker than visible output
+
+All three bundled receipts (.291, .294 and .296) have the same upstream
+`revision=fecffde64fd32399a877b452332681ef0db7993e`, despite different installer
+hashes and WinBoat patches. `Start-HeliosProvisioning.ps1::Assert-HeliosInstalled`
+checks that revision and the installed package's own verifier. This verifies
+installed integrity, but does not alone bind it to the selected bundle's exact
+version/hash. Comparing only this revision can therefore misidentify a test.
+The diagnostics' bound INF/version, loaded module paths and bundle hashes are
+the stronger evidence. This is a provisioning identity gap, not evidence that
+the already verified clean .294 report actually ran .291.
+
+`Complete-HeliosRestart` additionally requires a new boot, test signing, a running
+PnP device and `DspH=1`. It does not require successful outer D3D11 acceptance,
+advancing Presents or a visible frame. Consequently a `finished` receipt can
+coexist with this rendering failure. That is a diagnostic/acceptance limitation,
+not proof that provisioning itself caused DWM to fail.
+
+### Other paths rechecked
+
+- Adapter selection still falls back to adapter 0 when an expected LUID cannot
+  be found. Branding filters the product family, not an individual GPU. This is
+  a remaining identity risk with multiple matching devices; the fallback also
+  exists in .291 and is not a newly introduced .292 regression.
+- The Mesa patch changes host-facing device creation even without a WSI request:
+  it now copies/filters the pNext chain on every device creation. Its allocation,
+  immutable-input, promoted-timeline, nested-pointer and OOM fixture tests pass.
+  Source review found no new lifetime/cleanup defect in that synchronous path.
+  This does not validate every enabled feature or later GPU operation.
+- The added build script applies the Mesa patch and runs its checks; no new
+  optimization/compiler flag was found in this .291-to-.294 change. There is no
+  source evidence for blaming a compiler upgrade in this comparison.
+
+Re-executed `tests/helios-device-features.py`,
+`tests/helios-adapter-selection.py` and `tests/helios-shader-hresult.py`: all pass.
+These are host-side source/fixture tests, not Windows/NVIDIA desktop validation.
+Keep the MSAA contract defect, critical error callback path, installation
+identity and scanout failure as separate hypotheses; a single cleanup or switch
+must not be described as proving all four corrected.
+
 ## Scope and actual packages
 
 Reviewed the installer/registrations, D3D11 and D3D12 UMDs, Mesa/Venus patch,
