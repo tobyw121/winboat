@@ -46,17 +46,19 @@ test('the Git-bundled installer is complete and matches the trusted WinBoat chec
     assert.ok(!fs.readFileSync('scripts/helios/fetch-installer.ts', 'utf8').includes('api.github.com'));
 });
 
-test('the separate .294 test installer is complete while application packaging keeps the .291 default', () => {
-    const directory = 'resources/helios-22.22.294.0';
-    const receipt = verifyBundle(directory);
-    assert.equal(fs.readFileSync(path.join(directory, 'SHA256SUMS'), 'utf8').trim(), receipt.sha256 + '  HeliosSetup.exe');
-    const lock = JSON.parse(fs.readFileSync('helios/stack.lock.json', 'utf8'));
-    assert.equal(lock.bundledInstaller.path, 'resources/helios');
-    assert.notEqual(lock.bundledInstaller.sha256, receipt.sha256);
-    const builder = JSON.parse(fs.readFileSync('electron-builder.json', 'utf8'));
-    assert.ok(builder.extraResources.some((resource: { from?: string }) => resource.from === './resources/helios'));
-    assert.ok(!JSON.stringify(builder.extraResources).includes('helios-22.22.294.0'));
-});
+for (const version of ['22.22.294.0', '22.22.296.0']) {
+    test(`the separate ${version} test installer is complete while application packaging keeps the .291 default`, () => {
+        const directory = `resources/helios-${version}`;
+        const receipt = verifyBundle(directory);
+        assert.equal(fs.readFileSync(path.join(directory, 'SHA256SUMS'), 'utf8').trim(), receipt.sha256 + '  HeliosSetup.exe');
+        const lock = JSON.parse(fs.readFileSync('helios/stack.lock.json', 'utf8'));
+        assert.equal(lock.bundledInstaller.path, 'resources/helios');
+        assert.notEqual(lock.bundledInstaller.sha256, receipt.sha256);
+        const builder = JSON.parse(fs.readFileSync('electron-builder.json', 'utf8'));
+        assert.ok(builder.extraResources.some((resource: { from?: string }) => resource.from === './resources/helios'));
+        assert.ok(!JSON.stringify(builder.extraResources).includes(`helios-${version}`));
+    });
+}
 
 test('Windows-style Git checkouts preserve the checksum-locked snapshot including mixed original line endings', t => {
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'winboat-eol-test-'));

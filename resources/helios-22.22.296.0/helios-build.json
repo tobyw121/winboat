@@ -1,0 +1,9 @@
+{
+  "revision": "fecffde64fd32399a877b452332681ef0db7993e",
+  "sha256": "0b01e0b6fa294610bae3950b1006168d9f224025a99333a45e130a317fea44d7",
+  "repository": "tobyw121/winboat",
+  "winboatCommit": "a4b32c4a6292db048566a437abafa0fc6e43ad6a",
+  "sourceSnapshot": "d82ce565ac792eb48da5e59f2a82a12ff221851d",
+  "sourceLockSha256": "a6fbe83bad9e8c8a92d67078ce214c472f2b18611f2dc4c88a12578787fc2db4",
+  "workflow": ".github/workflows/build-helios-windows.yml"
+}

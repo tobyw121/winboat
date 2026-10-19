@@ -1,5 +1,44 @@
 # Validation record
 
+## Helios .296 diagnostics and QEMU render-node selection, 19 October 2026 (UTC)
+
+- Full Windows build, test signing and self-contained assembly passed in
+  [39275019139](https://github.com/tobyw121/winboat/actions/runs/39275019139),
+  source commit `a4b32c4a6292db048566a437abafa0fc6e43ad6a`.
+  Imported artifact `12200075969`; archive SHA-256:
+  `3a58961b7c23f5d5f5057decddd18f4527794366f7d29ac48a8a16cbf2936419`.
+  Installer SHA-256:
+  `0b01e0b6fa294610bae3950b1006168d9f224025a99333a45e130a317fea44d7`.
+  Receipt provenance, the source-lock digest, complete 74-entry payload,
+  all 40 manifest file hashes/sizes, and x86/x64 probe PE machines were checked.
+  The complete candidate is stored separately in `resources/helios-22.22.296.0/`;
+  `.291` remains the unchanged application/OEM default and `.294` stays separate.
+- [Game compatibility CI 39275019149](https://github.com/tobyw121/winboat/actions/runs/39275019149)
+  passed on the effective Windows source commit `a4b32c4a6292db048566a437abafa0fc6e43ad6a`.
+  This includes the production bounded Rust journal, C++ shader helper/exception
+  guard, x86/x64 WARP controls, and the real PowerShell child-process runner on
+  PowerShell 7 and Windows PowerShell 5.1. The later workflow-trigger update
+  passed again in [39276977581](https://github.com/tobyw121/winboat/actions/runs/39276977581).
+- [QEMU CI 39275019101](https://github.com/tobyw121/winboat/actions/runs/39275019101)
+  passed capture, viewer, patched display callbacks and a full production host
+  build. The log contains compilation of `ui_vulkan-readback.c.o`; the compiled
+  patch manifest matches the tracked manifest and the runtime label is
+  `glvnd-v5`. CI image ID:
+  `sha256:9ed84b3eb8b2b4ab1373f662c63e0fed40d3bb8d942da853bba2c3213cd8a2a5`.
+  This image was built for CI validation; it was not published as a registry tag.
+- The readback selection test exercises the actual production helper against
+  reordered GPUs, an unmatched render node, ambiguous identity and absent DRM
+  identity. Software EGL callback regressions also pass. These checks do not
+  import an NVIDIA DMA-BUF or demonstrate a visible Helios desktop.
+- Local source integrity covers 619 files, metadata synchronization passes,
+  and all 59 host tests passed with the candidate present. Guest application
+  diagnostics, profile restoration and child-only execution tests also passed locally.
+- No real Windows/Helios GPU is attached here. Stable VGA/Helios output, DWM
+  survival, outer D3D11 acceptance on the user's hardware, cold boot and game/API
+  rendering remain acceptance gates. `.296` is a diagnostic build, not a
+  confirmed flicker fix. The QEMU selection correction also requires a rebuilt
+  host; installing the Windows EXE alone does not update that host.
+
 ## WinBoat driver 22.22.291.0: live display modes, 18 October 2026 (UTC)
 
 - Full native Windows build, test signing and self-contained assembly passed in

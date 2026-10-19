@@ -5,6 +5,11 @@ Treiberstands. Er ist **keine bestätigte Behebung des Flackerns**. Das gebünde
 Standardpaket bleibt .291. Ein erfolgreicher CI-Build bestätigt noch kein
 sichtbares Bild auf NVIDIA-Hardware.
 
+Der vollständige Testinstaller liegt unter
+[`resources/helios-22.22.296.0/HeliosSetup.exe`](../resources/helios-22.22.296.0/HeliosSetup.exe),
+zusammen mit Build-Beleg und Prüfsumme. Dieses Paket bei einem ausdrücklichen
+Diagnosetest vollständig in Windows installieren.
+
 ## Neue Treiberinformationen
 
 Jedes D3D11-Gerät besitzt ein eigenes Journal mit Gerätekennung, Zeitkennung,
@@ -40,11 +45,11 @@ Windows-Neustart kann in einer administrativen **64-Bit-PowerShell der
 angemeldeten Windows-Konsole** ausgeführt werden:
 
 ```powershell
-& "$env:ProgramData\Helios\Test-HeliosDeviceProfiles.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:ProgramData\Helios\Test-HeliosDeviceProfiles.ps1"
 ```
 
-Der Helfer verlangt einen aktiven Helios-Adapter und eine zum Paket passende
-gebundene Treiberversion. Er prüft die Test-EXE gegen das gespeicherte
+Die Execution-Policy-Ausnahme gilt nur für diesen Prozess. Der Helfer verlangt
+einen aktiven Helios-Adapter und eine zum Paket passende gebundene Treiberversion. Er prüft die Test-EXE gegen das gespeicherte
 Paketmanifest und verwendet den vorhandenen WinBoat-Wartungsmutex. Er aktiviert
 keinen Adapter, ändert die Anzeigeanordnung nicht und startet weder DWM noch
 Windows neu. Bei unbenutzbarer Konsole genügt zunächst das neue Gerätejournal;
