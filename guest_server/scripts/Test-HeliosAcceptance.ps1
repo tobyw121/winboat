@@ -1,5 +1,6 @@
 param([ValidatePattern('^[a-zA-Z0-9_.-]{1,48}$')][string]$Label='manual',
-    [ValidatePattern('^[a-zA-Z0-9_.-]{1,96}$')][string]$ComparisonKey='graphics-suite-v1',[switch]$LibraryOnly)
+    [ValidatePattern('^[a-zA-Z0-9_.-]{1,96}$')][string]$ComparisonKey='graphics-suite-v1',
+    [string]$ToolsPath,[string]$ToolsManifestSha256,[switch]$LibraryOnly)
 . (Join-Path $PSScriptRoot 'Helios-ValidationCommon.ps1')
 function Get-HeliosAcceptancePlan {
     return @(
@@ -16,12 +17,24 @@ function Invoke-HeliosAcceptance([string]$RunLabel) {
     $state=Read-HeliosValidationJson (Join-Path $env:ProgramData 'Helios\install-state.json')
     $start=[DateTime]::UtcNow
     $runId=[guid]::NewGuid().ToString('N');$rows=@()
-    foreach($test in @(Get-HeliosAcceptancePlan)) {
+    $plan=@(Get-HeliosAcceptancePlan)
+    $toolRoot=$null
+    if ($ToolsPath) {
+        $toolRoot=Initialize-HeliosAcceptanceTools $ToolsPath $ToolsManifestSha256
+        $plan+=@(
+            @{name='OpenGL pixels';exe='helios-opengl-pixels.exe';arguments=@();coverage='Exact RGB readback, two odd dimensions';external=$true},
+            @{name='D3D11 1x resize';exe='helios-msaa-present.exe';arguments=@('1','unorm','12','resize');coverage='Rendered pixel oracle, presentation and window resize';external=$true},
+            @{name='D3D11 4x MSAA resize';exe='helios-msaa-present.exe';arguments=@('4','srgb','12','resize');coverage='4x MSAA resolve, pixel oracle, presentation and window resize';external=$true}
+        )
+    }
+    foreach($test in $plan) {
         $path=Join-Path ([string]$state.installRoot) ('runtime\smoke\'+$test.exe)
+        if ($test.Contains('external')) {$path=Join-Path $toolRoot $test.exe}
         $result=[ordered]@{name=$test.name;coverage=$test.coverage;status='missing';sha256=$null;exitCode=$null;signals=@();codes=@()}
         if (Test-Path -LiteralPath $path -PathType Leaf) {
             $actual=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
             $expected=@($state.runtimeFiles | Where-Object {$_.path -ieq $path -and $_.sha256 -ieq $actual})
+            if ($test.Contains('external')) {$expected=@($actual)} # Copied and verified against the pinned tools manifest below.
             if ($expected.Count -ne 1) {throw 'Probe bytes do not match the installed runtime manifest.'}
             $result.sha256=$actual
             $execution=Invoke-HeliosValidationProcess $path $test.arguments
@@ -42,8 +55,32 @@ function Invoke-HeliosAcceptance([string]$RunLabel) {
         dwmCrashes=$crashes;displayResets=$resets;observationErrors=@($runtime.errors);
         manualChecks=@{visibleColors=$false;windowSwitch=$false;resolutionChange=$false;deviceRecovery=$false};
         scope='Probe exit codes and existing crash events. No complete visual, MSAA or device-loss certification.'}
+    $report.extendedToolsSha256=$ToolsManifestSha256
     Write-HeliosValidationJson 'acceptance.json' $report
     return $report
+}
+function Initialize-HeliosAcceptanceTools([string]$Folder,[string]$Pin) {
+    $path=Join-Path $Folder 'tools.json'
+    if ($Pin -notmatch '^[a-fA-F0-9]{64}$' -or (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ine $Pin) {throw 'Independently verified tools-manifest SHA-256 required.'}
+    $manifest=Read-HeliosValidationJson $path
+    $expected=@('helios-msaa-present.exe','helios-opengl-pixels.exe')
+    if ($manifest.schema -ne 1 -or @($manifest.files).Count -ne 2) {throw 'Unsupported tools manifest.'}
+    $target=Join-Path (Initialize-HeliosValidationRoot) ('tools-'+$Pin.ToLowerInvariant())
+    if ((Test-Path -LiteralPath $target) -and ((Get-Item $target -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {throw 'Tools directory is a reparse point.'}
+    New-Item -ItemType Directory -Path $target -Force | Out-Null
+    Protect-HeliosValidationPath $target
+    foreach($name in $expected) {
+        $entries=@($manifest.files | Where-Object {$_.name -eq $name -and $_.sha256 -match '^[a-fA-F0-9]{64}$'})
+        if ($entries.Count -ne 1) {throw 'Incomplete tools manifest.'}
+        $source=Join-Path $Folder $name;$dest=Join-Path $target $name
+        if ((Get-Item $source -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {throw 'Tool is a reparse point.'}
+        if ((Test-Path -LiteralPath $dest) -and ((Get-Item $dest -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {throw 'Stored tool is a reparse point.'}
+        if ((Get-FileHash $source -Algorithm SHA256).Hash -ine $entries[0].sha256) {throw 'Tool checksum mismatch.'}
+        Copy-Item -LiteralPath $source -Destination $dest -Force
+        Protect-HeliosValidationPath $dest $false
+        if ((Get-FileHash $dest -Algorithm SHA256).Hash -ine $entries[0].sha256) {throw 'Stored tool checksum mismatch.'}
+    }
+    return $target
 }
 if ($LibraryOnly) {return}
 Invoke-HeliosAcceptance $Label | ConvertTo-Json -Depth 10

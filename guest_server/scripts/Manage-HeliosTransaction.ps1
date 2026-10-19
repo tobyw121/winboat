@@ -34,16 +34,12 @@ function Save-HeliosTransactionBundle([string]$Folder,[string]$Pin) {
     $target=Join-Path $root $Pin.ToLowerInvariant()
     if ((Test-Path -LiteralPath $target) -and ((Get-Item $target -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {throw 'Bundle directory is a reparse point.'}
     New-Item -ItemType Directory -Path $target -Force | Out-Null
-    $acl=Get-Acl -LiteralPath $target
-    $acl.SetSecurityDescriptorSddlForm('O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)')
-    Set-Acl -LiteralPath $target -AclObject $acl
+    Protect-HeliosValidationPath $target
     foreach($name in @('HeliosSetup.exe','helios-build.json')) {
         $dest=Join-Path $target $name
         if ((Test-Path -LiteralPath $dest) -and ((Get-Item $dest -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {throw 'Bundle file is a reparse point.'}
         Copy-Item -LiteralPath (Join-Path $Folder $name) -Destination $dest -Force
-        $acl=Get-Acl -LiteralPath $dest
-        $acl.SetSecurityDescriptorSddlForm('O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)')
-        Set-Acl -LiteralPath $dest -AclObject $acl
+        Protect-HeliosValidationPath $dest $false
     }
     if ((Get-FileHash (Join-Path $target 'HeliosSetup.exe') -Algorithm SHA256).Hash -ine $Pin) {throw 'Staged installer checksum mismatch.'}
     return [ordered]@{sha256=$Pin.ToLowerInvariant();version=$receipt.driverVersion;manifestSha256=$receipt.manifestSha256}

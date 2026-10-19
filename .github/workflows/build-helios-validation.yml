@@ -1,0 +1,49 @@
+name: Build Helios graphics validation tools
+on:
+  workflow_dispatch:
+  push:
+    branches: [work]
+    paths:
+      - '.github/workflows/build-helios-validation.yml'
+      - 'tests/helios-opengl-pixels.c'
+      - 'helios/upstream/tools/d3d11_msaa_present_probe.cpp'
+      - 'guest_server/scripts/Test-HeliosAcceptance.ps1'
+permissions:
+  contents: read
+jobs:
+  tools:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile actual D3D11 MSAA/presentation and OpenGL pixel probes
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          $cmd = Join-Path $env:RUNNER_TEMP 'validation.cmd'
+          @(
+            ('call "'+$vs+'\VC\Auxiliary\Build\vcvars64.bat"'),
+            'if errorlevel 1 exit /b 1',
+            'cl /nologo /W4 /WX /EHsc /std:c++17 /MT helios/upstream/tools/d3d11_msaa_present_probe.cpp /Fe:helios-msaa-present.exe /link d3d11.lib dxgi.lib d3dcompiler.lib user32.lib',
+            'if errorlevel 1 exit /b 1',
+            'cl /nologo /W4 /WX /std:c11 /MT tests/helios-opengl-pixels.c /Fe:helios-opengl-pixels.exe /link opengl32.lib user32.lib gdi32.lib',
+            'exit /b %errorlevel%'
+          ) | Set-Content -Encoding ascii $cmd
+          & cmd.exe /c $cmd
+          if ($LASTEXITCODE) {throw 'Native probe compilation failed'}
+          ./helios-msaa-present.exe --self-test
+          if ($LASTEXITCODE) {throw 'MSAA pixel oracle self-test failed'}
+          $files=@('helios-msaa-present.exe','helios-opengl-pixels.exe') | ForEach-Object {
+            @{name=$_;sha256=(Get-FileHash $_ -Algorithm SHA256).Hash}
+          }
+          @{schema=1;sourceCommit='${{ github.sha }}';files=@($files)} | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 tools.json
+          (Get-FileHash tools.json -Algorithm SHA256).Hash | Set-Content tools-manifest-sha256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: helios-validation-x64
+          path: |
+            helios-msaa-present.exe
+            helios-opengl-pixels.exe
+            tools.json
+            tools-manifest-sha256.txt

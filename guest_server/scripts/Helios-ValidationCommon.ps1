@@ -3,15 +3,19 @@ $ErrorActionPreference='Stop'
 function Get-HeliosValidationRoot {
     return Join-Path $env:ProgramData 'WinBoat\GraphicsValidation'
 }
+function Protect-HeliosValidationPath([string]$Path,[bool]$Directory=$true) {
+    $acl=Get-Acl -LiteralPath $Path
+    $sddl=if($Directory){'O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)'}else{'O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)'}
+    $acl.SetSecurityDescriptorSddlForm($sddl)
+    Set-Acl -LiteralPath $Path -AclObject $acl
+}
 function Initialize-HeliosValidationRoot {
     $root=Get-HeliosValidationRoot
     foreach($path in @((Join-Path $env:ProgramData 'WinBoat'),$root)) {
         if ((Test-Path -LiteralPath $path) -and ((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {throw 'Validation path is a reparse point.'}
         New-Item -ItemType Directory -Path $path -Force | Out-Null
     }
-    $acl=Get-Acl -LiteralPath $root
-    $acl.SetSecurityDescriptorSddlForm('O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)')
-    Set-Acl -LiteralPath $root -AclObject $acl
+    Protect-HeliosValidationPath $root
     return $root
 }
 function Read-HeliosValidationJson([string]$Path) {

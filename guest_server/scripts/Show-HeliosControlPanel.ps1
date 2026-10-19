@@ -55,10 +55,17 @@ Add-HeliosButton 'Ursprüngliche Optionen wiederherstellen' {
 }
 Add-HeliosLabel 'Vulkan/Mesa Venus wird auch von D3D11/12 und OpenGL genutzt. Globales Abschalten ist daher kein unabhängiger API-Schalter und wird hier nicht angeboten.'
 $label=New-Object Windows.Forms.TextBox;$label.Text='A1';$label.Width=330;$layout.Controls.Add($label)
+Add-HeliosLabel 'Optional: Verzeichnis der zusätzlichen Grafikprüfprogramme und unabhängig geprüfte tools.json-SHA-256 (für A/B/A/B dieselben Programme verwenden):'
+$tools=New-Object Windows.Forms.TextBox;$tools.Width=840;$layout.Controls.Add($tools)
+$toolsPin=New-Object Windows.Forms.TextBox;$toolsPin.Width=840;$layout.Controls.Add($toolsPin)
 Add-HeliosButton 'Grafiktests starten (kurze Testfenster)' {
     Invoke-HeliosPanel {
         if ($label.Text -notmatch '^[a-zA-Z0-9_.-]{1,48}$') {throw 'Use a short label such as A1 or B1.'}
         $arguments='-NoProfile -NoExit -ExecutionPolicy Bypass -File "'+(Join-Path $PSScriptRoot 'Test-HeliosAcceptance.ps1')+'" -Label '+$label.Text
+        if ($tools.Text) {
+            if ($tools.Text -match '["\r\n]' -or $toolsPin.Text -notmatch '^[a-fA-F0-9]{64}$') {throw 'Invalid tools path or manifest pin.'}
+            $arguments+=' -ToolsPath "'+$tools.Text.TrimEnd('\')+'" -ToolsManifestSha256 '+$toolsPin.Text
+        }
         $child=Start-Process "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList $arguments -PassThru
         return @{status='running';processId=$child.Id;message='Tests run in a separate interactive window. Export the result after completion.'}
     }
