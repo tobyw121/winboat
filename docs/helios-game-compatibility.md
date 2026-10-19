@@ -1,8 +1,21 @@
 # Helios: Spielekompatibilität
 
+## Aktuell gebündelt: 22.22.291.0
+
+Der Branch `work` liefert wieder exakt den Installer aus `f0a662f` mit
+22.22.291.0 aus. Installer, ursprünglicher Build-Beleg und Prüfsummen-Pin wurden
+gemeinsam zurückgenommen. Die unten beschriebenen Änderungen ab 22.22.292.0
+gehören zum neueren Entwicklungsquellstand, nicht zum aktuell gebündelten Paket.
+Die Quellen bleiben für die isolierte Regressionssuche erhalten.
+
+Eine vorhandene VM wird dadurch nicht automatisch heruntergestuft. Dazu muss
+der Installer aus `resources/helios/HeliosSetup.exe` in Windows angewendet werden;
+ein altes `C:\OEM\helios\HeliosSetup.exe` oder ein früher gebautes AppImage kann
+weiterhin eine andere Version enthalten. VGA und den Rettungsweg beibehalten.
+
 ## D3D11-Geräteauswahl ab 22.22.294.0
 
-Der gebündelte Installer enthält jetzt 22.22.294.0. Die D3D11-Brücke verwendet
+Der Entwicklungsstand 22.22.294.0 verwendet in der D3D11-Brücke
 denselben Produktnamen wie Mesa zur Vulkan-Geräteauswahl. Der alte Filter
 `Virtio-GPU Venus` passte nicht mehr zum gemeldeten `Helios vGPU (...)` und
 konnte deshalb den eigenen Adapter ausschließen. Der Regressionstest führt
@@ -27,7 +40,7 @@ Windows zunächst neu starten und anschließend das korrigierte Paket installier
 
 ## Vulkan und native D3D-Abfragen ab Quellversion 22.22.292.0
 
-Der mitgelieferte, in Windows-CI gebaute Installer 22.22.294.0 enthält diese
+Der frühere, in Windows-CI gebaute Installer 22.22.294.0 enthält diese
 Änderungen und die Erstinstallationskorrektur. Ein AppImage-Neubau übernimmt
 dieses Paket; eine vorhandene Windows-Installation benötigt anschließend die
 Aktualisierung des Gasttreibers. Der Paketbuild ist kein Hardware-Erfolgsnachweis.

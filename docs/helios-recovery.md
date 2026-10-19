@@ -1,10 +1,11 @@
 # Helios sicher wiederherstellen
 
-22.22.293.0 korrigiert den `classKey`-Installationsabbruch. Der Installer ist
-geprüft eingebunden; ein erfolgreicher Paketbuild belegt weder einen stabilen
-Windows-Desktop noch eine Behebung des beobachteten NVIDIA-/DMA-BUF-Flackerns.
+Aktuell ist wieder das unveränderte Paket 22.22.291.0 aus `f0a662f` gebündelt.
+Die Rücknahme ändert keine bereits installierten Windows-Treiber automatisch.
+Die bestehenden Rettungsfunktionen bleiben verfügbar.
 
-Das aktuell gebündelte Paket 22.22.294.0 ergänzt die korrigierte Auswahl des
+Der neuere Entwicklungsstand 22.22.293.0 korrigiert den `classKey`-Installationsabbruch;
+22.22.294.0 ergänzt die korrigierte Auswahl des
 umbenannten Vulkan-Geräts in der D3D11-Brücke. Der alte Gerätefilter konnte
 das eigene Gerät ausschließen. Die NVIDIA-Hardwareabnahme und der getrennte
 DMA-BUF-Größenkonflikt sind weiterhin offen; der Rettungsweg bleibt erforderlich.
