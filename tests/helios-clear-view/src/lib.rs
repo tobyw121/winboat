@@ -4,8 +4,6 @@
 #![cfg(all(test, windows))]
 #![allow(non_snake_case, non_camel_case_types, non_upper_case_globals)]
 use std::{ffi::c_void, mem::ManuallyDrop, sync::atomic::{AtomicUsize, Ordering}};
-#[path = "../../../helios/upstream/umd_common/src/hr.rs"]
-mod hr;
 use windows::{core::Interface, Win32::{Foundation::{HMODULE, RECT}, Graphics::{
     Direct3D::{D3D_DRIVER_TYPE_WARP, D3D_FEATURE_LEVEL_11_0}, Direct3D11::*, Dxgi::Common::*}}};
 
@@ -175,7 +173,8 @@ mod create_args;
 mod diagnostics { pub unsafe fn note<T>(_: T, _: &str, _: [u64; 6]) {} }
 fn feature_level_mode() -> u32 { if caps::SINGLE.get() { 0 } else { 1 } }
 
-mod hr { pub const E_FAIL: i32 = 0x80004005u32 as i32; }
+#[path = "../../../helios/upstream/umd_common/src/hr.rs"]
+mod hr;
 mod shader_result {
     include!(concat!(env!("OUT_DIR"), "/shader_result.rs"));
     #[test]
