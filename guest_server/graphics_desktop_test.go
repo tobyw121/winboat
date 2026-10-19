@@ -85,3 +85,25 @@ func TestDiagnosticsConcurrencyIsBounded(t *testing.T) {
 		t.Fatal(first.Code, second.Code)
 	}
 }
+
+func TestDiagnosticsReuseSuccessfulCollectorOnly(t *testing.T) {
+	m := newGraphicsMonitor()
+	calls := 0
+	h := m.diagnostics(func(context.Context) ([]byte, error) {
+		calls++
+		if calls == 1 {
+			return []byte(`invalid`), nil
+		}
+		return []byte(`{"observed":true}`), nil
+	})
+	for _, expected := range []int{503, 200, 200} {
+		w := httptest.NewRecorder()
+		h(w, httptest.NewRequest("GET", "/graphics/diagnostics", nil))
+		if w.Code != expected {
+			t.Fatal(w.Code, w.Body.String())
+		}
+	}
+	if calls != 2 {
+		t.Fatalf("collector started %d times", calls)
+	}
+}
