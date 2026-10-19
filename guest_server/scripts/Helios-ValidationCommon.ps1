@@ -41,7 +41,18 @@ function Get-HeliosValidationIdentity {
     $manifest=Join-Path $env:ProgramData 'Helios\manifest.json'
     $devices=@(Get-CimInstance Win32_VideoController | Where-Object {$_.PNPDeviceID -like 'PCI\VEN_1AF4&DEV_1050*'})
     if ($devices.Count -ne 1 -or $devices[0].ConfigManagerErrorCode -ne 0 -or $devices[0].DriverVersion -ne $state.version) {throw 'One healthy Helios adapter matching the installation state is required.'}
-    return [ordered]@{version=[string]$state.version;manifestSha256=(Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash;
+    $profile=[ordered]@{};$key=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SOFTWARE\Helios')
+    try {
+        foreach($name in @('UmdD3D12','UmdCommandLists','UmdFreeThreaded','UmdAsyncPresentStream','UmdPresentBatchFold','FeatureLevel11')) {
+            $value=$null
+            if ($null -ne $key -and $key.GetValueNames() -contains $name) {
+                if ($key.GetValueKind($name) -ne 'DWord') {throw 'Driver profile contains a non-DWORD option.'}
+                $value=[int]$key.GetValue($name)
+            }
+            $profile[$name]=$value
+        }
+    } finally {if($null -ne $key){$key.Dispose()}}
+    return [ordered]@{version=[string]$state.version;profile=$profile;manifestSha256=(Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash;
         bootAtUtc=(Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime().ToString('o')}
 }
 function Invoke-HeliosValidationProcess([string]$Exe,[string[]]$Arguments=@(),[int]$Timeout=45) {

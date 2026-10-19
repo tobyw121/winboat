@@ -6,9 +6,30 @@ function Assert-HeliosAcceptance($Report,$Identity) {
     if ($Report.schema -ne 1 -or $Report.automatedPassed -isnot [bool] -or -not $Report.automatedPassed -or $Report.identity.version -ne $Identity.version -or
         $Report.identity.manifestSha256 -ne $Identity.manifestSha256 -or $Report.identity.bootAtUtc -ne $Identity.bootAtUtc -or
         $finish -lt [DateTimeOffset]::UtcNow.AddMinutes(-30) -or $finish -gt [DateTimeOffset]::UtcNow.AddSeconds(30)) {throw 'A successful, current-boot acceptance run within 30 minutes is required.'}
-    foreach($name in @('D3D11','Vulkan enumeration','Vulkan features','Vulkan presentation','OpenGL')) {
+    if (($Report.identity.profile | ConvertTo-Json -Compress) -ne ($Identity.profile | ConvertTo-Json -Compress)) {throw 'Driver options changed since the acceptance run.'}
+    foreach($name in @('Package integrity','D3D11','Vulkan enumeration','Vulkan features','Vulkan presentation','OpenGL')) {
         $rows=@($Report.tests | Where-Object {$_.name -eq $name -and $_.status -eq 'passed' -and $_.sha256 -match '^[a-fA-F0-9]{64}$'})
         if ($rows.Count -ne 1) {throw 'Acceptance report is missing required probe evidence.'}
+    }
+}
+function Save-HeliosStableRecord($Bundle,$Identity,[string]$RunId) {
+    Restore-HeliosStableProfile ($Identity.profile | ConvertTo-Json | ConvertFrom-Json) -ValidateOnly
+    Write-HeliosValidationJson 'last-good.json' ([ordered]@{sha256=$Bundle.sha256;version=$Bundle.version;manifestSha256=$Bundle.manifestSha256;profile=$Identity.profile;
+        acceptanceRunId=$RunId;manuallyObservedAtUtc=[DateTime]::UtcNow.ToString('o')})
+}
+function Restore-HeliosStableProfile($Profile,[switch]$ValidateOnly) {
+    $names=@('UmdD3D12','UmdCommandLists','UmdFreeThreaded','UmdAsyncPresentStream','UmdPresentBatchFold','FeatureLevel11')
+    foreach($name in $names) {
+        $property=$Profile.PSObject.Properties[$name]
+        if ($null -eq $property -or ($null -ne $property.Value -and
+            (($property.Value -isnot [int] -and $property.Value -isnot [long]) -or $property.Value -lt 0 -or
+             $property.Value -gt $(if($name -eq 'FeatureLevel11'){2}else{1})))) {throw 'Invalid saved stable profile.'}
+    }
+    if ($ValidateOnly) {return}
+    if (-not (Test-Path -LiteralPath 'HKLM:\SOFTWARE\Helios')) {New-Item -Path 'HKLM:\SOFTWARE\Helios' | Out-Null}
+    foreach($name in $names) {
+        if ($null -eq $Profile.$name) {Remove-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Helios' -Name $name -ErrorAction SilentlyContinue}
+        else {New-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Helios' -Name $name -Value ([int]$Profile.$name) -PropertyType DWord -Force | Out-Null}
     }
 }
 function Enter-HeliosTransactionMaintenance {
@@ -65,13 +86,15 @@ function Invoke-HeliosTransaction([string]$Operation) {
         if (-not $ObservedStable) {throw 'Observe colors, window switching, resolution change and recovery before recording stable.'}
         $bundle=Save-HeliosTransactionBundle $BundlePath $ExpectedSha256
         if ($bundle.version -ne $identity.version -or $bundle.manifestSha256 -ine $identity.manifestSha256) {throw 'Stable bundle does not match the installed package.'}
-        Write-HeliosValidationJson 'last-good.json' $bundle
+        Save-HeliosStableRecord $bundle $identity $report.runId
         return @{status='stable-recorded';version=$bundle.version;runId=$report.runId;manualObservation=$true}
     }
     if ($Operation -eq 'Install') {
         $stable=Read-HeliosValidationJson (Join-Path $root 'last-good.json')
         $identity=Get-HeliosValidationIdentity
         if ($stable.version -ne $identity.version -or $stable.manifestSha256 -ine $identity.manifestSha256) {throw 'Current package must match the recorded stable baseline.'}
+        if (-not $stable.PSObject.Properties['profile'] -or
+            ($stable.profile | ConvertTo-Json -Compress) -ne ($identity.profile | ConvertTo-Json -Compress)) {throw 'Record a stable baseline with the current driver options before updating.'}
         $bundle=Save-HeliosTransactionBundle $BundlePath $ExpectedSha256
         Enter-HeliosTransactionMaintenance
         $state=[ordered]@{schema=1;id=[guid]::NewGuid().ToString('N');status='prepared';candidate=$bundle;previous=$stable;
@@ -108,6 +131,7 @@ function Invoke-HeliosTransaction([string]$Operation) {
         $state.status='restoring';Write-HeliosValidationJson 'transaction.json' $state
         try {
             Invoke-HeliosTransactionInstaller $state.previous
+            if ($state.previous.PSObject.Properties['profile']) {Restore-HeliosStableProfile $state.previous.profile}
             $state.candidate=$state.previous
             $state.installBoot=(Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime().ToString('o')
             $state.status='pending-reboot'
@@ -125,7 +149,9 @@ function Invoke-HeliosTransaction([string]$Operation) {
             Assert-HeliosAcceptance $report $identity
             if (-not $ObservedStable) {throw 'Explicit visual and recovery observation required.'}
             $state.status='accepted'
-            Write-HeliosValidationJson 'last-good.json' $state.candidate
+            Save-HeliosStableRecord $state.candidate $identity $report.runId
+            $state | Add-Member NoteProperty acceptedRunId $report.runId -Force
+            $state | Add-Member NoteProperty manuallyObservedAtUtc ([DateTime]::UtcNow.ToString('o')) -Force
             Set-HeliosTransactionHold $false
             Unregister-ScheduledTask -TaskName 'WinBoatHeliosValidation' -Confirm:$false -ErrorAction SilentlyContinue
         }

@@ -12,11 +12,15 @@ function Get-HeliosAcceptancePlan {
     )
 }
 function Invoke-HeliosAcceptance([string]$RunLabel) {
-    if ([Diagnostics.Process]::GetCurrentProcess().SessionId -eq 0) {throw 'Run in the logged-in Windows desktop, not the service session.'}
+    if (-not [Environment]::Is64BitProcess -or [Diagnostics.Process]::GetCurrentProcess().SessionId -eq 0) {throw 'Run native 64-bit PowerShell in the logged-in desktop, not the service session.'}
     $identity=Get-HeliosValidationIdentity
     $state=Read-HeliosValidationJson (Join-Path $env:ProgramData 'Helios\install-state.json')
     $start=[DateTime]::UtcNow
     $runId=[guid]::NewGuid().ToString('N');$rows=@()
+    $verify=Join-Path $env:ProgramData 'Helios\Verify-Helios.ps1'
+    $verification=Invoke-HeliosValidationProcess "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',('"'+$verify+'"'))
+    $rows += [ordered]@{name='Package integrity';coverage='Installed package verifier, API registrations and runtime hashes';status=$verification.status;
+        sha256=(Get-FileHash -LiteralPath $verify -Algorithm SHA256).Hash;exitCode=$verification.exitCode}
     $plan=@(Get-HeliosAcceptancePlan)
     $toolRoot=$null
     if ($ToolsPath) {
@@ -31,6 +35,7 @@ function Invoke-HeliosAcceptance([string]$RunLabel) {
         $path=Join-Path ([string]$state.installRoot) ('runtime\smoke\'+$test.exe)
         if ($test.Contains('external')) {$path=Join-Path $toolRoot $test.exe}
         $result=[ordered]@{name=$test.name;coverage=$test.coverage;status='missing';sha256=$null;exitCode=$null;signals=@();codes=@()}
+        if ($verification.status -ne 'passed') {$result.status='not-run';$rows+=$result;continue}
         if (Test-Path -LiteralPath $path -PathType Leaf) {
             $actual=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
             $expected=@($state.runtimeFiles | Where-Object {$_.path -ieq $path -and $_.sha256 -ieq $actual})
