@@ -255,13 +255,16 @@ mod ffi {
             len: usize,
             out_hr: *mut i32,
         ) -> usize;
-        unsafe fn create_hull_shader(self: &HeliosDxvkDevice, code: *const u8, len: usize)
-            -> usize;
-        unsafe fn create_domain_shader(
+        unsafe fn create_hull_shader(
             self: &HeliosDxvkDevice,
             code: *const u8,
             len: usize,
             out_hr: *mut i32,
+        ) -> usize;
+        unsafe fn create_domain_shader(
+            self: &HeliosDxvkDevice,
+            code: *const u8,
+            len: usize,
             out_hr: *mut i32,
         ) -> usize;
         unsafe fn create_compute_shader(

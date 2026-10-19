@@ -5,11 +5,28 @@ Only the COM device, bytecode wrapping and log I/O are fixtures. This does not
 load DXVK, Helios or a GPU; Windows builds check the native COM/CXX interfaces.
 """
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parents[1]
 source = (root / 'helios/upstream/umd/bridge/dxvk_bridge.cpp').read_text()
+# Check all CXX declarations too: the native helper test alone cannot detect a
+# missing/duplicated Rust-side HRESULT output parameter at the FFI boundary.
+rust = (root / 'helios/upstream/umd/src/bridge.rs').read_text()
+header = (root / 'helios/upstream/umd/bridge/dxvk_bridge.h').read_text()
+for kind in ('vertex', 'pixel', 'geometry', 'hull', 'domain', 'compute', 'sig', 'tess_sig'):
+    name = ('create_shader_sig' if kind == 'sig' else
+            'create_tess_shader_sig' if kind == 'tess_sig' else f'create_{kind}_shader')
+    declaration = re.search(r'unsafe fn ' + name + r'\((.*?)\) -> usize;', rust, re.S)
+    assert declaration, name
+    params = [p.strip() for p in declaration[1].split(',') if p.strip()]
+    assert len(params) == len(set(p.split(':')[0] for p in params)), name
+    assert params[-1] == 'out_hr: *mut i32', name
+    native = re.search(r'std::size_t ' + name + r'\((.*?)\) const;', header, re.S)
+    assert native and native[1].count(',') + 1 == len(params) - 1, name
+    assert native[1].strip().endswith('std::int32_t* out_hr'), name
+
 start = source.index('  template <typename Iface, typename Create>')
 end = source.index('{', start) + 1
 depth = 1

@@ -578,7 +578,7 @@
     "umd/build-support/typed_tables.rs": "66a96356829c65705432a00ff96d65112a55477dd1253a57e2a1ca8b9992e521",
     "umd/build.rs": "b28dde791e780b2c59ea08a4c86132a4abf9ce99107113ae79408e109fde87e5",
     "umd/src/adapter.rs": "a78412e54a87676cc673b39037bb36e4d06c65d17174122fc54f82f88cc0da41",
-    "umd/src/bridge.rs": "e792a68bcf48520b9b894606edf34173d33ad447dc369f0e3208bfd46f2679a2",
+    "umd/src/bridge.rs": "80c11b531f1fe9968234ccd2a5d08a0cb882386d0404ae14ec8284637e61fba9",
     "umd/src/caps.rs": "bbee18410a1a1b76ed27735ad1f85508b7534c7a7b5891134fe50b00ee1e60d5",
     "umd/src/ddi.rs": "9ab6d0167b76a725f31ae664598ab64fbe563795bfbd3ac0f8c3cd0c784c9897",
     "umd/src/device_funcs.rs": "5acb1102291a68261013fc1ed888b7c29ec5250bfeb75c909cbeb6246685a3fa",
@@ -725,7 +725,8 @@
       "adapter-selection-preserves-helios-branding",
       "require-matching-bound-diagnostic-driver",
       "context-correct-variant-failure-bounded-probe-teardown",
-      "real-native-probe-drain-and-timeout-tests"
+      "real-native-probe-drain-and-timeout-tests",
+      "shader-hresult-cxx-signature-validation"
     ],
     "addedFiles": [
       "kmd_logic/src/display_modes.rs",
