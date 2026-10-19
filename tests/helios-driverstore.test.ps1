@@ -65,6 +65,15 @@ try {
     $script:calls=@()
     Assert-Failure {Invoke-HeliosDriverStoreCleanup} 'known Helios'
     if($script:calls.Count){throw 'Unverified INF was removed'}
+    function Get-ScheduledTask {throw 'Scheduler unavailable'}
+    Assert-Failure {Pause-HeliosCleanupTasks} 'Scheduler unavailable'
+    $script:task=[pscustomobject]@{TaskName='HeliosGraphicsProvisioning';State='Running'}
+    function Get-ScheduledTask {return $script:task}
+    function Disable-ScheduledTask {$script:task.State='Disabled'}
+    Assert-Failure {Pause-HeliosCleanupTasks} 'is running'
+    $script:task.State='Ready'
+    Pause-HeliosCleanupTasks
+    if($script:task.State -ne 'Disabled'){throw 'Official installer was not paused'}
     Write-Host 'VGA-only cleanup, exact identity, export-first, foreign/boot-critical refusal, native failures and pending verification passed.'
 } finally {
     $env:ProgramData=$previousData;$env:windir=$previousWindows

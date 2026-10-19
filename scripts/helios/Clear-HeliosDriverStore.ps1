@@ -13,12 +13,19 @@ function Assert-HeliosAbsentWithVGA {
 function Set-HeliosCleanupHold {
     $key=[Microsoft.Win32.Registry]::LocalMachine.CreateSubKey('SOFTWARE\WinBoat\DisplayRecovery')
     try {$key.SetValue('HeliosDisabled',1,[Microsoft.Win32.RegistryValueKind]::DWord)} finally {$key.Dispose()}
+    Pause-HeliosCleanupTasks
+}
+function Pause-HeliosCleanupTasks {
+    # Query failure is not evidence that installation tasks are absent.
+    $tasks=@(Get-ScheduledTask -TaskPath '\' -ErrorAction Stop)
     foreach($name in @('WinBoatHeliosReboots','WinBoatHeliosAfterAtlas','HeliosGraphicsProvisioning')) {
-        $task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
-        if ($null -eq $task) {continue}
+        $matching=@($tasks | Where-Object {$_.TaskName -eq $name})
+        if (-not $matching.Count) {continue}
+        if ($matching.Count -ne 1) {throw "Ambiguous installer task $name."}
+        $task=$matching[0]
         if ($task.State.ToString() -eq 'Running') {throw "Installer task $name is running. No driver packages were removed."}
-        Disable-ScheduledTask -TaskName $name -ErrorAction Stop | Out-Null
-        if ((Get-ScheduledTask -TaskName $name -ErrorAction Stop).State.ToString() -ne 'Disabled') {throw "Cannot pause $name."}
+        Disable-ScheduledTask -TaskName $name -TaskPath '\' -ErrorAction Stop | Out-Null
+        if ((Get-ScheduledTask -TaskName $name -TaskPath '\' -ErrorAction Stop).State.ToString() -ne 'Disabled') {throw "Cannot pause $name."}
     }
 }
 function Get-VerifiedHeliosPackages {
