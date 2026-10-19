@@ -63,6 +63,7 @@ enum Btn {
     Install,
     Repair,
     Uninstall,
+    CleanDriverStore,
     Copy,
     Reboot,
 }
@@ -108,6 +109,7 @@ struct State {
     automatic: bool,
     worker: Option<Receiver<Event>>,
     running: bool,
+    last_operation: Option<Op>,
     failed: bool,
     progress: u8,
     progress_active: bool,
@@ -339,6 +341,7 @@ fn layout(state: &mut State, client_w: i32, client_h: i32) {
 
     let footer_y = ch - pad - footer_h + 4.0 * s;
     set_button(state, Btn::Copy, Rect { x: pad, y: footer_y, w: 140.0 * s, h: 32.0 * s });
+    set_button(state, Btn::CleanDriverStore, Rect { x: pad + 150.0 * s, y: footer_y, w: 180.0 * s, h: 32.0 * s });
     set_button(state, Btn::Reboot, Rect { x: cw - pad - 150.0 * s, y: footer_y, w: 150.0 * s, h: 32.0 * s });
 
     if state.edit != std::ptr::null_mut() {
@@ -402,6 +405,7 @@ fn refresh(state: &mut State) {
             Btn::Install => "Install".to_string(),
             Btn::Repair => "Repair".to_string(),
             Btn::Uninstall => "Uninstall".to_string(),
+            Btn::CleanDriverStore => "Clean DriverStore".to_string(),
             Btn::Copy => "Copy logs".to_string(),
             Btn::Reboot => "Reboot now".to_string(),
         };
@@ -409,6 +413,7 @@ fn refresh(state: &mut State) {
             Btn::Install => !state.installed && install && !busy,
             Btn::Repair => state.installed && install && !busy,
             Btn::Uninstall => state.installed && uninstall && !busy,
+            Btn::CleanDriverStore => !busy && !state.automatic && state.payload_dir.join("Clear-HeliosDriverStore.ps1").is_file(),
             Btn::Copy => true,
             Btn::Reboot => state.reboot_pending,
         };
@@ -642,6 +647,9 @@ fn start_operation(state: &mut State, op: Op) {
     if state.running {
         return;
     }
+    if op == Op::CleanDriverStore && state.automatic {
+        return;
+    }
     if let Err(error) = ensure_workspace(state) {
         state.status = format!("Could not prepare the payload: {error}");
         return;
@@ -651,6 +659,7 @@ fn start_operation(state: &mut State, op: Op) {
         return;
     }
     state.running = true;
+    state.last_operation = Some(op);
     state.failed = false;
     state.progress = 0;
     state.progress_active = true;
@@ -660,6 +669,7 @@ fn start_operation(state: &mut State, op: Op) {
         Op::Repair if state.updating => "Updating Helios\u{2026}".to_string(),
         Op::Repair => "Repairing the Helios installation\u{2026}".to_string(),
         Op::Uninstall => "Removing Helios\u{2026}".to_string(),
+        Op::CleanDriverStore => "Cleaning Helios driver packages; VGA rescue required\u{2026}".to_string(),
     };
     append_log(state, &format!("[setup] {}", state.status));
     let payload = crate::Payload {
@@ -714,7 +724,9 @@ fn drain(state: &mut State) {
         }
         refresh(state);
         if code == 0 {
-            state.status = "Done.".to_string();
+            state.status = if state.last_operation == Some(Op::CleanDriverStore) {
+                "DriverStore checked. Keep VGA rescue active; see the cleanup result below.".to_string()
+            } else { "Done.".to_string() };
             append_log(state, "[setup] completed successfully.");
         } else if code == 3010 {
             state.status = "A reboot is required to finish.".to_string();
@@ -760,7 +772,7 @@ fn prompt_reboot(hwnd: HWND) {
     let answer = unsafe {
         MessageBoxW(
             hwnd,
-            wide("Helios is installed, but Windows must restart to load the new display driver.\r\n\r\nRestart now?").as_ptr(),
+            wide("Windows must restart to finish the requested Helios operation.\r\n\r\nRestart now?").as_ptr(),
             wide("Helios vGPU Setup").as_ptr(),
             MB_ICONINFORMATION | MB_YESNO,
         )
@@ -855,11 +867,19 @@ unsafe extern "system" fn wndproc(hwnd: HWND, message: u32, wparam: WPARAM, lpar
                 Some(Btn::Install) => with_state(|s| start_operation(s, Op::Install)),
                 Some(Btn::Repair) => with_state(|s| start_operation(s, Op::Repair)),
                 Some(Btn::Uninstall) => with_state(|s| start_operation(s, Op::Uninstall)),
+                Some(Btn::CleanDriverStore) => {
+                    // No STATE borrow while the modal dialog pumps messages.
+                    if MessageBoxW(hwnd,
+                        wide("Remove all verified Helios graphics packages from the DriverStore?\r\n\r\nVGA-only rescue boot is required. Packages are backed up first. Runtime files remain; automatic setup stays paused. No driver is reinstalled automatically.").as_ptr(),
+                        wide("Clean Helios DriverStore").as_ptr(), MB_ICONWARNING | MB_YESNO | MB_DEFBUTTON2) == IDYES {
+                        with_state(|s| start_operation(s, Op::CleanDriverStore));
+                    }
+                }
                 Some(Btn::Copy) => with_state(|s| copy_logs(s)),
                 Some(Btn::Reboot) => {
                     let answer = MessageBoxW(
                         hwnd,
-                        wide("Reboot Windows now to finish installing Helios?").as_ptr(),
+                        wide("Reboot Windows now to finish the requested Helios operation?").as_ptr(),
                         wide("Helios vGPU Setup").as_ptr(),
                         MB_ICONQUESTION | MB_YESNO,
                     );
@@ -1014,6 +1034,7 @@ pub fn run(exe: &Path, automatic: bool) -> i32 {
                 automatic,
                 worker: None,
                 running: false,
+                last_operation: None,
                 failed: false,
                 progress: 0,
                 progress_active: false,
@@ -1024,6 +1045,7 @@ pub fn run(exe: &Path, automatic: bool) -> i32 {
                     Button { id: Btn::Repair, label: "Repair".into(), rect: Rect::default(), primary: true, enabled: false, visible: true },
                     Button { id: Btn::Uninstall, label: "Uninstall".into(), rect: Rect::default(), primary: false, enabled: false, visible: true },
                     Button { id: Btn::Copy, label: "Copy logs".into(), rect: Rect::default(), primary: false, enabled: true, visible: true },
+                    Button { id: Btn::CleanDriverStore, label: "Clean DriverStore".into(), rect: Rect::default(), primary: false, enabled: false, visible: true },
                     Button { id: Btn::Reboot, label: "Reboot now".into(), rect: Rect::default(), primary: false, enabled: false, visible: false },
                 ],
                 card: Rect::default(),

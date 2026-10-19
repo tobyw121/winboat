@@ -33,6 +33,8 @@ if ($env:RUSTFLAGS) {
 
 Push-Location $crateRoot
 try {
+    & $cargo test --locked --target-dir $targetDir
+    if ($LASTEXITCODE -ne 0) { throw 'Installer maintenance command tests failed.' }
     $arguments = @("build", "--locked", "--target-dir", $targetDir)
     if ($Configuration -eq "Release") { $arguments += "--release" }
     & $cargo @arguments

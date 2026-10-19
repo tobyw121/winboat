@@ -1,6 +1,8 @@
 param([string]$RepoRoot=(Split-Path -Parent $PSScriptRoot))
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
+$embedded=Join-Path $RepoRoot 'helios/upstream/packaging/windows/Clear-HeliosDriverStore.ps1'
+if ((Get-FileHash $embedded).Hash -ne (Get-FileHash (Join-Path $RepoRoot 'scripts/helios/Clear-HeliosDriverStore.ps1')).Hash) {throw 'Embedded and standalone cleanup implementations diverged'}
 . (Join-Path $RepoRoot 'scripts/helios/Clear-HeliosDriverStore.ps1') -LibraryOnly
 $previousData=$env:ProgramData;$previousWindows=$env:windir
 $root=Join-Path ([IO.Path]::GetTempPath()) ('helios-store-'+[guid]::NewGuid().ToString('N'))

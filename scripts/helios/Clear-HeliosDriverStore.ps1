@@ -83,5 +83,7 @@ $mutex=New-Object Threading.Mutex($false,'Global\WinBoatHeliosProvisioning');$ow
 try {
     try {$owned=$mutex.WaitOne(0)} catch [Threading.AbandonedMutexException] {$owned=$true}
     if (-not $owned) {throw 'Helios provisioning is active; no packages removed.'}
-    Invoke-HeliosDriverStoreCleanup | ConvertTo-Json -Depth 4
+    $result=Invoke-HeliosDriverStoreCleanup
+    $result | ConvertTo-Json -Depth 4
+    if ($result.status -eq 'restart-required') {exit 3010}
 } finally {if($owned){$mutex.ReleaseMutex()};$mutex.Dispose()}

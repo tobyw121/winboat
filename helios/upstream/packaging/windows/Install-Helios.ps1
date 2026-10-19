@@ -498,6 +498,7 @@ if ($previousState -and [string]$previousState.installRoot -and
 Copy-Item -LiteralPath (Join-Path $bundleRoot "Helios-PackageCommon.ps1") -Destination $stateRoot -Force
 Copy-Item -LiteralPath (Join-Path $bundleRoot "Uninstall-Helios.ps1") -Destination $stateRoot -Force
 Copy-Item -LiteralPath (Join-Path $bundleRoot "Verify-Helios.ps1") -Destination $stateRoot -Force
+Copy-Item -LiteralPath (Join-Path $bundleRoot "Clear-HeliosDriverStore.ps1") -Destination $stateRoot -Force
 # Keep the manifest beside the scripts so a stored uninstaller can read the
 # version. The installer exe is NOT copied: it is self-contained and embedding it
 # in its own payload would duplicate the whole bundle.

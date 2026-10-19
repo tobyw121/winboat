@@ -1,5 +1,17 @@
 # ROADMAP — Stage: Correctness and D3D12
 
+## WinBoat downstream: explicit DriverStore recovery (22.22.295.0)
+
+The next installer embeds the same verified cleanup script as the standalone
+WinBoat recovery tool. A separate Clean DriverStore button and explicit
+`--clean-driver-store` CLI operation run it; automatic installation and normal
+Repair never invoke destructive cleanup. Physical VGA-only rescue, package
+identity checks, export-before-delete, persistent setup hold and post-removal
+verification remain mandatory. Runtime files and loader registrations remain
+separate from driver-store cleanup. Cleanup does not reinstall or restart the VM.
+The bundled default remains the user-confirmed 22.22.291.0 until hardware
+acceptance of a newer package; 22.22.294.0 can be tested separately.
+
 ## WinBoat downstream: branded Vulkan adapter selection (22.22.294.0)
 
 The D3D11 bridge now obtains its DXVK device-name filter from the same branding

@@ -14,6 +14,7 @@
 //!   HeliosSetup.exe                              GUI
 //!   HeliosSetup.exe --silent [--automatic] [--log PATH]
 //!   HeliosSetup.exe --silent --uninstall [--log PATH]
+//!   HeliosSetup.exe --clean-driver-store [--log PATH]  explicit VGA-rescue maintenance
 //!   HeliosSetup.exe --bundle <payloadDir> <out.exe>   CI packing step only
 
 #![windows_subsystem = "windows"]
@@ -37,6 +38,7 @@ pub enum Op {
     Install,
     Repair,
     Uninstall,
+    CleanDriverStore,
 }
 
 /// Events from the worker thread to the GUI, polled on a timer so no message
@@ -51,6 +53,7 @@ pub struct Options {
     pub silent: bool,
     pub uninstall: bool,
     pub automatic: bool,
+    pub clean_driver_store: bool,
     pub log: Option<PathBuf>,
 }
 
@@ -128,6 +131,9 @@ fn build_command(payload: &Payload, op: Op, automatic: bool) -> Command {
         }
         Op::Uninstall => {
             command.arg("-File").arg(uninstall);
+        }
+        Op::CleanDriverStore => {
+            command.arg("-File").arg(payload.dir.join("Clear-HeliosDriverStore.ps1"));
         }
     }
     command
@@ -214,6 +220,10 @@ fn write_summary(code: i32, log: &Path) {
 }
 
 fn run_silent(exe: &Path, options: &Options) -> i32 {
+    if options.clean_driver_store && (options.automatic || options.uninstall) {
+        gui::console_line("DriverStore cleanup cannot be combined with automatic setup or uninstall.");
+        return 2;
+    }
     let payload = match prepare_payload(exe) {
         Ok(payload) => payload,
         Err(error) => {
@@ -221,7 +231,7 @@ fn run_silent(exe: &Path, options: &Options) -> i32 {
             return 1;
         }
     };
-    if !options.uninstall && !payload.has_install {
+    if !options.uninstall && !options.clean_driver_store && !payload.has_install {
         let log = options
             .log
             .clone()
@@ -234,7 +244,9 @@ fn run_silent(exe: &Path, options: &Options) -> i32 {
         write_summary(2, &log);
         return 2;
     }
-    let op = if options.uninstall {
+    let op = if options.clean_driver_store {
+        Op::CleanDriverStore
+    } else if options.uninstall {
         Op::Uninstall
     } else if options.automatic {
         // Let the payload's -Automatic mode choose between a fresh install and
@@ -280,7 +292,7 @@ fn run_silent(exe: &Path, options: &Options) -> i32 {
 
 fn parse_args() -> (Options, Option<(PathBuf, PathBuf)>) {
     let argv: Vec<String> = std::env::args().collect();
-    let mut options = Options { silent: false, uninstall: false, automatic: false, log: None };
+    let mut options = Options { silent: false, uninstall: false, automatic: false, clean_driver_store: false, log: None };
     let mut bundle = None;
     let mut i = 1;
     while i < argv.len() {
@@ -288,6 +300,7 @@ fn parse_args() -> (Options, Option<(PathBuf, PathBuf)>) {
             "--silent" | "-s" => options.silent = true,
             "--uninstall" | "/uninstall" => options.uninstall = true,
             "--automatic" | "/automatic" => options.automatic = true,
+            "--clean-driver-store" => { options.clean_driver_store = true; options.silent = true; }
             "--log" | "/log" if i + 1 < argv.len() => {
                 options.log = Some(PathBuf::from(&argv[i + 1]));
                 i += 1;
@@ -307,6 +320,29 @@ fn parse_args() -> (Options, Option<(PathBuf, PathBuf)>) {
         i += 1;
     }
     (options, bundle)
+}
+
+#[cfg(test)]
+mod maintenance_tests {
+    use super::*;
+
+    #[test]
+    fn cleanup_routes_only_to_the_fixed_payload() {
+        let payload = Payload { dir: PathBuf::from(r"C:\fixture"), temporary: false, has_install: false };
+        let command = build_command(&payload, Op::CleanDriverStore, false);
+        let args: Vec<_> = command.get_args().map(|arg| arg.to_string_lossy().into_owned()).collect();
+        assert!(args.last().unwrap().ends_with("Clear-HeliosDriverStore.ps1"));
+        assert!(args.iter().any(|arg| arg == "-File"));
+        assert!(!args.iter().any(|arg| arg.contains("Install-Helios.ps1") || arg == "-Automatic"));
+    }
+
+    #[test]
+    fn cleanup_rejects_automatic_and_uninstall_before_preparing_or_running_payload() {
+        for (automatic, uninstall) in [(true, false), (false, true)] {
+            let options = Options { silent: true, clean_driver_store: true, automatic, uninstall, log: None };
+            assert_eq!(run_silent(Path::new("nonexistent-installer.exe"), &options), 2);
+        }
+    }
 }
 
 fn main() {
