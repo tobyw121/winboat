@@ -316,7 +316,7 @@
     "packaging/windows/Helios-PackageCommon.ps1": "b76da6667fc1117cbe562a8004c641509b303d2eb3da153208700124c248201f",
     "packaging/windows/Install-Helios.ps1": "f8eadd2da8b405261073c1c02541d3fa4823c73c3cc6d56272528131f6b9410a",
     "packaging/windows/README.md": "6fb7805c2689bb577be675d9262c0b90fc0b71829d5ef656dc0513931cf6785f",
-    "packaging/windows/Test-HeliosDeviceProfiles.ps1": "8d5fa2f8b792536083e57a7f4b87c98b5f99941ad60d0bf852779c43d94c898f",
+    "packaging/windows/Test-HeliosDeviceProfiles.ps1": "ee14596170e95df64b08f7c8ebc790b12e2a461b2a93ff949730607e44d97038",
     "packaging/windows/Test-HeliosRegistrySnapshots.ps1": "1418630d6533ce95ced0ac59436897202d6f9ad2cdb0e2b0d1586c67a831d256",
     "packaging/windows/Uninstall-Helios.ps1": "e45183190e0aa9850b8fec818aca9c39dcfdd40c0a3e041ea87b0bb7c4ef21c9",
     "packaging/windows/Verify-Helios.ps1": "10ee65983698d5fda02301979e4e2da2e831f8eeda9fd69cae1017c2a8c1998a",
@@ -696,7 +696,8 @@
       "umd/src/forward/resource.rs": "a09ceecd2eafadbf3f9be75a91746d42594fc3cf29f244a6a28422921a23637e",
       "umd/src/lib.rs": "a22163dee04b974c0270075940d9e1e7d6bf1936c7337b327510cb3b1f71d2a4",
       "umd/bridge/dxvk_bridge.h": "7db70045e9a55f45c1d74edf182358b205ffe060e7ce363264e5e945b8625627",
-      "umd/src/forward/layout.rs": "a316004e44d88e38dde8e53e8b3359ab25132d135173659679f5c256a6f04097"
+      "umd/src/forward/layout.rs": "a316004e44d88e38dde8e53e8b3359ab25132d135173659679f5c256a6f04097",
+      "packaging/windows/Test-HeliosDeviceProfiles.ps1": "8d5fa2f8b792536083e57a7f4b87c98b5f99941ad60d0bf852779c43d94c898f"
     },
     "features": [
       "d3d11-uav-clear-view",
@@ -713,7 +714,8 @@
       "Embed explicit VGA-only DriverStore recovery in installer GUI and CLI (22.22.295.0), never automatic repair.",
       "bounded-per-device-capability-journal",
       "preserve-shader-backend-hresults",
-      "outer-runtime-probe-interleaved-profiles"
+      "outer-runtime-probe-interleaved-profiles",
+      "guest-api-structured-device-contract-evidence"
     ],
     "addedFiles": [
       "kmd_logic/src/display_modes.rs",

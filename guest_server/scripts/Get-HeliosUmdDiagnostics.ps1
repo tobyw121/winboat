@@ -1,4 +1,21 @@
 # Read-only, bounded summaries. Never return arbitrary log lines or module paths.
+function Read-HeliosGpuJournal([string]$Text) {
+    $prefix='(?m)^\[pid=\d+ tid=\d+\] GPU-DIAG '
+    $heads=[regex]::Matches($Text,$prefix+'device=(\d{1,20}) birth=(\d{1,24}) elapsed_ms=(\d{1,16}) queries=(\d{1,16}) mismatches=(\d{1,16})\r?$')
+    if (-not $heads.Count) {return $null}
+    $head=$heads[$heads.Count-1]
+    $id=$head.Groups[1].Value; $birth=$head.Groups[2].Value
+    $tail=$Text.Substring($head.Index)
+    $events=@([regex]::Matches($tail,$prefix+"event device=$id birth=$birth seq=(\d{1,16}) kind=(format|msaa|runtime-error|resource|view|shader) a=(\d{1,20}) b=(\d{1,20}) c=(\d{1,20}) d=(\d{1,20}) e=(\d{1,20}) f=(\d{1,20})\r?$") |
+        Select-Object -Last 16 | ForEach-Object {
+            [ordered]@{seq=$_.Groups[1].Value;kind=$_.Groups[2].Value;values=@($_.Groups[3..8] | ForEach-Object {$_.Value})}
+        })
+    $first=[regex]::Match($tail,$prefix+"mismatch device=$id birth=$birth fmt=(\d{1,10}) samples=(\d{1,3}) flags=(\d{1,10}) levels=(\d{1,10}) hr=(0x[0-9a-fA-F]{8})\r?$")
+    $mismatch=$null
+    if ($first.Success) {$mismatch=[ordered]@{format=$first.Groups[1].Value;samples=$first.Groups[2].Value;flags=$first.Groups[3].Value;levels=$first.Groups[4].Value;hr=$first.Groups[5].Value}}
+    return [ordered]@{device=$id;birth=$birth;elapsedMs=$head.Groups[3].Value;queries=$head.Groups[4].Value;
+        mismatches=$head.Groups[5].Value;firstMismatch=$mismatch;events=$events}
+}
 function Read-HeliosUmdSummary([string]$Path) {
     $stream=[IO.File]::Open($Path,'Open','Read','ReadWrite')
     try {
@@ -20,6 +37,8 @@ function Read-HeliosUmdSummary([string]$Path) {
             'adapter-open'='(?m)^\[pid=\d+ tid=\d+\] open_adapter_common interface='
             'device-ready'='(?m)^\[pid=\d+ tid=\d+\]   CreateDevice -> S_OK \(DXVK device \+ D3D11 funcs table installed\)\r?$'
             'device-create-failed'='(?m)^\[pid=\d+ tid=\d+\]   CreateDevice: DXVK device creation FAILED -> E_FAIL\r?$'
+            'device-destroyed'='(?m)^\[pid=\d+ tid=\d+\] DDI: DestroyDevice\r?$'
+            'no-present-observed'='(?m)^\[pid=\d+ tid=\d+\] DDI PresentBoundary: entry present=0 present1_single=0 present1_multi=0 mpo=0 render attempt/success/failure/missing=0/0/0/0 present attempt/success/failure/missing=0/0/0/0 mpo attempt/success/failure/missing=0/0/0/0 early_refusal=0\r?$'
             'producer-init-failed'='(?m)^\[dxvk-bridge\] producer: stream initialization FAILED \('
             'producer-submit-failed'='(?m)^\[dxvk-bridge\] present_frame_gate: command stream/submission failed\r?$'
         }
@@ -31,7 +50,8 @@ function Read-HeliosUmdSummary([string]$Path) {
         # or application data. Return only fixed API symbols and numeric codes.
         $codes=@([regex]::Matches($text,'\b(?:VK_ERROR_[A-Z0-9_]{1,64}|(?:hr|HRESULT)=0x[0-9a-fA-F]{8})\b') |
             ForEach-Object {$_.Value} | Sort-Object -Unique | Select-Object -First 16)
-        return [ordered]@{tailBytes=$count;tailTruncated=($start -gt 0);moduleBoundaryFound=$boundary;signals=$signals;codes=$codes}
+        return [ordered]@{tailBytes=$count;tailTruncated=($start -gt 0);moduleBoundaryFound=$boundary;signals=$signals;codes=$codes;
+            deviceReadyMeaning='UMD callback only; outer runtime acceptance unknown';journal=(Read-HeliosGpuJournal $text)}
     } finally {$stream.Dispose()}
 }
 function Get-HeliosUmdDiagnostics {

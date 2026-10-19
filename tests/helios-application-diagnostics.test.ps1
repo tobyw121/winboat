@@ -18,6 +18,14 @@ try {
     $summary=Read-HeliosUmdSummary $temporary
     if (-not $summary.tailTruncated -or $summary.moduleBoundaryFound -or $summary.tailBytes -gt 65536 -or
         $summary.signals[0].kind -ne 'device-create-failed') {throw 'UMD tail bound/unknown generation failed'}
+    $journal=$prefix+"GPU-DIAG device=3 birth=123456 elapsed_ms=8 queries=300 mismatches=1`n"+
+        $prefix+"GPU-DIAG mismatch device=3 birth=123456 fmt=28 samples=4 flags=0 levels=0 hr=0x00000000`n"
+    foreach ($i in 1..30) {$journal+=$prefix+"GPU-DIAG event device=3 birth=123456 seq=$i kind=msaa a=28 b=4 c=0 d=0 e=0 f=1`n"}
+    $journal+=$prefix+"GPU-DIAG event device=99 birth=987 seq=1 kind=shader a=0 b=0 c=0 d=0 e=0 f=0`n"
+    $journal+=$prefix+"GPU-DIAG event device=3 birth=123456 seq=31 kind=secret a=0 b=0 c=0 d=0 e=0 f=0`n"
+    $parsed=Read-HeliosGpuJournal $journal
+    if ($parsed.events.Count -ne 16 -or $parsed.events[0].seq -ne '15' -or
+        $parsed.firstMismatch.format -ne '28' -or ($parsed | ConvertTo-Json -Depth 8) -match 'secret|987') {throw 'Journal generation/field bounds failed'}
     [IO.File]::WriteAllText($temporary, ('x' * 16000) + "`npid=12 VkPhysicalDeviceVulkan12Features.timelineSemaphore not supported`npid=13 PASSWORD=secret not supported`n")
     $failures = @(Read-HeliosFeatureFailures $temporary)
     if ($failures.Count -ne 1 -or $failures[0].processId -ne 12 -or $failures[0].feature -ne 'VkPhysicalDeviceVulkan12Features.timelineSemaphore') { throw 'Bounded feature parsing failed' }
@@ -60,6 +68,19 @@ try {
         if ($report.errors.Count -or $report.apiRegistration.Count -ne 6 -or $report.rejectedFeatures.Count -ne 1 -or $report.loadedApplications[0].modules.Count -ne 1 -or
             $report.umdLogs.Count -ne 1 -or $report.umdLogs[0].signals[0].kind -ne 'device-create-failed') { throw 'Combined registry/profile/module/UMD collection failed' }
         if (($report | ConvertTo-Json -Depth 8) -match 'private|unrelated') { throw 'Non-graphics module data leaked' }
+        $probeFile=Join-Path $root 'Helios/device-probe-result.json'
+        @{schema=1;probeVersion='22.22.296.0';probeSha256=('a'*64);registryRestored=$true;
+          startedAtUtc=[DateTime]::UtcNow.ToString('o');finishedAtUtc=[DateTime]::UtcNow.ToString('o');private='secret';
+          arms=@(@{mode=1;timedOut=$false;exitCode=1;results=@(@{schema=1;warp=$false;requested=45056;achieved=0;flags=0;hr=2289696772;private='secret'})})} |
+            ConvertTo-Json -Depth 8 | Set-Content $probeFile
+        $before=$env:ProgramData; $env:ProgramData=$root
+        try {$probe=Get-HeliosDeviceProbeDiagnostics} finally {$env:ProgramData=$before}
+        if ($probe.arms[0].results[0].hr -ne 2289696772 -or ($probe | ConvertTo-Json -Depth 8) -match 'secret|private') {throw 'Outer HRESULT/probe allowlist failed'}
+        [IO.File]::WriteAllText($probeFile, 'x'*33000)
+        $before=$env:ProgramData; $env:ProgramData=$root
+        try {$probe=Get-HeliosDeviceProbeDiagnostics} finally {$env:ProgramData=$before}
+        if ($probe.error -notmatch 'invalid') {throw 'Oversized probe result accepted'}
+        Remove-Item $probeFile
         $registry | Add-Member ScriptMethod GetValue { param($Name,$Default) return (@(([char]0x754c).ToString() * 2000) * 4) } -Force
         $before=$env:ProgramData; $env:ProgramData=$root
         try { $limited=Get-HeliosApplicationDiagnostics } finally { $env:ProgramData=$before }

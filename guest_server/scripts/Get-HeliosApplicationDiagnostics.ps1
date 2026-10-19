@@ -3,6 +3,7 @@ param([switch]$LibraryOnly)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Get-HeliosUmdDiagnostics.ps1')
+. (Join-Path $PSScriptRoot 'Get-HeliosDeviceProbeDiagnostics.ps1')
 function Read-HeliosFeatureFailures([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return @() }
     $stream = [IO.File]::Open($Path, 'Open', 'Read', 'ReadWrite')
@@ -65,7 +66,9 @@ function Get-HeliosApplicationDiagnostics {
     }
     try {
         foreach ($appProcess in @(Get-Process -Name 'furmark','icarus*','client','dwm' -ErrorAction SilentlyContinue | Select-Object -First 4)) {
-            $modules = @($appProcess.Modules | Where-Object { $_.ModuleName -match '^(helios_umd.*|vulkan_virtio|vulkan-1|libgallium_wgl|d3d9|d3d11|d3d12|dxgi)\.dll$' } | Select-Object -First 6 | ForEach-Object {
+            $modules = @($appProcess.Modules | Where-Object { $_.ModuleName -match '^(helios_umd.*|vulkan_virtio|vulkan-1|libgallium_wgl|d3d9|d3d11|d3d12|dxgi)\.dll$' } |
+                Sort-Object @{Expression={if ($_.ModuleName -like 'helios_umd*') {0} elseif ($_.ModuleName -eq 'vulkan_virtio.dll') {1} else {2}}},ModuleName |
+                Select-Object -First 10 | ForEach-Object {
                 $path = [string]$_.FileName; $version = [string]$_.FileVersionInfo.FileVersion
                 [ordered]@{ name=[string]$_.ModuleName; path=$path.Substring(0,[Math]::Min(384,$path.Length)); version=$version.Substring(0,[Math]::Min(64,$version.Length)) }
             })
@@ -74,13 +77,19 @@ function Get-HeliosApplicationDiagnostics {
     } catch { $errors += 'Loaded application modules unavailable' }
     $umd=@()
     try {$umd=@(Get-HeliosUmdDiagnostics)} catch {$errors+='Helios UMD log summaries unavailable'}
+    $probe=Get-HeliosDeviceProbeDiagnostics
+    $recent=@()
+    if ($null -ne $probe -and $probe.Contains('startedAtUtc')) {
+        $recent=@($crashes | Where-Object {[DateTimeOffset]::Parse($_.timeUtc) -ge [DateTimeOffset]::Parse($probe.startedAtUtc)})
+    }
     $report = [ordered]@{ apiRegistration=$registration; rejectedFeatures=$features; crashes=$crashes; loadedApplications=$loaded; umdLogs=$umd;
+        deviceProbe=$probe;crashesSinceProbe=$recent;collectedAtUtc=[DateTime]::UtcNow.ToString('o');
         umdCorrelation='Recent PID files; may precede the current process. Signals and codes only; no signal is not proof of success.';
         featureCorrelation='PID only; entries may precede the current process'; errors=$errors }
     # Keep this extension below the existing guest API's overall 64 KiB limit.
     # Prefer recent feature/crash details over older registry/module records.
     $limited = $false
-    foreach ($section in @('loadedApplications','apiRegistration','crashes','rejectedFeatures','umdLogs')) {
+    foreach ($section in @('loadedApplications','apiRegistration','crashes','rejectedFeatures','umdLogs','crashesSinceProbe')) {
         while ([Text.Encoding]::UTF8.GetByteCount(($report | ConvertTo-Json -Depth 8 -Compress)) -gt 24000 -and @($report[$section]).Count) {
             $limited = $true
             $report[$section] = @($report[$section] | Select-Object -SkipLast 1)

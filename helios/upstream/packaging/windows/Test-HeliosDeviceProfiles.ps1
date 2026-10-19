@@ -78,7 +78,8 @@ try {
             [ordered]@{mode=$mode;timedOut=$timeout;exitCode=$process.ExitCode;results=$rows}
         } finally {$process.Dispose()}
     })
-    $report=[ordered]@{schema=1;startedAtUtc=$started;finishedAtUtc=[DateTime]::UtcNow.ToString('o');registryRestored=$true;arms=$arms}
+    $report=[ordered]@{schema=1;probeVersion=[string]$manifest.version;probeSha256=(Get-HeliosSha256 $probe);
+        startedAtUtc=$started;finishedAtUtc=[DateTime]::UtcNow.ToString('o');registryRestored=$true;arms=$arms}
     $path=Join-Path $env:ProgramData 'Helios/device-probe-result.json'
     $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $path -Encoding UTF8
     $report | ConvertTo-Json -Depth 8
