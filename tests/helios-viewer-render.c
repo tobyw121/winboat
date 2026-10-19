@@ -61,14 +61,6 @@ int main(void) {
  g_assert_true(frame_pacer_consume(&pacer,10000001,5,false));
  g_assert_true(frame_pacer_consume(&pacer,10000002,0,true));
  g_assert_true(frame_pacer_consume(&pacer,1,5,true)); /* Reset clock. */
- Viewer paced_root={.window=window,.area=area,.background_fps=5};
- Viewer paced_console={.parent=&paced_root,.cache_valid=TRUE};paced_root.active=&paced_console;
- gtk_widget_set_visible(window,FALSE);
- g_assert_true(consume_update(&paced_console));
- g_assert_false(consume_update(&paced_console));g_assert_true(paced_console.background_paused);
- gtk_widget_set_visible(window,TRUE);
- while(g_main_context_iteration(NULL,FALSE)) {}
- g_assert_true(consume_update(&paced_console)); /* Foreground ignores the cap. */
  GVariant *caps=property(NULL,NULL,NULL,NULL,NULL,NULL,&v);
  g_assert_cmpuint(g_variant_n_children(caps),==,1);g_variant_ref_sink(caps);g_variant_unref(caps);
  v.prefer_copy=TRUE;caps=property(NULL,NULL,NULL,NULL,NULL,NULL,&v);
@@ -226,6 +218,14 @@ int main(void) {
  gtk_drop_down_set_selected(GTK_DROP_DOWN(selector),0);g_assert_true(root.active==&basic);
  g_object_unref(selector);g_object_unref(root.waiting);g_ptr_array_free(root.consoles,TRUE);
  puts("Header adapter selector: Auto/VGA/Helios, manual selection retention, unavailable-adapter waiting, recovery, explicit unknown-health override and automatic bootstrap safety passed.");
+ Viewer paced_root={.window=window,.area=area,.background_fps=5};
+ Viewer paced_console={.parent=&paced_root,.cache_valid=TRUE};paced_root.active=&paced_console;
+ gtk_widget_set_visible(window,FALSE);
+ g_assert_true(consume_update(&paced_console));
+ g_assert_false(consume_update(&paced_console));g_assert_true(paced_console.background_paused);
+ gtk_widget_set_visible(window,TRUE);
+ while(g_main_context_iteration(NULL,FALSE)) {}
+ g_assert_true(consume_update(&paced_console)); /* Foreground ignores the cap. */
  gtk_window_destroy(GTK_WINDOW(window));
  puts("Selected GL API, both DMA orientations/crops and software frame corners passed without manual GDK_DEBUG.");
  return 0;
