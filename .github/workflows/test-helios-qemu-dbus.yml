@@ -99,7 +99,7 @@ jobs:
         run: |
           docker run --rm --entrypoint cat winboat-helios-test:drm-node /opt/helios/host-patches.sha256 > /tmp/compiled-patches.sha256
           cmp helios/host/patches/SHA256SUMS /tmp/compiled-patches.sha256
-          test "$(docker image inspect --format '{{index .Config.Labels "org.winboat.helios.runtime"}}' winboat-helios-test:drm-node)" = glvnd-v6
+          test "$(docker image inspect --format '{{index .Config.Labels "org.winboat.helios.runtime"}}' winboat-helios-test:drm-node)" = glvnd-v7
   capture:
     runs-on: ubuntu-24.04
     timeout-minutes: 5

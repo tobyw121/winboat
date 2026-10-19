@@ -94,8 +94,10 @@ def inspection(args):
 
 
 def cache_environment(env, storage, fingerprint):
+    if not Path(storage).is_absolute():
+        raise ValueError('Graphics cache storage must be an absolute path')
     cache = Path(storage)/'.winboat-cache'/'graphics'/hashlib.sha256(fingerprint).hexdigest()[:24]
-    for path in (cache.parent.parent,cache.parent,cache):
+    for path in (cache.parent.parent,cache.parent,cache,cache/'mesa',cache/'nvidia'):
         if path.is_symlink():
             raise ValueError('Graphics cache path must not be a symlink')
         path.mkdir(mode=0o700,parents=True,exist_ok=True)
@@ -122,7 +124,7 @@ def main():
                     fingerprint.extend(path.read_bytes()[:65536])
             if not fingerprint:
                 raise ValueError('GPU/runtime identity unavailable for persistent cache')
-            env = cache_environment(env,env.get('STORAGE','/storage'),fingerprint)
+            env = cache_environment(env,env.get('STORAGE') or '/storage',fingerprint)
     os.execve(sys.argv[1],[sys.argv[1],*args],env)
 
 

@@ -44,8 +44,18 @@ class PerformanceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             a=perf.cache_environment({},root,b'driver-a'); b=perf.cache_environment({},root,b'driver-b')
             self.assertNotEqual(a['MESA_SHADER_CACHE_DIR'],b['MESA_SHADER_CACHE_DIR'])
+            for key in ('MESA_SHADER_CACHE_DIR','__GL_SHADER_DISK_CACHE_PATH'):
+                leaf=Path(a[key])
+                self.assertTrue(leaf.is_dir())
+                self.assertEqual(leaf.stat().st_mode & 0o777,0o700)
+                leaf.rmdir();leaf.symlink_to(root,target_is_directory=True)
+                with self.assertRaises(ValueError): perf.cache_environment({},root,b'driver-a')
+                leaf.unlink();leaf.mkdir(mode=0o700)
+            with self.assertRaises(ValueError): perf.cache_environment({},'relative',b'driver-a')
             parent=Path(root)/'.winboat-cache/graphics'
-            for path in parent.iterdir(): path.rmdir()
+            for path in parent.iterdir():
+                for leaf in path.iterdir(): leaf.rmdir()
+                path.rmdir()
             parent.rmdir();parent.symlink_to(root,target_is_directory=True)
             with self.assertRaises(ValueError): perf.cache_environment({},root,b'driver-a')
 
