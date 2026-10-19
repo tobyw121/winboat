@@ -106,6 +106,9 @@ func (c *topologyController) reconcile(_ time.Time, enabled bool, pnp displayAda
 		}
 		return finish("extended")
 	}
+	if !d.Basic.Primary {
+		return finish("primary-layout-held")
+	}
 	if c.attempted {
 		return finish("extension-held")
 	}

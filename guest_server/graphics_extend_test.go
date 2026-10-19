@@ -2,6 +2,7 @@ package main
 
 import (
 	"testing"
+	"time"
 	"unsafe"
 )
 
@@ -24,5 +25,17 @@ func TestHeliosExtensionPreservesVGAAndModeABI(t *testing.T) {
 	basic.X, basic.Width = 2147483647, 1
 	if _, err := extendedHeliosMode(helios, basic); err == nil {
 		t.Fatal("position overflow accepted")
+	}
+}
+
+func TestPrimaryHeliosCloneIsNotMovedAutomatically(t *testing.T) {
+	c := topologyController{}
+	d := topologyFixture("clone")
+	d.Basic.Primary = false
+	d.Helios.Primary = true
+	pnp := displayAdapters{Helios: displayAdapter{State: "running"}, Basic: displayAdapter{State: "running"}}
+	_, s := c.reconcile(time.Now(), true, pnp, d, nil, false, func(string) (desktopSnapshot, error) { t.Fatal("primary layout changed"); return d, nil })
+	if s.State != "primary-layout-held" {
+		t.Fatal(s)
 	}
 }

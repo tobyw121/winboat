@@ -80,6 +80,9 @@ Geräteprüfung. Der separate `--warp`-Schalter dient ausschließlich CI-Kontrol
 
 ## Über die Guest API einsammeln
 
+Die zusätzlichen API-Werkzeuge, Verlaufsaufzeichnung und die neue Vorgabe
+„Erweitern“ sind unter [Guest-Grafikdiagnose](helios-guest-diagnostics.md) beschrieben.
+
 Den aktuellen Gastdienst einmal vom Linux-Host aktualisieren:
 
 ```bash

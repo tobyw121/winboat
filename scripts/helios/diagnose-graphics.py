@@ -7,6 +7,7 @@ import os
 import pathlib
 import re
 import subprocess
+import time
 import urllib.error
 import urllib.request
 
@@ -76,7 +77,32 @@ def collect_host(container):
     return result
 
 
-def collect(container, opener=None):
+def read_endpoint(opener, base, endpoint):
+    try:
+        with opener.open(base + '/' + endpoint, timeout=20) as response:
+            raw = response.read(131073)
+            if len(raw) > 131072:
+                raise ValueError('Response exceeds 128 KiB')
+            data = json.loads(raw)
+            if not isinstance(data, dict):
+                raise ValueError('Expected a JSON object')
+            return data
+    except urllib.error.HTTPError as error:
+        detail = {'error': str(error), 'httpStatus': error.code}
+        try:
+            raw = error.read(131073)
+            if len(raw) <= 131072:
+                detail['response'] = json.loads(raw)
+        except (OSError, ValueError):
+            pass
+        return detail
+    except (urllib.error.URLError, TimeoutError, ValueError) as error:
+        return {'error': str(error)}
+
+
+def collect(container, opener=None, samples=1, interval=5, sleeper=None):
+    if not 1 <= samples <= 12 or not 2 <= interval <= 30:
+        raise ValueError('Use 1..12 samples and a 2..30 second interval')
     port = subprocess.check_output(['docker', 'port', container, '7148/tcp'], text=True).splitlines()
     if not port:
         raise RuntimeError('Guest API port 7148/tcp is not published')
@@ -84,28 +110,22 @@ def collect(container, opener=None):
     if not 1 <= number <= 65535:
         raise RuntimeError('Invalid guest API port')
     opener = opener or urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    base = f'http://127.0.0.1:{number}'
     result = {'collectedAtUtc': datetime.datetime.now(datetime.timezone.utc).isoformat()}
-    for endpoint in ('version', 'graphics/diagnostics', 'graphics/helios'):
-        try:
-            with opener.open(f'http://127.0.0.1:{number}/{endpoint}', timeout=20) as response:
-                raw = response.read(131073)
-                if len(raw) > 131072:
-                    raise ValueError('Response exceeds 128 KiB')
-                data = json.loads(raw)
-                if not isinstance(data, dict):
-                    raise ValueError('Expected a JSON object')
-                result[endpoint] = data
-        except urllib.error.HTTPError as error:
-            detail = {'error': str(error), 'httpStatus': error.code}
-            try:
-                raw = error.read(131073)
-                if len(raw) <= 131072:
-                    detail['response'] = json.loads(raw)
-            except (OSError, ValueError):
-                pass
-            result[endpoint] = detail
-        except (urllib.error.URLError, TimeoutError, ValueError) as error:
-            result[endpoint] = {'error': str(error)}
+    if samples > 1:
+        observations = []
+        for index in range(samples):
+            observations.append({'hostAtUtc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                                 'adapters': read_endpoint(opener, base, 'graphics/adapters')})
+            if index + 1 < samples:
+                (sleeper or time.sleep)(interval)
+        result['capture'] = {'intervalSeconds': interval, 'observations': observations,
+                             'scope': 'Cached native monitor samples; no extra PowerShell polling'}
+    # Slow collectors run once after sampling. Older guests retain explicit 404s.
+    for endpoint in ('version', 'graphics/diagnostics', 'graphics/helios', 'graphics/history',
+                     'graphics/diagnostics/journals', 'graphics/diagnostics/runtime'):
+        result[endpoint] = read_endpoint(opener, base, endpoint)
+    result['finishedAtUtc'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
     return result
 
 
@@ -113,9 +133,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--container', default='WinBoat')
     parser.add_argument('--output', type=pathlib.Path)
+    parser.add_argument('--samples', type=int, choices=range(1, 13), default=1)
+    parser.add_argument('--interval', type=int, choices=range(2, 31), default=5)
     args = parser.parse_args()
     try:
-        result = collect(args.container)
+        result = collect(args.container, samples=args.samples, interval=args.interval)
         result['host'] = collect_host(args.container)
         path = args.output or pathlib.Path.home() / '.winboat/diagnostics' / (
             'graphics-' + datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d-%H%M%S-%f') + '.json')
@@ -128,6 +150,9 @@ def main():
         application = result.get('graphics/diagnostics', {}).get('driver', {}).get('application')
         if application is None:
             print('Application diagnostics unavailable; update the WinBoat guest service for feature/crash details.')
+        if any(result.get(endpoint, {}).get('httpStatus') == 404 for endpoint in (
+                'graphics/history', 'graphics/diagnostics/journals', 'graphics/diagnostics/runtime')):
+            print('Extended diagnostics unavailable; update the WinBoat guest service.')
         print(json.dumps(result, indent=2, ensure_ascii=False))
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
         parser.exit(1, str(error) + '\n')

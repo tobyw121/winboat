@@ -16,8 +16,8 @@ var changeDisplaySettings = displayUser32.NewProc("ChangeDisplaySettingsExW")
 func readDisplayMode(name *uint16, index uint32) (displayMode, error) {
 	mode := displayMode{Size: uint16(unsafe.Sizeof(displayMode{}))}
 	ok, _, _ := enumDisplaySettings.Call(uintptr(unsafe.Pointer(name)), uintptr(index), uintptr(unsafe.Pointer(&mode)), 0)
-	if ok == 0 {
-		return mode, fmt.Errorf("display-mode-unavailable")
+	if ok == 0 || mode.DriverExtra != 0 || mode.Size != uint16(unsafe.Sizeof(mode)) {
+		return mode, fmt.Errorf("display-mode-unavailable-or-extra-data-required")
 	}
 	return mode, nil
 }
@@ -49,6 +49,9 @@ func extendHeliosDesktop() error {
 			}
 			basic = name
 		} else {
+			if device.Flags&4 != 0 {
+				return fmt.Errorf("helios-primary-layout-requires-manual-change")
+			}
 			if helios != nil {
 				return fmt.Errorf("helios-not-unique")
 			}

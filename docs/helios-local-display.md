@@ -613,7 +613,13 @@ Die Zustandsprüfung und Diagnosen reparieren keinen noch unbekannten Fehler
 im WDDM-/Venus-Present-Pfad. Dafür müssen diese Laufzeitdaten aus dem betroffenen
 Windows-Gast und ein danach getesteter Windows-Treiber-Build vorliegen.
 
-### Gespiegelter Desktop und vollständiger VGA-Rückfall
+### Aktuelle Vorgabe: Erweitern ohne automatische VGA-Umschaltung
+
+Ab `helios-watchdog-v10` gilt die [neue Anzeige- und Diagnoserichtlinie](helios-guest-diagnostics.md).
+Die folgende Beschreibung betrifft die vorherige Klon-/Rückfallautomatik und gilt
+für aktuelle Gastdienste nicht mehr.
+
+### Vorherige Klon-/Rückfallautomatik
 
 Guest-Protokoll `helios-watchdog-v4` verwaltet für ausgewählte Helios-VMs die
 Windows-Anzeigetopologie. Erst wenn die ausgewählte Installation einen

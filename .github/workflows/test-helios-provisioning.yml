@@ -167,6 +167,8 @@ jobs:
           $data = (& ./guest_server/scripts/Get-HeliosDiagnostics.ps1) | ConvertFrom-Json
           if ($data.testSigning -isnot [bool]) {throw 'Active kernel signing query did not execute.'}
           if ($null -eq $data.driverRegistry) {throw 'Driver diagnostics JSON is incomplete.'}
+          $runtime = (& ./guest_server/scripts/Get-GraphicsRuntimeDiagnostics.ps1) | ConvertFrom-Json
+          if (-not $runtime.bootAtUtc) {throw 'Real Windows boot-time query did not execute.'}
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25'

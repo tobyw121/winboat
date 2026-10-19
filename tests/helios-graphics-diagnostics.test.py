@@ -65,6 +65,24 @@ class TestGraphicsCollector(unittest.TestCase):
         self.assertEqual(result['graphics/diagnostics']['driver']['application']['rejectedFeatures'][0]['feature'], 'timelineSemaphore')
         self.assertIn('128 KiB', result['graphics/helios']['error'])
         self.assertTrue(all(url.startswith('http://127.0.0.1:41000/') for url in opener.urls))
+    def test_sample_capture_uses_cached_status_and_collects_slow_reports_once(self):
+        class Capture:
+            def __init__(self): self.urls = []
+            def open(self, url, timeout):
+                self.urls.append(url)
+                return contextlib.closing(io.BytesIO(b'{"sampleAgeMs":42}'))
+        opener = Capture()
+        sleeps = []
+        with patch.object(graphics.subprocess, 'check_output', return_value='127.0.0.1:41000\n'):
+            result = graphics.collect('WinBoat', opener, samples=3, interval=2, sleeper=sleeps.append)
+        self.assertEqual(sleeps, [2, 2])
+        self.assertEqual(len(result['capture']['observations']), 3)
+        self.assertEqual(sum(url.endswith('/graphics/adapters') for url in opener.urls), 3)
+        for endpoint in ('graphics/history', 'graphics/diagnostics/journals', 'graphics/diagnostics/runtime'):
+            self.assertEqual(sum(url.endswith('/' + endpoint) for url in opener.urls), 1)
+        with self.assertRaises(ValueError): graphics.collect('WinBoat', samples=13)
+        with self.assertRaises(ValueError): graphics.collect('WinBoat', interval=0)
+
     def test_no_published_api_does_not_start_or_stop_vm(self):
         with patch.object(graphics.subprocess, 'check_output', return_value=''):
             with self.assertRaisesRegex(RuntimeError, 'not published'): graphics.collect('WinBoat', Opener())
