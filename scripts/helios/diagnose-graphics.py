@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Collect bounded, read-only guest graphics diagnostics without VM clipboard use."""
 import argparse
+import importlib.util
 import datetime
 import json
 import os
@@ -10,6 +11,7 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+import uuid
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -33,6 +35,8 @@ def parse_transport_errors(text):
             match = re.search(pattern, line)
             if match:
                 event = {'kind': kind}
+                stamp=re.match(r'^(\d{4}-\d{2}-\d{2}T[0-9:.]+Z) ',line)
+                if stamp: event['hostAtUtc']=stamp[1]
                 event.update({name: value if value.startswith('0x') else int(value)
                               for name, value in zip(names, match.groups())})
                 events.append(event)
@@ -63,7 +67,7 @@ def collect_host(container):
         template = '{{json .Config.Image}}\n{{json .Image}}\n{{json .State.Status}}'
         fields = subprocess.check_output(['docker', 'inspect', '--format', template, container], text=True, timeout=10).splitlines()
         result.update(zip(('image', 'imageId', 'containerState'), map(json.loads, fields)))
-        logs = subprocess.run(['docker', 'logs', '--tail', '300', container], capture_output=True, text=True, timeout=10, check=True)
+        logs = subprocess.run(['docker', 'logs', '--timestamps', '--tail', '300', container], capture_output=True, text=True, timeout=10, check=True)
         result['transportErrors'] = parse_transport_errors((logs.stdout + '\n' + logs.stderr)[-262144:])
         result['frameMetrics'] = parse_frame_metrics((logs.stdout + '\n' + logs.stderr)[-262144:])
         result['frameMetricsScope'] = 'Bounded log tail; ACK wall time and Vulkan capture phases, not guest FPS or end-to-end input latency. Frame tracing is optional.'
@@ -132,7 +136,7 @@ def collect(container, opener=None, samples=1, interval=5, sleeper=None):
         raise RuntimeError('Invalid guest API port')
     opener = opener or urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
     base = f'http://127.0.0.1:{number}'
-    result = {'collectedAtUtc': datetime.datetime.now(datetime.timezone.utc).isoformat()}
+    result = {'collectedAtUtc': datetime.datetime.now(datetime.timezone.utc).isoformat(),'captureId':uuid.uuid4().hex,'requestTiming':{}}
     if samples > 1:
         observations = []
         for index in range(samples):
@@ -145,7 +149,9 @@ def collect(container, opener=None, samples=1, interval=5, sleeper=None):
     # Slow collectors run once after sampling. Older guests retain explicit 404s.
     for endpoint in ('version', 'graphics/diagnostics', 'graphics/helios', 'graphics/history',
                      'graphics/diagnostics/journals', 'graphics/diagnostics/runtime'):
+        started=datetime.datetime.now(datetime.timezone.utc).isoformat()
         result[endpoint] = read_endpoint(opener, base, endpoint)
+        result['requestTiming'][endpoint]={'startUtc':started,'endUtc':datetime.datetime.now(datetime.timezone.utc).isoformat()}
     result['finishedAtUtc'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
     return result
 
@@ -160,6 +166,9 @@ def main():
     try:
         result = collect(args.container, samples=args.samples, interval=args.interval)
         result['host'] = collect_host(args.container)
+        spec=importlib.util.spec_from_file_location('correlation',pathlib.Path(__file__).with_name('graphics-correlation.py'))
+        correlation=importlib.util.module_from_spec(spec);spec.loader.exec_module(correlation)
+        result['correlation']=correlation.correlate(result)
         path = args.output or pathlib.Path.home() / '.winboat/diagnostics' / (
             'graphics-' + datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d-%H%M%S-%f') + '.json')
         path.parent.mkdir(parents=True, exist_ok=True)

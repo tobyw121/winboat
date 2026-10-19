@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Read-only host sampling for interleaved A/B comparisons; no VM changes."""
 import argparse
+import csv
+import importlib.util
 from concurrent.futures import ThreadPoolExecutor
 import datetime
 import json
@@ -15,6 +17,26 @@ import time
 
 VIEWER_FIELDS = ('pid','console','monotonicUs','dmabufFrames','softwareFrames','renderedFrames',
                  'sourceCopyWallUs','completionWaitUs','copySamples','skippedRedraws','coalescedUpdates')
+
+
+def read_frame_times(path, application):
+    spec=importlib.util.spec_from_file_location('comparison',Path(__file__).with_name('compare-graphics.py'))
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    if path.stat().st_size>67108864: raise ValueError('Frame CSV exceeds 64 MiB')
+    values=[];pids=set();rejected=0
+    with path.open(newline='',encoding='utf-8-sig') as stream:
+        for row in csv.DictReader(stream):
+            if row.get('Application','').casefold()!=application.casefold(): continue
+            try:
+                value=float(row['MsBetweenPresents'])
+                if not math.isfinite(value) or not 0<value<=60000: raise ValueError()
+                pids.add(int(row['ProcessID']));values.append(value)
+            except (ValueError,KeyError): rejected+=1
+    if len(pids)!=1 or len(values)<2: raise ValueError('Select one application process with at least two valid presents')
+    result=module.frame_summary(values)
+    result.update(processId=next(iter(pids)),rejectedSamples=rejected,
+                  scope='PresentMon MsBetweenPresents; presentation intervals, not input latency or displayed-frame proof')
+    return result
 
 
 def viewer_metrics(text):
@@ -77,8 +99,17 @@ def main():
     parser.add_argument('--samples',type=int,choices=range(2,61),default=10)
     parser.add_argument('--interval',type=int,choices=range(1,31),default=2)
     parser.add_argument('--viewer-log',type=Path)
+    parser.add_argument('--comparison-key',help='Same workload, resolution and settings identifier for A/B/A/B')
+    parser.add_argument('--frame-csv',type=Path,help='Existing PresentMon CSV; collection is never started automatically')
+    parser.add_argument('--frame-application',help='Exact Application column value; one PID required')
     parser.add_argument('--output',type=Path,required=True)
     args=parser.parse_args()
+    if bool(args.frame_csv)!=bool(args.frame_application): parser.error('Provide both frame CSV and application')
+    if args.comparison_key and not re.fullmatch(r'[a-zA-Z0-9_.-]{1,96}',args.comparison_key): parser.error('Invalid comparison key')
+    frames=None
+    if args.frame_csv:
+        try: frames=read_frame_times(args.frame_csv,args.frame_application)
+        except (OSError,ValueError) as error: parser.error(str(error))
     if not re.fullmatch(r'[a-zA-Z0-9_.-]{1,48}',args.label): parser.error('Use a short comparison label')
     samples=[];started=time.monotonic()
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -91,6 +122,7 @@ def main():
     report={'label':args.label,'collectedAtUtc':datetime.datetime.now(datetime.timezone.utc).isoformat(),
             'elapsedSeconds':time.monotonic()-started,'samples':samples,'summary':summarize(samples),
             'scope':'Container CPU includes QEMU and renderer; 100% is one host CPU. No guest FPS or latency claim.'}
+    report.update(comparisonKey=args.comparison_key,frameTimes=frames)
     if args.viewer_log:
         with args.viewer_log.open('rb') as stream:
             stream.seek(max(0,args.viewer_log.stat().st_size-262144))

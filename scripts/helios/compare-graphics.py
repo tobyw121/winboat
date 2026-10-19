@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+"""Compare saved A/B/A/B reports without installing or enabling drivers."""
+import argparse
+import json
+import math
+from pathlib import Path
+import statistics
+
+
+def percentile(values, fraction):
+    ordered=sorted(values)
+    if not ordered: return None
+    position=(len(ordered)-1)*fraction
+    lower=int(position);upper=min(lower+1,len(ordered)-1)
+    return ordered[lower]+(ordered[upper]-ordered[lower])*(position-lower)
+
+
+def frame_summary(values):
+    if any(type(v) not in (int,float) or not math.isfinite(v) or not 0<v<=60000 for v in values):
+        raise ValueError('Frame durations must be finite milliseconds in (0,60000]')
+    return {'samples':len(values),'medianMs':percentile(values,.5),
+            'p95Ms':percentile(values,.95),'p99Ms':percentile(values,.99)}
+
+
+def compare(reports):
+    if len(reports)!=4 or [r.get('label') for r in reports]!=['A1','B1','A2','B2']:
+        raise ValueError('Supply reports in A1/B1/A2/B2 order')
+    scopes={r.get('comparisonKey') for r in reports}
+    if len(scopes)!=1 or None in scopes:
+        raise ValueError('Reports require the same explicit workload/settings comparisonKey')
+    summaries=[r.get('summary',{}) for r in reports]
+    pairs=[]
+    for a,b in ((0,1),(2,3)):
+        av=summaries[a].get('meanCpuPercentOfOneCore');bv=summaries[b].get('meanCpuPercentOfOneCore')
+        valid=all(type(v) in (float,int) and math.isfinite(v) and v>=0 for v in (av,bv))
+        pairs.append({'baseline':reports[a]['label'],'candidate':reports[b]['label'],
+                      'cpuPercentagePointDelta':bv-av if valid else None})
+    return {'schema':1,'comparisonKey':reports[0]['comparisonKey'],'pairs':pairs,
+            'frameTimes':[r.get('frameTimes') for r in reports],
+            'scope':'Paired observations only. Workload equality is operator-supplied; no automatic promotion or causality claim.'}
+
+
+def main():
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('reports',nargs=4,type=Path)
+    args=parser.parse_args()
+    try:
+        reports=[]
+        for path in args.reports:
+            if path.stat().st_size>1048576: raise ValueError('Report exceeds 1 MiB')
+            reports.append(json.loads(path.read_text()))
+        print(json.dumps(compare(reports),indent=2))
+    except (OSError,ValueError,TypeError) as error: parser.exit(1,str(error)+'\n')
+
+
+if __name__=='__main__': main()

@@ -14,6 +14,9 @@ on:
       - 'scripts/helios/performance-profile.py'
       - 'scripts/helios/measure-performance.py'
       - 'tests/helios-performance-metrics.py'
+      - 'tests/helios-comparison.py'
+      - 'scripts/helios/compare-graphics.py'
+      - 'scripts/helios/graphics-correlation.py'
       - 'scripts/helios/inspect-qemu-backend.py'
       - 'tests/helios-qemu-backend.test.py'
       - 'scripts/helios/capture-display*.py'
@@ -49,6 +52,9 @@ on:
       - 'scripts/helios/performance-profile.py'
       - 'scripts/helios/measure-performance.py'
       - 'tests/helios-performance-metrics.py'
+      - 'tests/helios-comparison.py'
+      - 'scripts/helios/compare-graphics.py'
+      - 'scripts/helios/graphics-correlation.py'
       - 'scripts/helios/inspect-qemu-backend.py'
       - 'tests/helios-qemu-backend.test.py'
       - 'scripts/helios/capture-display*.py'
@@ -84,6 +90,7 @@ jobs:
           persist-credentials: false
       - run: python3 tests/helios-performance.py
       - run: python3 tests/helios-performance-metrics.py
+      - run: python3 tests/helios-comparison.py
       - run: python3 scripts/helios/performance-profile.py baseline --output /tmp/baseline.json
   host-build:
     name: Compile patched production QEMU and host runtime
