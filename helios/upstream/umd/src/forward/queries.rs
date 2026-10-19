@@ -476,10 +476,12 @@ pub(crate) unsafe fn helios_multisample_quality_levels(
     // D3D11 accepts powers of two up to 32; WDDM 1.3 defines only TILED_RESOURCE.
     if sample_count == 0 || sample_count > 32 || !sample_count.is_power_of_two()
         || flags & !1 != 0 {
+        crate::diagnostics::note(h, "msaa-refused", [fmt as u64, sample_count as u64, flags as u64, 0, 0, 0]);
         return 0;
     }
     if crate::caps::feature_profile().msaa == crate::caps::MsaaPolicy::SingleSampleOnly
         && sample_count != 1 {
+        crate::diagnostics::note(h, "msaa-policy", [fmt as u64, sample_count as u64, flags as u64, 0, 0, 0]);
         return 0;
     }
     // SAFETY: DDI lookup validates the live device handle before borrowing COM.

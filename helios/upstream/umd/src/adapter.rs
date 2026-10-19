@@ -424,6 +424,10 @@ unsafe extern "system" fn create_device(
         dev: create.hDrvDevice.pDrvPrivate as *mut device_funcs::HeliosDevice,
     };
 
+    // SAFETY: the private block is initialized and guarded until handoff.
+    unsafe { crate::diagnostics::note(create.hDrvDevice, "created",
+        [create.Interface as u64, create.Version as u64, create.Flags as u64, 0, 0, 0]); }
+
     unsafe {
         let dev = &mut *(create.hDrvDevice.pDrvPrivate as *mut device_funcs::HeliosDevice);
         let context_hr = device_funcs::create_runtime_context(dev);
@@ -505,6 +509,8 @@ unsafe extern "system" fn create_device(
         }
     }
 
+    // SAFETY: constructed live device remains runtime-owned through this callback.
+    unsafe { crate::diagnostics::note(create.hDrvDevice, "returned", [0, 0, 0, 0, 0, 0]); }
     if std::env::var_os("HELIOS_DXGI_NO_REDIRECTION").is_some() {
         log_error!(
             "  CreateDevice -> DXGI_STATUS_NO_REDIRECTION (env-gated; DXGI desktop fallback)"

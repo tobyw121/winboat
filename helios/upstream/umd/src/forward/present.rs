@@ -1294,6 +1294,7 @@ unsafe fn dxgi_present_impl(
     // DXGI_DDI_HDEVICE is a UINT_PTR carrying the driver device handle, the same
     // private pointer stored in D3D10DDI_HDEVICE.pDrvPrivate.
     let h = dxgi_device_handle(a.hDevice);
+    crate::diagnostics::note(h, "present", [0, 0, 0, 0, 0, 0]);
     let context = d3d11_context(h);
     let src_h = dxgi_resource_handle(a.hSurfaceToPresent);
     let dst_h = dxgi_resource_handle(a.hDstResource);
@@ -2366,6 +2367,7 @@ pub(crate) unsafe extern "system" fn dxgi_present_mpo(
         return E_INVALIDARG;
     }
     let a = &*arg;
+    crate::diagnostics::note(dxgi_device_handle(a.hDevice), "present", [1, 0, 0, 0, 0, 0]);
     if a.PresentPlaneCount == 0 || a.pPresentPlanes.is_null() {
         probe_early_refusal(PresentBoundaryEntry::Mpo, "no MPO planes");
         log_error!("DXGI PresentMultiplaneOverlay: no present planes");
@@ -2523,6 +2525,7 @@ pub(crate) unsafe extern "system" fn dxgi_present1(arg: *mut ddi::DXGI_DDI_ARG_P
         return E_INVALIDARG;
     }
     let a = &*arg;
+    crate::diagnostics::note(dxgi_device_handle(a.hDevice), "present", [2, 0, 0, 0, 0, 0]);
     if a.SurfacesToPresent == 0 || a.phSurfacesToPresent.is_null() {
         probe_early_refusal(
             PresentBoundaryEntry::Present1Multi,

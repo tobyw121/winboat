@@ -8,6 +8,8 @@ on:
       - 'helios/host/**'
       - 'helios/source.lock.json'
       - 'tests/helios-qemu-dbus.*'
+      - 'scripts/helios/inspect-qemu-backend.py'
+      - 'tests/helios-qemu-backend.test.py'
       - 'scripts/helios/capture-display*.py'
       - 'tests/helios-display-capture.py'
       - 'tests/helios-resolutions.py'
@@ -35,6 +37,8 @@ on:
       - 'helios/host/**'
       - 'helios/source.lock.json'
       - 'tests/helios-qemu-dbus.*'
+      - 'scripts/helios/inspect-qemu-backend.py'
+      - 'tests/helios-qemu-backend.test.py'
       - 'scripts/helios/capture-display*.py'
       - 'tests/helios-display-capture.py'
       - 'tests/helios-resolutions.py'
@@ -67,6 +71,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - run: python3 tests/helios-qemu-backend.test.py
       - name: Install QEMU for display capture tests
         run: |
           sudo apt-get update

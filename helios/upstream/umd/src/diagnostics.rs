@@ -1,7 +1,7 @@
 //! Bounded per-device initialization journal, independent of UmdTrace.
 //! No per-frame output and no changes to capability answers or synchronization.
 use std::collections::{BTreeMap, VecDeque};
-use std::sync::{Mutex, atomic::{AtomicU64, Ordering}};
+use std::sync::{Mutex, atomic::{AtomicBool, AtomicU64, Ordering}};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 const LIMIT: usize = 96;
@@ -41,20 +41,22 @@ pub(crate) struct DeviceDiagnostics {
     birth: u128,
     started: Instant,
     journal: Mutex<Journal>,
+    presented: AtomicBool,
 }
 impl DeviceDiagnostics {
     pub(crate) fn new() -> Self {
         Self { id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
             birth: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_micros(),
-            started: Instant::now(), journal: Mutex::new(Journal::default()) }
+            started: Instant::now(), journal: Mutex::new(Journal::default()), presented: AtomicBool::new(false) }
     }
     fn record(&self, kind: &'static str, values: [u64; 6]) {
+        if kind == "present" && self.presented.swap(true, Ordering::Relaxed) { return; }
         self.journal.lock().unwrap_or_else(|e| e.into_inner()).record(kind, values);
     }
     pub(crate) fn dump(&self) {
         let journal = self.journal.lock().unwrap_or_else(|e| e.into_inner());
-        crate::log_error!("GPU-DIAG device={} birth={} elapsed_ms={} queries={} mismatches={}",
-            self.id, self.birth, self.started.elapsed().as_millis(), journal.seq, journal.mismatches);
+        crate::log_error!("GPU-DIAG device={} birth={} elapsed_ms={} queries={} mismatches={} presented={}",
+            self.id, self.birth, self.started.elapsed().as_millis(), journal.seq, journal.mismatches, u8::from(self.presented.load(Ordering::Relaxed)));
         if let Some(v) = journal.first_mismatch {
             crate::log_error!("GPU-DIAG mismatch device={} birth={} fmt={} samples={} flags={} levels={} hr=0x{:08x}",
                 self.id, self.birth, v[0], v[1], v[2], v[3], v[4]);

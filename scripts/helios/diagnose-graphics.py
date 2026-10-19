@@ -48,6 +48,15 @@ def collect_host(container):
         result['error'] = type(error).__name__ + ': host graphics details unavailable'
     root = pathlib.Path(__file__).resolve().parents[2]
     try:
+        helper = pathlib.Path(__file__).with_name('inspect-qemu-backend.py').read_text()
+        process = subprocess.run(['docker', 'exec', '-i', container, 'python3', '-'], input=helper,
+                                 capture_output=True, text=True, timeout=10, check=True)
+        if len(process.stdout) > 8192:
+            raise ValueError('Oversized backend report')
+        result['qemuBackend'] = json.loads(process.stdout)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        result['qemuBackend'] = {'error': 'Running QEMU configuration unavailable'}
+    try:
         receipt = json.loads((root / 'resources/helios/helios-build.json').read_text())
         result['bundledInstaller'] = {key: receipt.get(key) for key in ('sha256', 'winboatCommit', 'sourceLockSha256')}
     except (OSError, ValueError):

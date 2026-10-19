@@ -536,7 +536,7 @@ pub(crate) unsafe fn create_shader_11_1_common(
     sig: *const ddi::D3D11_1DDIARG_STAGE_IO_SIGNATURES,
     name: &str,
 ) {
-    crate::diagnostics::note(h, "shader", [7, 0, 0, 0, 0, 0]);
+    crate::diagnostics::note(h, "shader", [7, kind as u64, 0, 0, 0, 0]);
     clear_handle(h_shader);
     let Some(dev) = helios_device(h) else {
         return;

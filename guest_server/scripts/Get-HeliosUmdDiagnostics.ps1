@@ -1,12 +1,12 @@
 # Read-only, bounded summaries. Never return arbitrary log lines or module paths.
 function Read-HeliosGpuJournal([string]$Text) {
     $prefix='(?m)^\[pid=\d+ tid=\d+\] GPU-DIAG '
-    $heads=[regex]::Matches($Text,$prefix+'device=(\d{1,20}) birth=(\d{1,24}) elapsed_ms=(\d{1,16}) queries=(\d{1,16}) mismatches=(\d{1,16})\r?$')
+    $heads=[regex]::Matches($Text,$prefix+'device=(\d{1,20}) birth=(\d{1,24}) elapsed_ms=(\d{1,16}) queries=(\d{1,16}) mismatches=(\d{1,16})(?: presented=([01]))?\r?$')
     if (-not $heads.Count) {return $null}
     $head=$heads[$heads.Count-1]
     $id=$head.Groups[1].Value; $birth=$head.Groups[2].Value
     $tail=$Text.Substring($head.Index)
-    $events=@([regex]::Matches($tail,$prefix+"event device=$id birth=$birth seq=(\d{1,16}) kind=(format|msaa|runtime-error|resource|view|shader) a=(\d{1,20}) b=(\d{1,20}) c=(\d{1,20}) d=(\d{1,20}) e=(\d{1,20}) f=(\d{1,20})\r?$") |
+    $events=@([regex]::Matches($tail,$prefix+"event device=$id birth=$birth seq=(\d{1,16}) kind=(created|format|msaa|msaa-refused|msaa-policy|runtime-error|resource|view|shader|present|returned) a=(\d{1,20}) b=(\d{1,20}) c=(\d{1,20}) d=(\d{1,20}) e=(\d{1,20}) f=(\d{1,20})\r?$") |
         Select-Object -Last 16 | ForEach-Object {
             [ordered]@{seq=$_.Groups[1].Value;kind=$_.Groups[2].Value;values=@($_.Groups[3..8] | ForEach-Object {$_.Value})}
         })
@@ -14,7 +14,7 @@ function Read-HeliosGpuJournal([string]$Text) {
     $mismatch=$null
     if ($first.Success) {$mismatch=[ordered]@{format=$first.Groups[1].Value;samples=$first.Groups[2].Value;flags=$first.Groups[3].Value;levels=$first.Groups[4].Value;hr=$first.Groups[5].Value}}
     return [ordered]@{device=$id;birth=$birth;elapsedMs=$head.Groups[3].Value;queries=$head.Groups[4].Value;
-        mismatches=$head.Groups[5].Value;firstMismatch=$mismatch;events=$events}
+        mismatches=$head.Groups[5].Value;presented=$(if ($head.Groups[6].Success) {$head.Groups[6].Value -eq '1'} else {$null});firstMismatch=$mismatch;events=$events}
 }
 function Read-HeliosUmdSummary([string]$Path) {
     $stream=[IO.File]::Open($Path,'Open','Read','ReadWrite')
