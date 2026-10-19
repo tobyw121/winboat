@@ -105,7 +105,7 @@ func collectConsoleDesktop(ctx context.Context) (desktopSnapshot, error) {
 }
 func collectConsoleDesktopAction(ctx context.Context, action string) (desktopSnapshot, error) {
 	var result desktopSnapshot
-	arguments := map[string]string{"probe": "--display-session-probe", "clone": "--display-session-clone", "basic": "--display-session-basic"}
+	arguments := map[string]string{"probe": "--display-session-probe", "extend": "--display-session-extend", "clone": "--display-session-clone", "basic": "--display-session-basic"}
 	argument, ok := arguments[action]
 	if !ok {
 		return result, desktopProbeError("unknown-display-operation")
@@ -167,7 +167,7 @@ func consoleDesktopOperation(action string) (desktopSnapshot, error) {
 	if action == "probe" {
 		return result, nil
 	}
-	if action != "clone" && action != "basic" {
+	if action != "clone" && action != "basic" && action != "extend" {
 		return result, fmt.Errorf("unknown-display-operation")
 	}
 	changeErr := applyCCD(action)
@@ -177,7 +177,7 @@ func consoleDesktopOperation(action string) (desktopSnapshot, error) {
 	}
 	if changeErr != nil {
 		after.ChangeError = changeErr.Error()
-	} else if (action == "clone" && !clonedDesktop(after)) || (action == "basic" && !basicDesktop(after)) {
+	} else if (action == "extend" && (!extendedDesktop(after) || after.Basic.Primary != result.Basic.Primary)) || (action == "clone" && !clonedDesktop(after)) || (action == "basic" && !basicDesktop(after)) {
 		after.ChangeError = "display-change-not-confirmed"
 	}
 	return after, nil

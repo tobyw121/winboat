@@ -130,6 +130,9 @@ func augmentCCD(result *desktopSnapshot) error {
 	return nil
 }
 func applyCCD(action string) error {
+	if action == "extend" {
+		return extendHeliosDesktop()
+	}
 	paths, _, err := readCCD(0x11)
 	if err != nil {
 		return err

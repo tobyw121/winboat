@@ -295,7 +295,7 @@ func getIcon(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	if len(os.Args) == 2 {
-		actions := map[string]string{"--display-session-probe": "probe", "--display-session-clone": "clone", "--display-session-basic": "basic"}
+		actions := map[string]string{"--display-session-probe": "probe", "--display-session-extend": "extend", "--display-session-clone": "clone", "--display-session-basic": "basic"}
 		if action, ok := actions[os.Args[1]]; ok {
 			runDisplaySessionProbe(action)
 			return
