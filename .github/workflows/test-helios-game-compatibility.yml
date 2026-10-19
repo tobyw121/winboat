@@ -7,6 +7,8 @@ on:
       - '.github/workflows/test-helios-game-compatibility.yml'
       - 'tests/helios-adapter-selection.py'
       - 'tests/helios-device-profiles.test.ps1'
+      - 'tests/helios-native-probe-process.test.ps1'
+      - 'tests/helios-probe-timeout.cpp'
       - 'helios/upstream/packaging/windows/Test-HeliosDeviceProfiles.ps1'
       - 'tests/helios-journal.rs'
       - 'helios/upstream/umd/src/diagnostics.rs'
@@ -31,6 +33,8 @@ on:
     paths:
       - 'tests/helios-adapter-selection.py'
       - 'tests/helios-device-profiles.test.ps1'
+      - 'tests/helios-native-probe-process.test.ps1'
+      - 'tests/helios-probe-timeout.cpp'
       - 'helios/upstream/packaging/windows/Test-HeliosDeviceProfiles.ps1'
       - 'tests/helios-journal.rs'
       - 'helios/upstream/umd/src/diagnostics.rs'
@@ -131,6 +135,8 @@ jobs:
             'if errorlevel 1 exit /b 1'
             'cl /nologo /W4 /EHsc /std:c++17 /MT tests/helios-game-clearview.cpp /Fe:helios-clearview-${{ matrix.arch }}.exe /link d3d11.lib dxgi.lib'
             'if errorlevel 1 exit /b 1'
+            'cl /nologo /W4 /EHsc /MT tests/helios-probe-timeout.cpp /Fe:helios-timeout-${{ matrix.arch }}.exe'
+            'if errorlevel 1 exit /b 1'
             'cl /nologo /W4 /EHsc /std:c++17 /MT helios/upstream/packaging/windows/probes/d3d11-device-probe.cpp /Fe:helios-device-${{ matrix.arch }}.exe /link d3d11.lib dxgi.lib'
             'if errorlevel 1 exit /b 1'
             'cl /nologo /W4 /EHsc /std:c++17 /MT helios/upstream/packaging/windows/probes/d3d11-smoke.cpp /Fe:helios-render-${{ matrix.arch }}.exe /link d3d11.lib dxgi.lib d3dcompiler.lib'
@@ -143,6 +149,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'WARP control: single outer device creation failed.' }
           & ./helios-render-${{ matrix.arch }}.exe --warp
           if ($LASTEXITCODE -ne 0) { throw 'WARP control: compute/draw/depth/MSAA readback failed.' }
+      - name: Run real bounded diagnostic child processes on both PowerShell runtimes
+        shell: pwsh
+        run: |
+          ./tests/helios-native-probe-process.test.ps1 -Probe ./helios-device-${{ matrix.arch }}.exe -TimeoutProbe ./helios-timeout-${{ matrix.arch }}.exe
+          & "$env:WINDIR/System32/WindowsPowerShell/v1.0/powershell.exe" -NoProfile -File ./tests/helios-native-probe-process.test.ps1 -Probe ./helios-device-${{ matrix.arch }}.exe -TimeoutProbe ./helios-timeout-${{ matrix.arch }}.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Native diagnostic child process test failed.' }
       - uses: actions/upload-artifact@v4
         with:
           name: helios-clearview-probe-${{ matrix.arch }}

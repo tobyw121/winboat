@@ -316,7 +316,7 @@
     "packaging/windows/Helios-PackageCommon.ps1": "b76da6667fc1117cbe562a8004c641509b303d2eb3da153208700124c248201f",
     "packaging/windows/Install-Helios.ps1": "f8eadd2da8b405261073c1c02541d3fa4823c73c3cc6d56272528131f6b9410a",
     "packaging/windows/README.md": "6fb7805c2689bb577be675d9262c0b90fc0b71829d5ef656dc0513931cf6785f",
-    "packaging/windows/Test-HeliosDeviceProfiles.ps1": "5d01d06fab0bfe3c0ac4ccaa602c953531f535115e0bce3c5fd96de5556225bd",
+    "packaging/windows/Test-HeliosDeviceProfiles.ps1": "c54147e03a3f97c6b12fd7d27e7159d53794db4afe36434b932d5e86f00b452e",
     "packaging/windows/Test-HeliosRegistrySnapshots.ps1": "1418630d6533ce95ced0ac59436897202d6f9ad2cdb0e2b0d1586c67a831d256",
     "packaging/windows/Uninstall-Helios.ps1": "e45183190e0aa9850b8fec818aca9c39dcfdd40c0a3e041ea87b0bb7c4ef21c9",
     "packaging/windows/Verify-Helios.ps1": "10ee65983698d5fda02301979e4e2da2e831f8eeda9fd69cae1017c2a8c1998a",
@@ -724,7 +724,8 @@
       "child-process-only-capability-profiles",
       "adapter-selection-preserves-helios-branding",
       "require-matching-bound-diagnostic-driver",
-      "context-correct-variant-failure-bounded-probe-teardown"
+      "context-correct-variant-failure-bounded-probe-teardown",
+      "real-native-probe-drain-and-timeout-tests"
     ],
     "addedFiles": [
       "kmd_logic/src/display_modes.rs",

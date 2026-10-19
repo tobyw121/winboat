@@ -24,7 +24,7 @@ function Convert-HeliosCrashEvent($Event) {
     $data = @{}
     foreach ($entry in @($xml.Event.EventData.Data)) { $data[$entry.GetAttribute('Name')] = [string]$entry.InnerText }
     $app = [string]$data['AppName']; $module = [string]$data['ModuleName']
-    if ($app -notmatch '(?i)(furmark|icarus|^(client|dwm)\.exe$)' -and
+    if ($app -notmatch '(?i)(furmark|icarus|^(client|dwm|d3d11-device-probe)\.exe$)' -and
         $module -notmatch '(?i)^(helios_umd.*|vulkan_virtio|plugin_gxc_vulkan.*)\.dll$') { return $null }
     $result = [ordered]@{ timeUtc=$Event.TimeCreated.ToUniversalTime().ToString('o') }
     foreach ($name in @('AppName','ModuleName','ExceptionCode','FaultingOffset','ProcessId')) {

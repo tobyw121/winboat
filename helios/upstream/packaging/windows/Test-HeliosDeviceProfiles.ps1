@@ -85,7 +85,11 @@ try {
                 try {$process.Kill()} catch {} # It may have exited during the timeout race.
                 $exited=$process.WaitForExit(5000)
             }
-            $output=if ($stdout.IsCompleted) {$stdout.GetAwaiter().GetResult()} else {''}
+            if ($exited) {
+                # A timed process wait does not itself drain asynchronous pipes.
+                try {[void]$stdout.Wait(1000); [void]$stderr.Wait(1000)} catch {}
+            }
+            $output=if ($stdout.Status -eq 'RanToCompletion') {$stdout.GetAwaiter().GetResult()} else {''}
             $exitCode=if ($exited) {$process.ExitCode} else {$null}
             $rows=@($output -split '\r?\n' | Where-Object {$_ -match '^\{"schema":1,'} | ForEach-Object {$_ | ConvertFrom-Json})
             [ordered]@{mode=$mode;processId=$process.Id;timedOut=$timeout;exited=$exited;exitCode=$exitCode;results=$rows}
