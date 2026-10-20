@@ -266,6 +266,9 @@ pub(crate) unsafe extern "system" fn check_format_support(
             dxgi_output_bits_per_sample(fmt as u32, caps)
         );
     }
+    if crate::knobs::backend_caps_profile() {
+        caps = crate::diagnostics::backend_bounded_format(fmt as u32, raw_caps, caps);
+    }
     crate::diagnostics::note(h, "format", [fmt as u64, raw_caps as u64, caps as u64, 0, 0, 0]);
     if !out.is_null() {
         *out = caps;

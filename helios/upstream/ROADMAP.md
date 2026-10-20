@@ -4496,3 +4496,15 @@ complete subsystem contract.
 WinBoat diagnostic source version 22.22.297.0: preserve the first failing DDI context (16 numeric events) across journal wrap and flush once at first runtime error. Resource events include format, width, height, sample count/quality and bind flags. This changes diagnostic sources only; bundled .291 remains unchanged and new binaries require Windows build and hardware validation.
 
 WinBoat diagnostic source 22.22.298.0: bound resource/open cardinalities, fail resource creation on a removed backend, add real format/MSAA/view/shared-readback acceptance and DXGI process budget observations. The default .291 bundle is unchanged. No claim of corrected caps or hardware acceptance without the native probe on Helios.
+
+
+### Downstream .299 candidate: cross-layer admission and contract checks
+Host Vulkan/DRM/PCI identity admission, optional QEMU-owned Vulkan byte budget,
+opt-in damage readback, host resource/DMABUF correlation and live heap observations
+are checksum-locked in the WinBoat host overlay. Default installer remains .291.
+`.299` adds a child-only `d3d11-backend-caps` comparison: intersect normalized
+output/MSAA flags with the real backend; preserve the XR unsupported sentinel.
+Default DWM capabilities and synchronization are unchanged. Initialization may
+legitimately fail where backend coverage is insufficient; this mode is evidence,
+not a claim of FL11 conformance. Native shared-process/keyed-mutex pixel tests
+passed Windows WARP CI; real Helios/NVIDIA execution remains required.

@@ -81,6 +81,12 @@ pub(crate) static UMD_TIMER_RESOLUTION: BoolKnob = BoolKnob::new(c"UmdTimerRes",
 /// Feature-level profile selector. Absent = 1 (the full FL11 profile).
 pub(crate) static FEATURE_LEVEL_11: DwordKnob = DwordKnob::new(c"FeatureLevel11", 1);
 
+/// Child-process diagnostic mode; never writes registry or changes DWM.
+pub(crate) fn backend_caps_profile() -> bool {
+    static MODE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *MODE.get_or_init(|| std::env::var("HELIOS_DIAGNOSTIC_BACKEND_CAPS").as_deref() == Ok("1"))
+}
+
 /// Dcomp-vehicle flip-ordering gate cap, microseconds. Absent = 32 ms.
 pub(crate) static VEHICLE_FLIP_GATE_US: DwordKnob = DwordKnob::new(c"VehicleFlipGateUs", 32_000);
 

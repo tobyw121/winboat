@@ -10,6 +10,8 @@ try {
     if ($env:HELIOS_DIAGNOSTIC_FEATURE_LEVEL -ne 'parent-value') {throw 'Parent process modified.'}
     $info=New-HeliosApplicationStartInfo '/fixture/game.exe' 'driver-default'
     if ($info.EnvironmentVariables.ContainsKey('HELIOS_DIAGNOSTIC_FEATURE_LEVEL')) {throw 'Inherited diagnostic override escaped default profile.'}
+    $info=New-HeliosApplicationStartInfo '/fixture/game.exe' 'd3d11-backend-caps'
+    if($info.EnvironmentVariables['HELIOS_DIAGNOSTIC_BACKEND_CAPS'] -ne '1' -or $info.EnvironmentVariables.ContainsKey('HELIOS_DIAGNOSTIC_FEATURE_LEVEL')){throw 'Backend diagnostic profile leaked FL override'}
     function Test-HeliosProcessProfileSupport {return $false}
     $blocked=$false
     try {New-HeliosApplicationStartInfo '/fixture/game.exe' 'd3d11-fl11' | Out-Null} catch {$blocked=$true}

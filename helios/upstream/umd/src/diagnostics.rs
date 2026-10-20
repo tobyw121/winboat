@@ -1,5 +1,5 @@
 //! Bounded per-device initialization journal, independent of UmdTrace.
-//! No per-frame output and no changes to capability answers or synchronization.
+//! No per-frame output or changes to synchronization.
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Mutex, atomic::{AtomicBool, AtomicU64, Ordering}};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
@@ -7,6 +7,19 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 /// Process-local test override; reject everything outside the three known profiles.
 pub(crate) fn profile_override(value: &str) -> Option<u32> {
     match value { "0" => Some(0), "1" => Some(1), "2" => Some(2), _ => None }
+}
+
+/// Diagnostic-only intersection with the real backend. Keep existing runtime
+/// normalization, but never invent output/MSAA capabilities missing below it.
+/// Low DDI MSAA bits collide with API SO_BUFFER/TEXTURE1D and are handled apart.
+pub(crate) fn backend_bounded_format(fmt: u32, raw: u32, normalized: u32) -> u32 {
+    const OUTPUT: u32 = 0x0004_0000 | 0x0020_0000 | 0x0040_0000 |
+        0x0000_4000 | 0x0000_8000 | 0x0001_0000;
+    let mut answer = normalized & !(OUTPUT & !raw);
+    if raw & 0x0020_0000 == 0 { answer &= !8; }
+    if raw & 0x0040_0000 == 0 { answer &= !16; }
+    if fmt == 89 && raw == 0 { return 0x8000_0000; }
+    answer
 }
 
 const LIMIT: usize = 96;
@@ -107,6 +120,16 @@ pub(crate) unsafe fn note(h: crate::ddi::D3D10DDI_HDEVICE, kind: &'static str, v
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn backend_profile_cannot_add_output_caps_or_lose_xr_sentinel() {
+        assert_eq!(backend_bounded_format(28, 0, 0x0064_c018) & 0x0064_c018, 0);
+        assert_eq!(backend_bounded_format(28, 0x0064_c000, 0x0064_c018), 0x0064_c018);
+        assert_eq!(backend_bounded_format(89, 0, 0), 0x8000_0000);
+        for raw in [0, 8, 16, 0x20_0000, 0x40_0000, u32::MAX] {
+            let answer = backend_bounded_format(28, raw, u32::MAX);
+            assert_eq!(answer & 0x0065_c000 & !raw, 0);
+        }
+    }
     #[test]
     fn diagnostic_profiles_are_explicit_and_bounded() {
         for n in 0..3 { assert_eq!(profile_override(&n.to_string()), Some(n)); }
