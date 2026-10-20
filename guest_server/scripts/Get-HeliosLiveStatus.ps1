@@ -10,12 +10,14 @@ function Get-HeliosLiveStatus([scriptblock]$Read,[bool]$Slow) {
         catch {$report.errors+='Unavailable: '+$endpoint}
     }
     if ($Slow -and $report.Contains('graphics/diagnostics')) {
+        $report.boundDriverVersion='unknown'
         try {
             $driver=$report['graphics/diagnostics'].driver
             $bound=@($driver.controllers | Where-Object {$_.PNPDeviceID -like 'PCI\VEN_1AF4&DEV_1050*'} | Select-Object -First 1)
             $warnings=@()
             if ($bound.Count -eq 1) {
                 $version=[string]$bound[0].DriverVersion
+                $report.boundDriverVersion=$version
                 foreach($process in @($driver.application.loadedApplications)) {
                     foreach($module in @($process.modules)) {
                         if ($module.name -like 'helios_umd*' -and $module.version -and

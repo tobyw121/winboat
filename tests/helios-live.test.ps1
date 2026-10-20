@@ -16,6 +16,7 @@ $slow=Get-HeliosLiveStatus {param($endpoint)
     [pscustomobject]@{}
 } $true
 if (@($slow.warnings).Count -ne 2) {throw 'Mixed loaded and bound versions were hidden'}
+if ($slow.boundDriverVersion -ne '22.22.291.0') {throw 'Bound version missing from dashboard summary.'}
 $failed=Get-HeliosLiveStatus {throw 'offline'} $false
 if ($failed.errors.Count -ne 2) {throw 'Offline API reported as healthy'}
 Write-Host 'Dashboard fast/slow separation, mixed-version warnings and unavailable API passed.'

@@ -2,6 +2,8 @@
 param([switch]$CheckUI)
 Add-Type -AssemblyName System.Windows.Forms
 . (Join-Path $PSScriptRoot 'Helios-ControlSettings.ps1')
+. (Join-Path $PSScriptRoot 'Helios-Comparison.ps1')
+. (Join-Path $PSScriptRoot 'Start-HeliosApplication.ps1') -LibraryOnly
 if (-not $CheckUI -and [Diagnostics.Process]::GetCurrentProcess().SessionId -eq 0) {throw 'The control panel requires the interactive desktop.'}
 if (-not $CheckUI -and -not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {throw 'Start Helios Control as Administrator.'}
 $form=New-Object Windows.Forms.Form
@@ -9,6 +11,8 @@ $form.Text='Helios Control';$form.Width=900;$form.Height=760
 $layout=New-Object Windows.Forms.FlowLayoutPanel
 $layout.Dock='Fill';$layout.FlowDirection='TopDown';$layout.WrapContents=$false;$layout.AutoScroll=$true
 $form.Controls.Add($layout)
+$dashboardSummary=New-Object Windows.Forms.Label;$dashboardSummary.Width=840;$dashboardSummary.Height=40
+$dashboardSummary.Text='Live-Status wird geladen; fehlende Daten bleiben unbekannt.';$layout.Controls.Add($dashboardSummary)
 $dashboard=New-Object Windows.Forms.TextBox
 $dashboard.Multiline=$true;$dashboard.ReadOnly=$true;$dashboard.ScrollBars='Both';$dashboard.Width=840;$dashboard.Height=150
 $dashboard.Text='Live status: native adapter state every 5 seconds; slow reports at most once a minute.'
@@ -40,6 +44,9 @@ Add-HeliosButton 'Status und geladene Grafikmodule' {
 Add-HeliosButton 'Installations- und Teststatus' {
     Invoke-HeliosPanel {& (Join-Path $PSScriptRoot 'Manage-HeliosTransaction.ps1') -Action Status | ConvertFrom-Json}
 }
+Add-HeliosButton 'Freigabestufe dieser VM anzeigen' {
+    Invoke-HeliosPanel {& (Join-Path $PSScriptRoot 'Manage-HeliosRelease.ps1') -Action Status | ConvertFrom-Json}
+}
 Add-HeliosLabel 'Treiberoptionen: Unbestimmt = Treibervorgabe. Änderungen benötigen einen Windows-Neustart. Bei einem Fehler ursprüngliche Werte wiederherstellen.'
 $boxes=@{}
 $current=Get-HeliosControlSettings
@@ -63,7 +70,22 @@ Add-HeliosButton 'Ursprüngliche Optionen wiederherstellen' {
     }
 }
 Add-HeliosLabel 'Vulkan/Mesa Venus wird auch von D3D11/12 und OpenGL genutzt. Globales Abschalten ist daher kein unabhängiger API-Schalter und wird hier nicht angeboten.'
+Add-HeliosLabel 'Anwendungsprofil: nur fuer eine x64-EXE, ohne globale Registry-Aenderung. Diagnoseprofile koennen die Grafikfunktionen einschraenken; alte Treiber ohne Unterstuetzung werden abgewiesen.'
+$applicationMode=New-Object Windows.Forms.ComboBox;$applicationMode.DropDownStyle='DropDownList';$applicationMode.Width=330
+[void]$applicationMode.Items.AddRange(@('driver-default','d3d11-fl10','d3d11-fl11'));$applicationMode.SelectedIndex=0;$layout.Controls.Add($applicationMode)
+Add-HeliosButton 'Anwendungs-Verknuepfung erstellen' {
+    Invoke-HeliosPanel {
+        $dialog=New-Object Windows.Forms.OpenFileDialog;$dialog.Filter='Windows x64 application|*.exe'
+        if($dialog.ShowDialog() -eq 'OK'){return New-HeliosApplicationShortcut $dialog.FileName ([string]$applicationMode.SelectedItem)}
+    }
+}
 $label=New-Object Windows.Forms.TextBox;$label.Text='A1';$label.Width=330;$layout.Controls.Add($label)
+Add-HeliosButton 'A/B/A/B-Vergleich beginnen' {
+    Invoke-HeliosPanel {New-HeliosComparisonSession;$label.Text='A1';return @{next='A1';message='Baseline explicitly selected; run tests before changing the driver.'}}
+}
+Add-HeliosButton 'Naechster Vergleichsschritt / Ergebnis' {
+    Invoke-HeliosPanel {$progress=Get-HeliosComparisonProgress;if($progress.Contains('label')){$label.Text=$progress.label};return $progress}
+}
 Add-HeliosLabel 'Optional: Verzeichnis der zusätzlichen Grafikprüfprogramme und unabhängig geprüfte tools.json-SHA-256 (für A/B/A/B dieselben Programme verwenden):'
 $tools=New-Object Windows.Forms.TextBox;$tools.Width=840;$layout.Controls.Add($tools)
 $toolsPin=New-Object Windows.Forms.TextBox;$toolsPin.Width=840;$layout.Controls.Add($toolsPin)
@@ -79,9 +101,29 @@ Add-HeliosButton 'Grafiktests starten (kurze Testfenster)' {
         return @{status='running';processId=$child.Id;message='Tests run in a separate interactive window. Export the result after completion.'}
     }
 }
+$resumeScenario=New-Object Windows.Forms.ComboBox;$resumeScenario.DropDownStyle='DropDownList';$resumeScenario.Width=330
+[void]$resumeScenario.Items.AddRange(@('minimize','reconnect','standby'));$resumeScenario.SelectedIndex=0;$layout.Controls.Add($resumeScenario)
+Add-HeliosButton 'Wiederaufnahme beobachten und testen' {
+    Invoke-HeliosPanel {
+        $observed.Checked=$false
+        $arguments='-NoProfile -NoExit -ExecutionPolicy Bypass -File "'+(Join-Path $PSScriptRoot 'Test-HeliosResume.ps1')+'" -Scenario '+[string]$resumeScenario.SelectedItem
+        if($tools.Text) {
+            if($tools.Text -match '["\r\n]' -or $toolsPin.Text -notmatch '^[a-fA-F0-9]{64}$'){throw 'Invalid tools path or manifest pin.'}
+            $arguments+=' -ToolsPath "'+$tools.Text.TrimEnd('\')+'" -ToolsManifestSha256 '+$toolsPin.Text
+        }
+        $child=Start-Process "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList $arguments -PassThru
+        return @{status='running';processId=$child.Id;message='Perform the selected action on the host/viewer, then inspect visible recovery and the saved resume report.'}
+    }
+}
 $observed=New-Object Windows.Forms.CheckBox
 $observed.Text='Farben, Fensterwechsel, Auflösungswechsel und Wiederherstellung geprüft; kein Flackern'
 $observed.Width=840;$layout.Controls.Add($observed)
+Add-HeliosButton 'Nur auf dieser VM als getestet markieren' {
+    Invoke-HeliosPanel {& (Join-Path $PSScriptRoot 'Manage-HeliosRelease.ps1') -Action MarkTested -ObservedStable:$observed.Checked | ConvertFrom-Json}
+}
+Add-HeliosButton 'Lokale Freigabe zuruecknehmen' {
+    Invoke-HeliosPanel {& (Join-Path $PSScriptRoot 'Manage-HeliosRelease.ps1') -Action Reset | ConvertFrom-Json}
+}
 Add-HeliosButton 'Update nach Neustart bestätigen' {
     Invoke-HeliosPanel {& (Join-Path $PSScriptRoot 'Manage-HeliosTransaction.ps1') -Action Accept -ObservedStable:$observed.Checked | ConvertFrom-Json}
 }
