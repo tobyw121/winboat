@@ -26,6 +26,9 @@ on:
       - 'tests/helios-support-export.py'
       - 'tests/helios-support-bundle.py'
       - 'scripts/helios/support-bundle.py'
+      - 'scripts/helios/graphics-trial.py'
+      - 'scripts/helios/rescue-graphics.py'
+      - 'tests/helios-graphics-trial.py'
       - 'tests/helios-io-poll-qemu.py'
       - 'tests/helios-performance-metrics.py'
       - 'tests/helios-comparison.py'
@@ -78,6 +81,9 @@ on:
       - 'tests/helios-support-export.py'
       - 'tests/helios-support-bundle.py'
       - 'scripts/helios/support-bundle.py'
+      - 'scripts/helios/graphics-trial.py'
+      - 'scripts/helios/rescue-graphics.py'
+      - 'tests/helios-graphics-trial.py'
       - 'tests/helios-io-poll-qemu.py'
       - 'tests/helios-performance-metrics.py'
       - 'tests/helios-comparison.py'
@@ -123,6 +129,8 @@ jobs:
       - run: python3 tests/helios-bisect.py
       - run: python3 tests/helios-support-export.py
       - run: python3 tests/helios-support-bundle.py
+      - run: python3 tests/helios-graphics-trial.py
+      - run: python3 tests/helios-rescue.test.py
       - run: python3 tests/helios-comparison.py
       - run: python3 scripts/helios/performance-profile.py baseline --output /tmp/baseline.json
   host-build:

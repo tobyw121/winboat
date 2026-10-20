@@ -20,11 +20,11 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def docker_json(*args):
-    return json.loads(subprocess.check_output(['docker', *args], text=True))
+    return json.loads(subprocess.check_output(['docker', *args], text=True, timeout=10))
 
 
-def guest_action(container, action):
-    ports = subprocess.check_output(['docker', 'port', container, '7148/tcp'], text=True).splitlines()
+def guest_action(container, action, timeout=60):
+    ports = subprocess.check_output(['docker', 'port', container, '7148/tcp'], text=True, timeout=5).splitlines()
     port = int(ports[0].rsplit(':', 1)[1])
     if not 1 <= port <= 65535:
         raise RuntimeError('Invalid guest API port')
@@ -32,7 +32,7 @@ def guest_action(container, action):
         headers={'X-WinBoat-Recovery': action})
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
     try:
-        with opener.open(request, timeout=60) as response:
+        with opener.open(request, timeout=timeout) as response:
             return json.load(response)
     except urllib.error.HTTPError as error:
         if error.code == 404:
@@ -114,7 +114,9 @@ def host_action(container, restore):
         for source, targets in [('display.sh', ['/run/display.sh']),
                                 ('qemu.sh', ['/usr/bin/qemu-system-x86_64', '/usr/local/bin/qemu-system-x86_64'])]:
             destination = folder / source
-            shutil.copyfile(ROOT / 'helios/host' / source, destination)
+            packaged=Path(__file__).with_name('rescue-host')
+            host_root=packaged if packaged.is_dir() else ROOT/'helios/host'
+            shutil.copyfile(host_root/source, destination)
             destination.chmod(0o755)
             mounts += [{'type': 'bind', 'source': str(destination), 'target': target, 'read_only': True} for target in targets]
         override = folder / 'compose-vga.json'
