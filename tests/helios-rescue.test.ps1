@@ -55,6 +55,11 @@ $script:running=$false; $script:basic=31
 if((Invoke-HeliosRescue 'helios-disable').status -ne 'blocked' -or $script:operations.Count){throw 'Unhealthy VGA allowed disable'}
 $script:basic=22; $script:pending=$true
 if((Invoke-HeliosRescue 'helios-disable').status -ne 'restart-required' -or $script:operations.Count -ne 1 -or -not $script:hold){throw 'VGA reboot need ignored'}
+$script:basic=22;$script:pending=$false;$script:operations=@()
+if((Invoke-HeliosRescue 'helios-disable' $true).status -ne 'blocked' -or $script:operations.Count){throw 'Automatic isolation changed VGA'}
+$script:basic=0
+if((Invoke-HeliosRescue 'helios-disable' $true).status -ne 'disabled' -or ($script:operations -join ',') -ne '/disable-device HELIOS'){throw 'Healthy-VGA automatic isolation failed'}
+$script:operations=@()
 $script:missing=$true; $script:basic=0; $script:pending=$false; $script:operations=@()
 if((Invoke-HeliosRescue 'helios-disable').status -ne 'held' -or $script:operations.Count){throw 'Absent hardware claimed a device disable'}
 $script:taskStates.HeliosGraphicsProvisioning='Ready';$script:failPause=$true;$blocked=$false

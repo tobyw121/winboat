@@ -144,6 +144,21 @@ Add-HeliosButton 'Testergebnis exportieren' {
         }
     }
 }
+Add-HeliosButton 'Automatische Helios-Isolation aktivieren' {
+    Invoke-HeliosPanel {
+        $key='HKLM:\SOFTWARE\WinBoat\DisplayRecovery'
+        . (Join-Path $PSScriptRoot 'Initialize-DisplayRecoveryKey.ps1')
+        Initialize-DisplayRecoveryKey $key
+        New-ItemProperty -LiteralPath $key -Name AutoIsolateHelios -Value 1 -PropertyType DWord -Force | Out-Null
+        return @{status='enabled';scope='Three confirmed PnP failures with healthy primary VGA; no automatic re-enable.'}
+    }
+}
+Add-HeliosButton 'Automatische Helios-Isolation deaktivieren' {
+    Invoke-HeliosPanel {
+        Remove-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\WinBoat\DisplayRecovery' -Name AutoIsolateHelios -ErrorAction SilentlyContinue
+        return @{status='disabled'}
+    }
+}
 Add-HeliosButton 'Helios isolieren, VGA behalten' {
     Invoke-HeliosPanel {& (Join-Path $PSScriptRoot 'Set-HeliosRescue.ps1') -Action helios-disable | ConvertFrom-Json}
 }

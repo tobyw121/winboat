@@ -15,6 +15,7 @@ import (
 
 var displayTopology topologyController // collectDisplayAdapters is serialized by the monitor
 var restartVerification graphicsRetry
+var containment graphicsBreaker
 
 func collectDisplayAdapters(ctx context.Context, viewerUnavailable bool) ([]byte, error) {
 	executable, err := os.Executable()
@@ -55,6 +56,19 @@ func collectDisplayAdapters(ctx context.Context, viewerUnavailable bool) ([]byte
 		}
 		return next, err
 	})
+	if containment.observe(time.Now(), !rescue && graphicsContainmentEnabled(), pnp, desktop, probeErr) {
+		// The fixed rescue script rechecks VGA health and takes the existing
+		// provisioning mutex. No VGA enable, topology change or reboot allowed.
+		if graphicsRescueMutex.TryLock() {
+			script := filepath.Join(filepath.Dir(executable), "scripts", "Set-HeliosRescue.ps1")
+			_, isolationErr := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, "-Action", "helios-disable", "-PreserveVga").Output()
+			graphicsRescueMutex.Unlock()
+			pnp.Recovery = "helios-isolation-requested"
+			if isolationErr != nil {
+				pnp.Recovery = "helios-isolation-unavailable"
+			}
+		}
+	}
 	pnp.Policy = &policy
 	if rescue {
 		pnp.Policy = &topologyStatus{Goal: "vga-rescue", State: "held", VGAProtection: "no-automatic-vga-or-primary-changes"}

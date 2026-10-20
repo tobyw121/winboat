@@ -1,5 +1,5 @@
 # Explicit, fixed PnP rescue. Never accept a caller-supplied device ID or command.
-param([ValidateSet('helios-disable','helios-enable')][string]$Action, [switch]$LibraryOnly)
+param([ValidateSet('helios-disable','helios-enable')][string]$Action, [switch]$LibraryOnly,[switch]$PreserveVga)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Initialize-DisplayRecoveryKey.ps1')
@@ -16,7 +16,7 @@ function Get-HeliosRescueDevices {
         helios=@($all | Where-Object {$_.Present -and $_.PNPDeviceID -like 'PCI\VEN_1AF4&DEV_1050*' -and $_.Service -eq 'helios_kmd_render'})
     }
 }
-function Invoke-HeliosRescue([string]$Operation) {
+function Invoke-HeliosRescue([string]$Operation,[bool]$NoVgaChange=$false) {
     if ($Operation -notin @('helios-disable','helios-enable')) { throw 'Unknown graphics recovery operation.' }
     $idleTasks=@()
     $script:rescueStage='inspect-installer-tasks'
@@ -50,6 +50,7 @@ function Invoke-HeliosRescue([string]$Operation) {
         }
     }
     if ($devices.basic[0].ConfigManagerErrorCode -eq 22) {
+        if ($NoVgaChange) {return @{status='blocked';message='Automatic isolation requires healthy VGA; no VGA change allowed.'}}
         $script:rescueStage='enable-vga'
         & pnputil.exe /enable-device $devices.basic[0].PNPDeviceID | Out-Null
         if ($LASTEXITCODE -eq 3010) { return @{status='restart-required';message='VGA needs a Windows restart; Helios was not changed.'} }
@@ -93,7 +94,7 @@ $owned=$false
 try {
     try { $owned=$lock.WaitOne(0) } catch [Threading.AbandonedMutexException] { $owned=$true }
     if (-not $owned) { @{status='blocked';message='Helios provisioning is active; no devices changed.'} | ConvertTo-Json -Compress; return }
-    Invoke-HeliosRescue $Action | ConvertTo-Json -Compress
+    Invoke-HeliosRescue $Action ([bool]$PreserveVga) | ConvertTo-Json -Compress
 }
 catch {
     $exception=$_.Exception

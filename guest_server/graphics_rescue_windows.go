@@ -32,3 +32,13 @@ func runGraphicsRescue(ctx context.Context, action string) ([]byte, error) {
 	script := filepath.Join(filepath.Dir(executable), "scripts", "Set-HeliosRescue.ps1")
 	return exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, "-Action", action).Output()
 }
+
+func graphicsContainmentEnabled() bool {
+	key, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\WinBoat\DisplayRecovery`, registry.QUERY_VALUE)
+	if err != nil {
+		return false
+	}
+	defer key.Close()
+	value, _, err := key.GetIntegerValue("AutoIsolateHelios")
+	return err == nil && value == 1
+}
