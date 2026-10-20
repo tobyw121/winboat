@@ -30,7 +30,7 @@ class SoakTests(unittest.TestCase):
         def sleep(seconds): now[0]+=seconds
         def endpoint(opener,base,name,timeout):
             return {'helios':{'state':'running','private':'secret'}} if name.endswith('adapters') else {'driver':{'collectedAtUtc':'2026-10-20T12:00:00Z','dwmCrashes':[]}}
-        with tempfile.TemporaryDirectory() as root,patch.object(soak,'load',side_effect=lambda name: diagnostics if name=='diagnose-graphics' else metrics),patch.object(soak.subprocess,'check_output',return_value='127.0.0.1:7148'),patch.object(metrics,'container_sample',return_value={'cpuPercentOfOneCore':150}),patch.object(diagnostics,'read_endpoint',side_effect=endpoint):
+        with tempfile.TemporaryDirectory() as root,patch.object(soak,'load',side_effect=lambda name: diagnostics if name=='diagnose-graphics' else metrics),patch.object(soak.subprocess,'check_output',return_value='127.0.0.1:7148'),patch.object(metrics,'gpu_sample',return_value={'available':False}),patch.object(metrics,'container_sample',return_value={'cpuPercentOfOneCore':150}),patch.object(diagnostics,'read_endpoint',side_effect=endpoint):
             output=Path(root)/'run.jsonl'
             result=soak.record('fixture',1,15,output,clock=lambda:now[0],sleeper=sleep)
             self.assertTrue(result['completed']);self.assertEqual(result['validCpuSamples'],4)
@@ -38,6 +38,22 @@ class SoakTests(unittest.TestCase):
             self.assertEqual(data[0]['kind'],'header');self.assertEqual(data[-1]['kind'],'summary')
             self.assertNotIn('secret',output.read_text())
             with self.assertRaises(FileExistsError): soak.record('fixture',1,15,output)
+            now[0]=0
+            def interrupt(seconds): raise KeyboardInterrupt()
+            interrupted=Path(root)/'interrupted.jsonl'
+            partial=soak.record('fixture',1,15,interrupted,clock=lambda:now[0],sleeper=interrupt)
+            self.assertFalse(partial['completed']);self.assertEqual(partial['validCpuSamples'],1)
+            checkpoint=json.loads(interrupted.read_text().splitlines()[-1])
+            self.assertEqual(checkpoint['kind'],'summary');self.assertFalse(checkpoint['completed'])
+
+    def test_idle_frames_are_not_hangs_and_stale_telemetry_is_separate(self):
+        rows=[{'kind':'sample','elapsedSeconds':i*60,'intervalSeconds':60,'container':{},'adapters':{'helios':{}},
+               'viewer':[{'pid':1,'console':0,'monotonicUs':stamp,'renderedFrames':10,'coalescedUpdates':0}]} for i,stamp in enumerate((100,200,200))]
+        self.assertIsNone(soak.summarize(rows)['suspectedStallIntervals'])
+        result=soak.summarize(rows,True)
+        self.assertEqual(result['suspectedStallIntervals'],1)
+        self.assertEqual(result['staleViewerTelemetryIntervals'],1)
+        self.assertEqual(result['observedRenderedFrames'],0)
 
 
 if __name__=='__main__': unittest.main()

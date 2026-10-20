@@ -1,7 +1,7 @@
 # Helios: Live-Diagnose und geführte Untersuchung
 
 Diese Erweiterungen benötigen eine aktuelle WinBoat-AppImage und den Gastdienst
-mit `helios-watchdog-v13`. Der Standardinstaller bleibt `.291`; weder ein Build
+mit `helios-watchdog-v14`. Der Standardinstaller bleibt `.291`; weder ein Build
 noch eine lokale Testmarkierung ändert den Repository-Standard.
 
 ```bash
@@ -164,3 +164,5 @@ Dashboard-Abfrageaufteilung und die gebündelten Diagnosehilfen. Windows CI baut
 auch das tatsächliche WinForms-Formular ohne Treiberänderung auf.
 Reales Standby-Verhalten und sichtbare Ausgabe auf der RTX 2070 müssen weiterhin
 in der VM abgenommen werden. Diese Erweiterungen ersetzen keinen Treiberfix.
+
+Weitere Werkzeuge: [erste DDI-Fehler, DWM-Minidumps, Langzeitmessung, Regressionssuche und QEMU-Profile](helios-deep-diagnostics.md).

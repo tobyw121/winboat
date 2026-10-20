@@ -14,13 +14,13 @@ support=importlib.util.module_from_spec(SPEC);SPEC.loader.exec_module(support)
 
 class ExportTests(unittest.TestCase):
     def test_nested_private_strings_and_unknown_fields_never_export(self):
-        source={'password':'secret','host':{'image':'private-registry/user','qemuBackend':{'backend':'dbus','renderNode':'/dev/dri/renderD128'}},
+        source={'password':'secret','host':{'image':'private-registry/user','qemuBackend':{'backend':'dbus','renderNode':'/dev/dri/renderD128','performance':{'requestedAccelerator':'kvm','ioThreads':[{'pollMaxNs':0}]}}},
                 'graphics/diagnostics':{'driver':{'application':{'loadedApplications':[{'name':'dwm.exe','modules':[{'name':'vulkan_virtio.dll','path':'C:\\Users\\private\\x.dll'}]}],
                                                                'umdLogs':[{'file':'umd-123.log','codes':['VK_ERROR_DEVICE_LOST'],'journal':{'firstFailure':[{'kind':'resource','values':['28','1920']}]}}]}}}}
         filtered=support.filter_report(source)
         encoded=json.dumps(filtered)
         self.assertNotIn('private',encoded);self.assertNotIn('secret',encoded)
-        self.assertIn('VK_ERROR_DEVICE_LOST',encoded);self.assertIn('1920',encoded)
+        self.assertIn('pollMaxNs',encoded);self.assertIn('kvm',encoded);self.assertIn('VK_ERROR_DEVICE_LOST',encoded);self.assertIn('1920',encoded)
         self.assertIsNone(support.filter_report(10**1000))
         self.assertIsNone(support.filter_report(float('nan')))
 

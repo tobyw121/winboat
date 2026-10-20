@@ -18,7 +18,7 @@ git pull --ff-only origin work
 ```
 
 Die neue AppImage verwenden und den Gastdienst aktualisieren. Das neue
-Grafikprotokoll lautet `helios-watchdog-v13`:
+Grafikprotokoll lautet `helios-watchdog-v14`:
 
 ```bash
 python3 scripts/atlas/diagnose-vm.py --update-guest
@@ -228,3 +228,5 @@ installieren auf den CI-Rechnern keinen Helios-Treiber.
 
 Ein vollständiger Windows-/RTX-2070-Dauertest und die sichtbare Abnahme bleiben
 noch erforderlich. Deshalb bleibt `.291` unverändert die Vorgabe.
+
+Erweiterte Messwerkzeuge und das neue QEMU-I/O-Profil: [Helios Deep Diagnostics](helios-deep-diagnostics.md).

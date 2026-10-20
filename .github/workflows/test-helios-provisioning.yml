@@ -220,6 +220,7 @@ jobs:
           ./tests/helios-application-diagnostics.test.ps1
           ./tests/graphics-runtime-diagnostics.test.ps1
           ./tests/helios-journal-report.test.ps1
+          ./tests/helios-crash-capture.test.ps1
           ./tests/helios-provisioning.test.ps1
           ./tests/atlas-helios-handoff.test.ps1
       - name: Read real Windows kernel and driver diagnostics without changing configuration

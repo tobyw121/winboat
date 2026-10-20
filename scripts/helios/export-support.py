@@ -32,6 +32,9 @@ driverRegistry acceptance transaction comparison resume release dump-policy resu
 label passed exitCode test summary identity manifestSha256 machineId bootAtUtc profile
 UmdD3D12 UmdCommandLists UmdFreeThreaded UmdAsyncPresentStream UmdPresentBatchFold FeatureLevel11
 maximumFiles expiresAtUtc dumpType enabled owned bytes available warnings apiRegistration
+performance requestedAccelerator cpuModel topology cpus sockets dies cores threads maxcpus
+disks cache aio discard detect-zeroes ioThreads pollMaxNs networkModels availableLogicalCpus
+framePhases submitMeanMs waitMeanMs cpuMeanMs ackSamples ackMeanMs captureSamples
 values featureCorrelation umdCorrelation runtimeModules exceptionCode faultingOffset
 '''.split())
 # No path or machine/user-specific free text is accepted. Even known keys such
@@ -43,6 +46,9 @@ created format msaa msaa-refused msaa-policy runtime-error resource view shader 
 returned device-ready device-create-failed device-destroyed no-present-observed adapter-open
 producer-init-failed producer-submit-failed buffer-size-mismatch egl-image-error
 egl-import-error memory-accounting-error device-selection-mismatch import-backoff
+kvm tcg host max qemu64 qemu32 other unspecified virtio-net-pci e1000 e1000e rtl8139
+writeback writethrough directsync unsafe native io_uring unmap on off raw qcow2
+software-cpu-emulation cpu-model-not-host unsafe-disk-cache emulated-network-adapter vcpu-affinity-oversubscribed
 minidump dwm.exe vulkan_virtio.dll helios_umd.dll helios_umd32.dll helios_umd12.dll
 helios_umd12_32.dll d3d11.dll dxgi.dll d3d12.dll vulkan-1.dll libgallium_wgl.dll
 '''.split()) | {'Microsoft Basic Display Adapter','Helios vGPU'}
