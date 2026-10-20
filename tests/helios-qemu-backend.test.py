@@ -30,6 +30,19 @@ class BackendTests(unittest.TestCase):
         self.assertNotIn('private', str(result))
         self.assertIn('display-count-invalid', backend.inspect(self.base() + ['-display', 'none'])['issues'])
 
+    def test_performance_audit_filters_paths_and_identifies_emulation(self):
+        args=self.base()+['-accel','tcg','-cpu','qemu64','-smp','6,sockets=1,cores=6,threads=1',
+                          '-drive','file=/private/disk.raw,cache=unsafe,aio=threads,format=raw',
+                          '-device','e1000e,netdev=n0','-object','iothread,id=private-name,poll-max-ns=0']
+        report=backend.inspect(args)['performance']
+        self.assertEqual(report['topology']['cpus'],6)
+        self.assertEqual(report['ioThreads'][0]['pollMaxNs'],0)
+        self.assertIn('software-cpu-emulation',report['warnings'])
+        self.assertIn('unsafe-disk-cache',report['warnings'])
+        self.assertIn('emulated-network-adapter',report['warnings'])
+        self.assertNotIn('private',str(report))
+        self.assertEqual(backend.performance(['qemu','-enable-kvm','-cpu','host'])['warnings'],[])
+
 
 if __name__ == '__main__':
     unittest.main()

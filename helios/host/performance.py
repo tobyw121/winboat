@@ -50,7 +50,11 @@ def options(args, env, huge_free=None):
             raise ValueError('Existing queue/FD configuration must be preserved')
         args[index] = ','.join(nic+['mq=on','vectors='+str(2*queues+2)])
         args[bi] = ','.join(backend+['queues='+str(queues)])
-    if number(env,'HELIOS_IO_THREAD',1):
+    io_thread=number(env,'HELIOS_IO_THREAD',1)
+    poll=env.get('HELIOS_IO_POLL_NS','')
+    if poll and (poll not in ('0','32768','65536') or not io_thread):
+        raise ValueError('I/O polling requires an enabled I/O thread and 0, 32768 or 65536 ns')
+    if io_thread:
         controllers = [(i,p) for i,p in devices if p[0] in ('virtio-scsi-pci','virtio-blk-pci')]
         if len(controllers) != 1 or any(p.startswith('iothread=') for p in controllers[0][1]):
             raise ValueError('I/O thread requires one unassigned VirtIO storage controller')
@@ -58,7 +62,7 @@ def options(args, env, huge_free=None):
             raise ValueError('I/O thread identity already in use')
         index, controller = controllers[0]
         args[index] = ','.join(controller+['iothread=helios-io'])
-        args += ['-object','iothread,id=helios-io']
+        args += ['-object','iothread,id=helios-io'+(',poll-max-ns='+poll if poll else '')]
     huge = env.get('HELIOS_HUGEPAGES','off')
     prealloc = number(env,'HELIOS_PREALLOC',1)
     if huge not in ('off','2M','1G'):

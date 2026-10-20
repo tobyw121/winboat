@@ -68,5 +68,13 @@ class PerformanceTests(unittest.TestCase):
         self.assertEqual(perf.options(BASE,{'HELIOS_FRAME_TRACE':'1'})[-2:],['-trace','enable=helios_vulkan_capture'])
         with self.assertRaises(ValueError): perf.options(BASE+['-trace','events=custom'],{'HELIOS_FRAME_TRACE':'1'})
 
+    def test_explicit_io_polling_preserves_other_policies(self):
+        result=perf.options(BASE,{'HELIOS_IO_THREAD':'1','HELIOS_IO_POLL_NS':'0'})
+        self.assertIn('iothread,id=helios-io,poll-max-ns=0',result)
+        self.assertIn('file=disk.raw,cache=writeback,aio=threads',result)
+        for env in ({'HELIOS_IO_POLL_NS':'0'},{'HELIOS_IO_THREAD':'1','HELIOS_IO_POLL_NS':'-1'},
+                    {'HELIOS_IO_THREAD':'1','HELIOS_IO_POLL_NS':'999999999'}):
+            with self.assertRaises(ValueError): perf.options(BASE,env)
+
 
 if __name__ == '__main__': unittest.main()

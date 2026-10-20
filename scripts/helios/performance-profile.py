@@ -8,19 +8,20 @@ import re
 
 
 def profile(name, affinity='', queues=0, hugepages='off', preallocate=False):
-    if name not in ('baseline','cache','io-thread','custom'):
+    if name not in ('baseline','cache','io-thread','io-thread-low-cpu','custom'):
         raise ValueError('Unknown comparison profile')
     if name != 'custom' and (affinity or queues or hugepages != 'off' or preallocate):
         raise ValueError('Use custom for CPU, network or memory options')
     return {'HELIOS_SHADER_CACHE':str(int(name == 'cache')),
-            'HELIOS_IO_THREAD':str(int(name == 'io-thread')),
+            'HELIOS_IO_THREAD':str(int(name in ('io-thread','io-thread-low-cpu'))),
+            'HELIOS_IO_POLL_NS':'0' if name=='io-thread-low-cpu' else '',
             'HELIOS_CPU_AFFINITY':affinity,'HELIOS_NET_QUEUES':str(queues),
             'HELIOS_HUGEPAGES':hugepages,'HELIOS_PREALLOC':str(int(preallocate)),'HELIOS_FRAME_TRACE':'0'}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('profile',choices=('baseline','cache','io-thread','custom'))
+    parser.add_argument('profile',choices=('baseline','cache','io-thread','io-thread-low-cpu','custom'))
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--service',default='windows')
     parser.add_argument('--cpu-affinity',default='')
@@ -29,17 +30,21 @@ def main():
     parser.add_argument('--preallocate',action='store_true')
     parser.add_argument('--shader-cache',action='store_true')
     parser.add_argument('--io-thread',action='store_true')
+    parser.add_argument('--io-poll-ns',choices=('0','32768','65536'))
     parser.add_argument('--frame-trace',action='store_true')
     args = parser.parse_args()
     if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}',args.service):
         parser.error('Invalid Compose service name')
     try:
         env=profile(args.profile,args.cpu_affinity,args.net_queues,args.hugepages,args.preallocate)
-        if args.shader_cache or args.io_thread or args.frame_trace:
+        if args.shader_cache or args.io_thread or args.frame_trace or args.io_poll_ns:
             if args.profile != 'custom': raise ValueError('Use custom to combine options')
             env['HELIOS_SHADER_CACHE']=str(int(args.shader_cache))
             env['HELIOS_IO_THREAD']=str(int(args.io_thread))
             env['HELIOS_FRAME_TRACE']=str(int(args.frame_trace))
+            if args.io_poll_ns:
+                if not args.io_thread: raise ValueError('Use --io-thread with --io-poll-ns')
+                env['HELIOS_IO_POLL_NS']=args.io_poll_ns
         # Validate CPU syntax with the same production parser, without changing affinity.
         import importlib.util
         path=Path(__file__).resolve().parents[2]/'helios/host/performance.py'

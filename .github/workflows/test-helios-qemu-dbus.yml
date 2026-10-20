@@ -13,6 +13,13 @@ on:
       - 'tests/helios-performance.py'
       - 'scripts/helios/performance-profile.py'
       - 'scripts/helios/measure-performance.py'
+      - 'scripts/helios/soak-graphics.py'
+      - 'scripts/helios/bisect-graphics.py'
+      - 'scripts/helios/export-support.py'
+      - 'tests/helios-soak.py'
+      - 'tests/helios-bisect.py'
+      - 'tests/helios-support-export.py'
+      - 'tests/helios-io-poll-qemu.py'
       - 'tests/helios-performance-metrics.py'
       - 'tests/helios-comparison.py'
       - 'scripts/helios/compare-graphics.py'
@@ -51,6 +58,13 @@ on:
       - 'tests/helios-performance.py'
       - 'scripts/helios/performance-profile.py'
       - 'scripts/helios/measure-performance.py'
+      - 'scripts/helios/soak-graphics.py'
+      - 'scripts/helios/bisect-graphics.py'
+      - 'scripts/helios/export-support.py'
+      - 'tests/helios-soak.py'
+      - 'tests/helios-bisect.py'
+      - 'tests/helios-support-export.py'
+      - 'tests/helios-io-poll-qemu.py'
       - 'tests/helios-performance-metrics.py'
       - 'tests/helios-comparison.py'
       - 'scripts/helios/compare-graphics.py'
@@ -90,6 +104,9 @@ jobs:
           persist-credentials: false
       - run: python3 tests/helios-performance.py
       - run: python3 tests/helios-performance-metrics.py
+      - run: python3 tests/helios-soak.py
+      - run: python3 tests/helios-bisect.py
+      - run: python3 tests/helios-support-export.py
       - run: python3 tests/helios-comparison.py
       - run: python3 scripts/helios/performance-profile.py baseline --output /tmp/baseline.json
   host-build:
@@ -106,6 +123,10 @@ jobs:
         run: |
           docker run --rm --entrypoint cat winboat-helios-test:drm-node /opt/helios/host-patches.sha256 > /tmp/compiled-patches.sha256
           cmp helios/host/patches/SHA256SUMS /tmp/compiled-patches.sha256
+      - name: Verify actual QEMU I/O polling properties without a guest disk
+        run: docker run --rm --network none -e LD_LIBRARY_PATH=/opt/helios/renderer/lib:/opt/helios/lib --entrypoint python3 -v "$PWD:/src:ro" -w /src winboat-helios-test:drm-node tests/helios-io-poll-qemu.py
+      - name: Verify runtime capability label
+        run: |
           test "$(docker image inspect --format '{{index .Config.Labels "org.winboat.helios.runtime"}}' winboat-helios-test:drm-node)" = glvnd-v7
   capture:
     runs-on: ubuntu-24.04
