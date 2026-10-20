@@ -61,6 +61,10 @@ function Invoke-HeliosAcceptance([string]$RunLabel) {
         manualChecks=@{visibleColors=$false;windowSwitch=$false;resolutionChange=$false;deviceRecovery=$false};
         scope='Probe exit codes and existing crash events. No complete visual, MSAA or device-loss certification.'}
     $report.extendedToolsSha256=$ToolsManifestSha256
+    try {
+        . (Join-Path $PSScriptRoot 'Helios-Comparison.ps1')
+        Save-HeliosComparisonRun $report
+    } catch {$report.historyError='Comparison history unavailable; export this result before the next run.'}
     Write-HeliosValidationJson 'acceptance.json' $report
     return $report
 }

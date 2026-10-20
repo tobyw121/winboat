@@ -33,7 +33,21 @@ def compare(reports):
         if versions[0]!=versions[2] or versions[1]!=versions[3]: raise ValueError('Driver version changed within a comparison arm')
         signatures=[{t['name']:t.get('sha256') for t in r['tests']} for r in reports]
         equal=all(s==signatures[0] for s in signatures) and all(signatures[0].values())
+        pairs=[]
+        for a,b in ((0,1),(2,3)):
+            other={t['name']:t for t in reports[b]['tests']}
+            first=None
+            for row in reports[a]['tests']:
+                target=other.get(row['name'])
+                if target is None or any(row.get(k)!=target.get(k) for k in ('status','exitCode','codes')):
+                    first={'test':row['name'],'baselineStatus':row.get('status'),'baselineCode':row.get('exitCode'),
+                           'candidateStatus':target.get('status') if target else 'missing',
+                           'candidateCode':target.get('exitCode') if target else None,
+                           'sameProbeBytes':bool(target and row.get('sha256') and row['sha256']==target.get('sha256'))}
+                    break
+            pairs.append({'baseline':reports[a]['label'],'candidate':reports[b]['label'],'firstDivergence':first})
         return {'schema':1,'comparisonKey':reports[0]['comparisonKey'],'driverVersions':versions,'sameProbeBytes':bool(equal),
+                'pairs':pairs,'reproducedFirstDivergence':pairs[0]['firstDivergence'] is not None and pairs[0]['firstDivergence']==pairs[1]['firstDivergence'],
                 'runs':[{'label':r['label'],'automatedPassed':r['automatedPassed'],'tests':r['tests']} for r in reports],
                 'scope':'Different probe hashes limit attribution to the driver. Manual visual and recovery checks remain separate.'}
     summaries=[r.get('summary',{}) for r in reports]

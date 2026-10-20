@@ -26,6 +26,15 @@ try {
     $blocked=$false
     try {Initialize-HeliosAcceptanceTools $source $pin | Out-Null} catch {$blocked=$true}
     if (-not $blocked) {throw 'Changed probe bytes were accepted.'}
+    . (Join-Path (Split-Path $PSScriptRoot) 'guest_server/scripts/Helios-Comparison.ps1')
+    New-HeliosComparisonSession
+    foreach($label in @('A1','B1','A2','B2')) {
+        $arm=$label.StartsWith('A')
+        Save-HeliosComparisonRun ([pscustomobject]@{runId=[guid]::NewGuid().ToString('N');label=$label;comparisonKey='same';
+            identity=[pscustomobject]@{version=$(if($arm){'291'}else{'294'})};
+            tests=@([pscustomobject]@{name='MSAA';sha256=('a'*64);status=$(if($arm){'passed'}else{'failed'});exitCode=$(if($arm){0}else{2})})})
+    }
+    if(-not (Get-HeliosComparisonProgress).reproducedFirstDivergence){throw 'Archived comparison session lost its first failure.'}
     Write-Host 'Real Windows protected storage, atomic receipts and external-tool hash checks passed.'
 } finally {
     $env:ProgramData=$previous
