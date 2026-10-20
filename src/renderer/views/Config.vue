@@ -110,6 +110,8 @@
                     <p class="text-sm text-neutral-400">Record flickering for about a minute. Collects guest status and existing host logs without changing drivers or restarting Windows. Requires Python 3 on Linux.</p>
                     <x-button :disabled="captureRunning || isApplyingChanges" @click="captureGraphics()">{{ captureRunning ? 'Recording…' : 'Capture flickering' }}</x-button>
                     <x-button :disabled="captureRunning || isApplyingChanges" @click="captureGraphics(true)">Create support ZIP</x-button>
+                    <x-button :disabled="trialRunning || captureRunning || isApplyingChanges" @click="testHelios()">Test installed Helios (60 seconds)</x-button>
+                    <p v-if="trialMessage" class="text-sm text-neutral-400 mt-2">{{ trialMessage }}</p>
                     <p v-if="captureMessage" class="text-sm text-neutral-400 mt-2">{{ captureMessage }}</p>
                 </x-card>
 
@@ -520,6 +522,7 @@ import {changedResourceErrors} from '../../shared/configuration-resources';
 import {configuredSharedFolders, prepareSharedFolders, checkSharedFolders, type ShareCheck} from '../lib/shared-folders';
 import { configureHelios, HELIOS_IMAGE } from '../../shared/helios';
 import {captureGraphics,captureRunning,captureMessage} from '../lib/graphics-capture';
+import {testHelios,trialRunning,trialMessage} from '../lib/graphics-trial';
 import { HELIOS_RESOLUTIONS, DEFAULT_HELIOS_RESOLUTION, heliosResolution, configureHeliosResolution } from '../../shared/helios-resolution';
 import { requireHelios } from '../lib/helios';
 import { resolveHeliosDisplay } from '../../shared/helios-display';
