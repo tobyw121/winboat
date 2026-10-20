@@ -663,7 +663,7 @@ pub(crate) unsafe extern "system" fn create_resource(
     h_resource: ddi::D3D10DDI_HRESOURCE,
     h_rt: ddi::D3D10DDI_HRTRESOURCE,
 ) {
-    crate::diagnostics::note(h, "resource", [0, 0, 0, 0, 0, 0]);
+    let _operation = crate::diagnostics::operation(h, "resource", [0, 0, 0, 0, 0, 0]);
     clear_handle(h_resource);
     if arg.is_null() {
         log_error!("DDI CreateResource identity: null args");
@@ -1317,7 +1317,7 @@ pub(crate) unsafe extern "system" fn open_resource(
     h_resource: ddi::D3D10DDI_HRESOURCE,
     h_rt: ddi::D3D10DDI_HRTRESOURCE,
 ) {
-    crate::diagnostics::note(h, "resource", [1, 0, 0, 0, 0, 0]);
+    let _operation = crate::diagnostics::operation(h, "resource", [1, 0, 0, 0, 0, 0]);
     clear_handle(h_resource);
 
     if arg.is_null() {

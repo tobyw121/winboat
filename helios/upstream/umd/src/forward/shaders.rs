@@ -75,7 +75,7 @@ pub(crate) unsafe extern "system" fn create_vertex_shader(
     _hrt: ddi::D3D10DDI_HRTSHADER,
     _sig: *const ddi::D3D10DDIARG_STAGE_IO_SIGNATURES,
 ) {
-    crate::diagnostics::note(h, "shader", [0, 0, 0, 0, 0, 0]);
+    let _operation = crate::diagnostics::operation(h, "shader", [0, 0, 0, 0, 0, 0]);
     clear_handle(h_shader);
     let Some(dev) = helios_device(h) else {
         return;
@@ -115,7 +115,7 @@ pub(crate) unsafe extern "system" fn create_pixel_shader(
     _hrt: ddi::D3D10DDI_HRTSHADER,
     _sig: *const ddi::D3D10DDIARG_STAGE_IO_SIGNATURES,
 ) {
-    crate::diagnostics::note(h, "shader", [1, 0, 0, 0, 0, 0]);
+    let _operation = crate::diagnostics::operation(h, "shader", [1, 0, 0, 0, 0, 0]);
     clear_handle(h_shader);
     let Some(dev) = helios_device(h) else {
         return;
@@ -536,7 +536,7 @@ pub(crate) unsafe fn create_shader_11_1_common(
     sig: *const ddi::D3D11_1DDIARG_STAGE_IO_SIGNATURES,
     name: &str,
 ) {
-    crate::diagnostics::note(h, "shader", [7, kind as u64, 0, 0, 0, 0]);
+    let _operation = crate::diagnostics::operation(h, "shader", [7, kind as u64, 0, 0, 0, 0]);
     clear_handle(h_shader);
     let Some(dev) = helios_device(h) else {
         return;
@@ -638,7 +638,7 @@ pub(crate) unsafe extern "system" fn create_geometry_shader(
     _hrt: ddi::D3D10DDI_HRTSHADER,
     _sig: *const ddi::D3D10DDIARG_STAGE_IO_SIGNATURES,
 ) {
-    crate::diagnostics::note(h, "shader", [2, 0, 0, 0, 0, 0]);
+    let _operation = crate::diagnostics::operation(h, "shader", [2, 0, 0, 0, 0, 0]);
     clear_handle(h_shader);
     let Some(dev) = helios_device(h) else {
         return;
@@ -677,7 +677,7 @@ pub(crate) unsafe extern "system" fn create_geometry_shader_so(
     _hrt: ddi::D3D10DDI_HRTSHADER,
     _sig: *const ddi::D3D10DDIARG_STAGE_IO_SIGNATURES,
 ) {
-    crate::diagnostics::note(h, "shader", [3, 0, 0, 0, 0, 0]);
+    let _operation = crate::diagnostics::operation(h, "shader", [3, 0, 0, 0, 0, 0]);
     clear_handle(h_shader);
     if arg.is_null() {
         set_runtime_error(h, E_INVALIDARG);
@@ -737,7 +737,7 @@ pub(crate) unsafe extern "system" fn create_hull_shader(
     _hrt: ddi::D3D10DDI_HRTSHADER,
     sig: *const ddi::D3D11DDIARG_TESSELLATION_IO_SIGNATURES,
 ) {
-    crate::diagnostics::note(h, "shader", [4, 0, 0, 0, 0, 0]);
+    let _operation = crate::diagnostics::operation(h, "shader", [4, 0, 0, 0, 0, 0]);
     clear_handle(h_shader);
     let Some(dev) = helios_device(h) else {
         return;
@@ -782,7 +782,7 @@ pub(crate) unsafe extern "system" fn create_hull_shader_11_1(
     _hrt: ddi::D3D10DDI_HRTSHADER,
     sig: *const ddi::D3D11_1DDIARG_TESSELLATION_IO_SIGNATURES,
 ) {
-    crate::diagnostics::note(h, "shader", [8, 0, 0, 0, 0, 0]);
+    let _operation = crate::diagnostics::operation(h, "shader", [8, 0, 0, 0, 0, 0]);
     clear_handle(h_shader);
     let Some(dev) = helios_device(h) else {
         return;
@@ -829,7 +829,7 @@ pub(crate) unsafe extern "system" fn create_domain_shader(
     _hrt: ddi::D3D10DDI_HRTSHADER,
     sig: *const ddi::D3D11DDIARG_TESSELLATION_IO_SIGNATURES,
 ) {
-    crate::diagnostics::note(h, "shader", [5, 0, 0, 0, 0, 0]);
+    let _operation = crate::diagnostics::operation(h, "shader", [5, 0, 0, 0, 0, 0]);
     clear_handle(h_shader);
     let Some(dev) = helios_device(h) else {
         return;
@@ -874,7 +874,7 @@ pub(crate) unsafe extern "system" fn create_domain_shader_11_1(
     _hrt: ddi::D3D10DDI_HRTSHADER,
     sig: *const ddi::D3D11_1DDIARG_TESSELLATION_IO_SIGNATURES,
 ) {
-    crate::diagnostics::note(h, "shader", [9, 0, 0, 0, 0, 0]);
+    let _operation = crate::diagnostics::operation(h, "shader", [9, 0, 0, 0, 0, 0]);
     clear_handle(h_shader);
     let Some(dev) = helios_device(h) else {
         return;
@@ -920,7 +920,7 @@ pub(crate) unsafe extern "system" fn create_compute_shader(
     h_shader: ddi::D3D10DDI_HSHADER,
     _hrt: ddi::D3D10DDI_HRTSHADER,
 ) {
-    crate::diagnostics::note(h, "shader", [6, 0, 0, 0, 0, 0]);
+    let _operation = crate::diagnostics::operation(h, "shader", [6, 0, 0, 0, 0, 0]);
     clear_handle(h_shader);
     let Some(dev) = helios_device(h) else {
         return;

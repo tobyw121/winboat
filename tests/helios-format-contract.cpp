@@ -70,7 +70,37 @@ int main(int argc, char** argv) {
             HRESULT create=device->CreateTexture2D(&desc,nullptr,&texture);
             bool ok=SUCCEEDED(create) && texture;
             if(ok && depth) {ComPtr<ID3D11DepthStencilView> view;create=device->CreateDepthStencilView(texture.Get(),nullptr,&view);ok=SUCCEEDED(create) && view;}
-            if(ok && !depth) {ComPtr<ID3D11RenderTargetView> view;create=device->CreateRenderTargetView(texture.Get(),nullptr,&view);ok=SUCCEEDED(create) && view;}
+            if(ok && !depth) {
+                ComPtr<ID3D11RenderTargetView> view;
+                create=device->CreateRenderTargetView(texture.Get(),nullptr,&view);ok=SUCCEEDED(create) && view;
+                const bool rgba=format==DXGI_FORMAT_R8G8B8A8_UNORM || format==DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+                const bool bgra=format==DXGI_FORMAT_B8G8R8A8_UNORM;
+                if(ok && (rgba || bgra)) {
+                    const float red[]={1,0,0,1};context->ClearRenderTargetView(view.Get(),red);
+                    ComPtr<ID3D11Texture2D> resolved,readback;
+                    auto plain=desc;plain.SampleDesc.Count=1;plain.SampleDesc.Quality=0;plain.BindFlags=0;
+                    ID3D11Texture2D* pixels=texture.Get();
+                    if(samples>1) {
+                        create=device->CreateTexture2D(&plain,nullptr,&resolved);ok=SUCCEEDED(create) && resolved;
+                        if(ok) {context->ResolveSubresource(resolved.Get(),0,texture.Get(),0,format);pixels=resolved.Get();}
+                    }
+                    plain.Usage=D3D11_USAGE_STAGING;plain.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
+                    if(ok) {create=device->CreateTexture2D(&plain,nullptr,&readback);ok=SUCCEEDED(create) && readback;}
+                    if(ok) {
+                        context->CopyResource(readback.Get(),pixels);D3D11_MAPPED_SUBRESOURCE map{};
+                        create=context->Map(readback.Get(),0,D3D11_MAP_READ,0,&map);ok=SUCCEEDED(create);
+                        if(ok) {
+                            ok=map.pData && map.RowPitch>=desc.Width*4;
+                            for(UINT y=0;ok && y<desc.Height;++y) for(UINT x=0;x<desc.Width;++x) {
+                                const auto* pixel=static_cast<const unsigned char*>(map.pData)+y*map.RowPitch+x*4;
+                                if(pixel[0]!=(bgra?0:255) || pixel[1]!=0 || pixel[2]!=(bgra?255:0) || pixel[3]!=255) ok=false;
+                            }
+                            context->Unmap(readback.Get(),0);
+                        }
+                    }
+                    std::printf("contract-pixels format=%u samples=%u passed=%u\n",static_cast<unsigned>(format),samples,ok?1u:0u);
+                }
+            }
             std::printf("contract format=%u samples=%u quality=%u support=0x%08x HRESULT=0x%08x passed=%u\n",
                 static_cast<unsigned>(format),samples,quality,support,static_cast<unsigned>(create),ok?1u:0u);
             if(!ok) ++failures;

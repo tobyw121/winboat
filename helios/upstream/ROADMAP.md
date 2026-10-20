@@ -4521,3 +4521,16 @@ larger nominal size cannot repair an incompatible image layout. Existing reuse
 and completion-before-free rules remain; no permanent retention of obsolete
 buffers after resize/teardown. Default bundled installer remains .291. Physical
 Windows/NVIDIA acceptance and a matching new driver build are still required.
+
+
+### Downstream .301: scoped first-error DDI context
+Resource, view and shader callback scopes now carry a thread-local operation
+code and bounded numeric shape. Runtime errors snapshot this context into the
+first-failure journal. Nested calls restore their parent and completed callbacks
+clear the scope; uninstrumented callbacks remain unknown rather than inheriting
+a stale label. Operation codes: 1=resource, 2=view, 3=shader. No pointer/command
+line collection or capability/synchronization changes. External format-contract
+validation now clears, resolves and checks exact RGBA/BGRA pixels for each
+advertised 1x/2x/4x/8x sample count. Floating/depth formats retain creation/view
+coverage; no additional pixel coverage is claimed for them. Default installer
+stays .291; real RTX acceptance remains pending.

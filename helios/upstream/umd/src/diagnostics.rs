@@ -22,6 +22,27 @@ pub(crate) fn backend_bounded_format(fmt: u32, raw: u32, normalized: u32) -> u32
     answer
 }
 
+// Scope the operation to its DDI callback and thread. An unrelated callback
+// must never inherit a stale label from an earlier resource/view operation.
+thread_local! { static OPERATION: std::cell::Cell<Option<(u64,[u64;6])>> = const { std::cell::Cell::new(None) }; }
+pub(crate) struct OperationScope(Option<(u64,[u64;6])>);
+impl Drop for OperationScope { fn drop(&mut self) { OPERATION.with(|slot| slot.set(self.0)); } }
+fn operation_code(kind: &str) -> u64 { match kind { "resource"=>1,"view"=>2,"shader"=>3,_=>0 } }
+fn annotate_error(mut values:[u64;6]) -> [u64;6] {
+    if let Some((kind,context))=OPERATION.with(|slot| slot.get()) {
+        values[1]=kind; values[2..6].copy_from_slice(&context[..4]);
+    }
+    values
+}
+/// SAFETY: same live runtime HDEVICE contract as `note`. Guard must remain in
+/// the DDI stack frame; dropping it restores a nested caller's context.
+pub(crate) unsafe fn operation(h: crate::ddi::D3D10DDI_HDEVICE, kind: &'static str, values:[u64;6]) -> OperationScope {
+    let previous=OPERATION.with(|slot| slot.replace(Some((operation_code(kind),values))));
+    // SAFETY: caller supplies the current DDI's live HDEVICE.
+    unsafe { note(h,kind,values); }
+    OperationScope(previous)
+}
+
 const LIMIT: usize = 96;
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -111,6 +132,11 @@ impl DeviceDiagnostics {
 /// SAFETY: callers supply the runtime's live HDEVICE for the current DDI.
 /// Resolver checks the object tag and follows deferred contexts to their parent.
 pub(crate) unsafe fn note(h: crate::ddi::D3D10DDI_HDEVICE, kind: &'static str, values: [u64; 6]) {
+    let code=operation_code(kind);
+    if code!=0 {
+        OPERATION.with(|slot| { if slot.get().is_some_and(|v|v.0==code) { slot.set(Some((code,values))); } });
+    }
+    let values=if kind=="runtime-error" {annotate_error(values)} else {values};
     // SAFETY: lifetime/handle contract is provided by the DDI caller above.
     if let Some(dev) = unsafe { crate::forward::helios_device(h) } {
         dev.diagnostics.record(kind, values);
@@ -120,6 +146,21 @@ pub(crate) unsafe fn note(h: crate::ddi::D3D10DDI_HDEVICE, kind: &'static str, v
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn ddi_failure_context_is_thread_scoped_and_restored() {
+        let failure=[0x80070057,0,0,0,0,0];
+        // SAFETY: the host test's resolver always returns None; no HDEVICE is read.
+        let outer=unsafe {operation(0,"resource",[28,1920,1080,4,0,0])};
+        assert_eq!(annotate_error(failure),[0x80070057,1,28,1920,1080,4]);
+        {
+            // SAFETY: same test resolver with no pointer dereference.
+            let _inner=unsafe {operation(0,"view",[2,1,0,0,0,0])};
+            assert_eq!(annotate_error(failure)[1],2);
+        }
+        assert_eq!(annotate_error(failure)[1],1);
+        assert_eq!(std::thread::spawn(move ||annotate_error(failure)).join().unwrap(),failure);
+        drop(outer);assert_eq!(annotate_error(failure),failure);
+    }
     #[test]
     fn backend_profile_cannot_add_output_caps_or_lose_xr_sentinel() {
         assert_eq!(backend_bounded_format(28, 0, 0x0064_c018) & 0x0064_c018, 0);
