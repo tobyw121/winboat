@@ -34,6 +34,7 @@ UmdD3D12 UmdCommandLists UmdFreeThreaded UmdAsyncPresentStream UmdPresentBatchFo
 maximumFiles expiresAtUtc dumpType enabled owned bytes available warnings apiRegistration
 performance requestedAccelerator cpuModel topology cpus sockets dies cores threads maxcpus
 disks cache aio discard detect-zeroes ioThreads pollMaxNs networkModels availableLogicalCpus
+memoryBudget local budgetBytes usageBytes reservationBytes availableReservationBytes
 framePhases submitMeanMs waitMeanMs cpuMeanMs ackSamples ackMeanMs captureSamples
 values featureCorrelation umdCorrelation runtimeModules exceptionCode faultingOffset
 '''.split())

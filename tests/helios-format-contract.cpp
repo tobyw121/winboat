@@ -36,6 +36,18 @@ int main(int argc, char** argv) {
     hr=D3D11CreateDevice(selected.Get(),warp?D3D_DRIVER_TYPE_WARP:D3D_DRIVER_TYPE_UNKNOWN,nullptr,
         D3D11_CREATE_DEVICE_BGRA_SUPPORT,&level,1,D3D11_SDK_VERSION,&device,nullptr,&context);
     if(FAILED(hr)) {std::printf("device HRESULT=0x%08x\n",static_cast<unsigned>(hr));return 5;}
+    ComPtr<IDXGIAdapter3> budgetAdapter;
+    if(selected && SUCCEEDED(selected.As(&budgetAdapter))) {
+        for(auto group:{DXGI_MEMORY_SEGMENT_GROUP_LOCAL,DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL}) {
+            DXGI_QUERY_VIDEO_MEMORY_INFO info{};
+            if(SUCCEEDED(budgetAdapter->QueryVideoMemoryInfo(0,group,&info))) {
+                std::printf("budget local=%u budget=%llu usage=%llu reservation=%llu available=%llu\n",
+                    group==DXGI_MEMORY_SEGMENT_GROUP_LOCAL?1u:0u,
+                    static_cast<unsigned long long>(info.Budget),static_cast<unsigned long long>(info.CurrentUsage),
+                    static_cast<unsigned long long>(info.CurrentReservation),static_cast<unsigned long long>(info.AvailableForReservation));
+            }
+        }
+    }
     unsigned failures=0;
     const DXGI_FORMAT formats[]={DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
         DXGI_FORMAT_B8G8R8A8_UNORM,DXGI_FORMAT_R16G16B16A16_FLOAT,DXGI_FORMAT_R32G32B32A32_FLOAT,

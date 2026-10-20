@@ -91,7 +91,10 @@ function Invoke-HeliosValidationProcess([string]$Exe,[string[]]$Arguments=@(),[i
         if ($text -match 'Direct3D 11 clear/copy/readback: all 527 pixels match') {$signals+='d3d11-readback-527'}
         if ($text -match 'MSAA format=\d+ samples=\d+ quality=\d+') {$signals+='msaa-query-observed'}
         $codes=@([regex]::Matches($text,'\b(?:VK_ERROR_[A-Z0-9_]{1,64}|0x[0-9a-fA-F]{8})\b') | ForEach-Object {$_.Value} | Sort-Object -Unique | Select-Object -First 16)
-        return [ordered]@{status=$(if($process.ExitCode -eq 0){'passed'}else{'failed'});exitCode=$process.ExitCode;signals=$signals;codes=$codes}
+        $budget=@([regex]::Matches($text,'(?m)^budget local=([01]) budget=(\d{1,20}) usage=(\d{1,20}) reservation=(\d{1,20}) available=(\d{1,20})\r?$') | Select-Object -First 2 | ForEach-Object {
+            [ordered]@{local=$_.Groups[1].Value -eq '1';budgetBytes=$_.Groups[2].Value;usageBytes=$_.Groups[3].Value;reservationBytes=$_.Groups[4].Value;availableReservationBytes=$_.Groups[5].Value}
+        })
+        return [ordered]@{status=$(if($process.ExitCode -eq 0){'passed'}else{'failed'});exitCode=$process.ExitCode;signals=$signals;codes=$codes;memoryBudget=$budget}
     } finally {
         if ($null -ne $process) {$process.Dispose()}
         Remove-Item -LiteralPath $out,$err -Force -ErrorAction SilentlyContinue

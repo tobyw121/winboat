@@ -673,6 +673,12 @@ pub(crate) unsafe extern "system" fn create_resource(
     let Some(device) = d3d11_device(h) else {
         return;
     };
+    // A lost backend device cannot own new resources. Report its original
+    // reason through the legal DDI mapping; the runtime owns recreation.
+    if let Err(error) = device.GetDeviceRemovedReason() {
+        set_runtime_error(h, create_error_hr(&error));
+        return;
+    }
     let a = &*arg;
     let mip0 = if a.pMipInfoList.is_null() {
         ddi::D3D10DDI_MIPINFO {
@@ -1336,6 +1342,11 @@ pub(crate) unsafe extern "system" fn open_resource(
         unsafe { read_open_identity(a.pPrivateDriverData, a.PrivateDriverDataSize) },
         Some((_, None))
     );
+    if a.NumAllocations > 30720 {
+        log_error!("DDI open_resource FAILED: allocation cardinality outside D3D11 bounds");
+        set_runtime_error(h, E_INVALIDARG);
+        return;
+    }
     if a.NumAllocations != 0 && info2.is_null() {
         log_error!("DDI open_resource FAILED: allocation array is null");
         set_runtime_error(h, E_INVALIDARG);

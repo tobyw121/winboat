@@ -30,7 +30,7 @@ function Invoke-HeliosAcceptance([string]$RunLabel) {
             @{name='D3D11 1x resize';exe='helios-msaa-present.exe';arguments=@('1','unorm','12','resize');coverage='Rendered pixel oracle, presentation and window resize';external=$true},
             @{name='D3D11 4x MSAA resize';exe='helios-msaa-present.exe';arguments=@('4','srgb','12','resize');coverage='4x MSAA resolve, pixel oracle, presentation and window resize';external=$true}
         )
-        if(Test-Path -LiteralPath (Join-Path $toolRoot 'helios-format-contract.exe') -PathType Leaf) {
+        if(@((Read-HeliosValidationJson (Join-Path $toolRoot 'tools.json')).files | Where-Object {$_.name -eq 'helios-format-contract.exe'}).Count -eq 1) {
             $plan+=@{name='D3D11 format contracts';exe='helios-format-contract.exe';arguments=@();coverage='Advertised formats/MSAA versus texture/view creation and shared readback';external=$true}
         }
     }
@@ -47,7 +47,8 @@ function Invoke-HeliosAcceptance([string]$RunLabel) {
             $result.sha256=$actual
             $execution=Invoke-HeliosValidationProcess $path $test.arguments
             $result.status=$execution.status;$result.exitCode=$execution.exitCode
-            if ($execution.Contains('signals')) {$result.signals=$execution.signals;$result.codes=$execution.codes}
+            if ($execution.Contains('signals')) {$result.signals=$execution.signals;$result.codes=$execution.codes
+                if($execution.Contains('memoryBudget')){$result.memoryBudget=$execution.memoryBudget}}
         }
         $rows+=$result
     }
@@ -93,6 +94,10 @@ function Initialize-HeliosAcceptanceTools([string]$Folder,[string]$Pin) {
         Protect-HeliosValidationPath $dest $false
         if ((Get-FileHash $dest -Algorithm SHA256).Hash -ine $entries[0].sha256) {throw 'Stored tool checksum mismatch.'}
     }
+    $storedManifest=Join-Path $target 'tools.json'
+    if((Test-Path -LiteralPath $storedManifest) -and ((Get-Item -LiteralPath $storedManifest -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'Stored manifest is a reparse point.'}
+    Copy-Item -LiteralPath $path -Destination $storedManifest -Force
+    if((Get-FileHash -LiteralPath $storedManifest -Algorithm SHA256).Hash -ine $Pin){throw 'Stored tools manifest checksum mismatch.'}
     return $target
 }
 if ($LibraryOnly) {return}

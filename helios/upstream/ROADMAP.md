@@ -4494,3 +4494,5 @@ complete subsystem contract.
   `VIRGL_LOG_LEVEL=debug`.
 
 WinBoat diagnostic source version 22.22.297.0: preserve the first failing DDI context (16 numeric events) across journal wrap and flush once at first runtime error. Resource events include format, width, height, sample count/quality and bind flags. This changes diagnostic sources only; bundled .291 remains unchanged and new binaries require Windows build and hardware validation.
+
+WinBoat diagnostic source 22.22.298.0: bound resource/open cardinalities, fail resource creation on a removed backend, add real format/MSAA/view/shared-readback acceptance and DXGI process budget observations. The default .291 bundle is unchanged. No claim of corrected caps or hardware acceptance without the native probe on Helios.
