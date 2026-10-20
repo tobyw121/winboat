@@ -31,7 +31,7 @@ Den Gastdienst einer laufenden VM unabhängig davon aktualisieren:
 python3 scripts/atlas/diagnose-vm.py --update-guest
 ```
 
-Das aktuelle Grafikprotokoll lautet `helios-watchdog-v12`. Eine alte AppImage
+Das aktuelle Grafikprotokoll lautet `helios-watchdog-v13`. Eine alte AppImage
 kann beim nächsten Start wieder ihren älteren Gastdienst einspielen.
 Details zum Build stehen in [build-helios-local.md](build-helios-local.md).
 

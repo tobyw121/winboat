@@ -1,5 +1,8 @@
 # Helios Control, Treiberabnahme und Versionsvergleich
 
+Live-Dashboard, Diagnoseknopf, geführten Vergleich, Anwendungsprofile und
+Wiederaufnahmetests beschreibt [helios-investigation.md](helios-investigation.md).
+
 Die neue Windows-Steuerung verbindet die vorhandenen Diagnosefunktionen mit
 einem ausdrücklichen Update- und Abnahmeweg. **22.22.291.0 bleibt Standard.**
 Die Installer-EXE-Dateien und der Kernel-Treibercode wurden dabei nicht geändert.
@@ -15,7 +18,7 @@ git pull --ff-only origin work
 ```
 
 Die neue AppImage verwenden und den Gastdienst aktualisieren. Das neue
-Grafikprotokoll lautet `helios-watchdog-v12`:
+Grafikprotokoll lautet `helios-watchdog-v13`:
 
 ```bash
 python3 scripts/atlas/diagnose-vm.py --update-guest
