@@ -1,0 +1,20 @@
+diff --git a/src/venus/vkr_device.c b/src/venus/vkr_device.c
+index b4e15fa..985556e 100644
+--- a/src/venus/vkr_device.c
++++ b/src/venus/vkr_device.c
+@@ -313,6 +313,15 @@ vkr_device_object_destroy(struct vkr_context *ctx,
+    /* always cleanup vkr allocs */
+    switch (obj->type) {
+    case VK_OBJECT_TYPE_DEVICE_MEMORY:
++      if (!ctx->on_worker_thread) {
++         /* No vkFreeMemory was issued on this teardown path. A later
++          * instance/device cleanup is not proof that aliases have retired. */
++         struct vkr_device_memory *mem = (struct vkr_device_memory *)obj;
++         if (mem->budget_charge || mem->budget_ref.valid)
++            vkr_log("shared VRAM teardown unconfirmed; retaining charge");
++         mem->budget_charge = 0;
++         mem->budget_ref.valid = false;
++      }
+       vkr_device_memory_release((struct vkr_device_memory *)obj);
+       break;
+    case VK_OBJECT_TYPE_DESCRIPTOR_POOL:

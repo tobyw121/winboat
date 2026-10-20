@@ -31,12 +31,24 @@ int main(void) {
     assert(write(finish[1],"x",1)==1);int status;
     assert(waitpid(child,&status,0)==child && WIFEXITED(status) && WEXITSTATUS(status)==0);
     assert(helios_vram_change(gpu,1000,1000,0,false,&used,NULL) && used==0);
+    child=fork();assert(child>=0);
+    if(!child) {
+        struct helios_vram_reference lost={0};
+        assert(helios_vram_change(gpu,1000,1000,600,false,NULL,NULL));
+        assert(helios_vram_reference_change(gpu,image,&lost,600,0)==1);
+        _exit(0); /* No verified Vulkan/alias teardown: never reclaim by dead PID. */
+    }
+    assert(waitpid(child,&status,0)==child && WIFEXITED(status) && WEXITSTATUS(status)==0);
+    assert(helios_vram_change(gpu,1000,1000,0,false,&used,NULL) && used==600);
+    assert(!helios_vram_change(gpu,1000,1000,251,false,NULL,NULL));
+    /* The intentionally lost backing stays known; test unknown lookup on another inode. */
+    int old_image=image;char other[]="/tmp/helios-ref-other-XXXXXX";image=mkstemp(other);assert(image>=0);unlink(other);
     struct helios_vram_reference unknown={0};assert(helios_vram_reference_change(gpu,image,&unknown,0,1)==0);
     assert(helios_vram_reference_change(NULL,image,NULL,0,2)==0);
     char refs[PATH_MAX];snprintf(refs,sizeof(refs),"%s.refs",ledger);
     fd=open(refs,O_WRONLY|O_TRUNC);assert(fd>=0);assert(write(fd,"bad",3)==3);close(fd);
     assert(helios_vram_reference_change(gpu,image,&unknown,0,1)==-1);
-    close(image);unlink(buffer);unlink(refs);unlink(ledger);
+    close(image);close(old_image);unlink(buffer);unlink(refs);unlink(ledger);
     for(int i=0;i<2;i++){close(ready[i]);close(finish[i]);}
     puts("Producer/FD release retains DMA-BUF charge until the last cross-process import; unknown/corrupt identities refused.");
 }

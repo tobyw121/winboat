@@ -46,7 +46,7 @@ can retain charges until the next whole-VM launch. The 15-percent reserve and
 live driver estimate provide headroom; this is not a guarantee that the
 hardware's whole-device usage counter will always remain at 85 percent.
 
-Dead-worker charges are retained conservatively: exported buffers can outlive
+Dead-worker and unconfirmed non-worker teardown charges are retained conservatively: exported buffers can outlive
 their producer. A new whole-VM launch gets a fresh ledger. Corrupt, insecure,
 missing or full ledgers reject new allocations rather than disabling the cap.
 The ledger has 128 process/device slots and uses tmpfs; it is touched on memory

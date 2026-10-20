@@ -52,7 +52,7 @@ The per-VM 85-percent allocation ledger now retains charges for known DMA-BUF
 backings across renderer contexts, global resources and QEMU imports. Releasing
 the producer does not release the charge while a known importer remains.
 Opaque/unknown aliases are charged conservatively instead of guessing identity.
-Dead workers and lost handoffs can retain charges until the next whole-VM launch;
+Dead workers, unconfirmed non-worker cleanup and lost handoffs can retain charges until the next whole-VM launch;
 this is preferable to undercounting live memory. The reference ledger has 256
 backing slots. It does not observe every external alias or exact physical VRAM
 residency. See [the memory policy](helios-vram-budget.md).
