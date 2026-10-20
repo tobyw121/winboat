@@ -691,7 +691,11 @@ pub(crate) unsafe extern "system" fn create_resource(
     crate::diagnostics::note(h, "resource", [a.Format as u64,
         mip0.TexelWidth as u64, mip0.TexelHeight as u64,
         a.SampleDesc.Count as u64, a.SampleDesc.Quality as u64, a.BindFlags as u64]);
-    let num_sub = (a.MipLevels.max(1) * a.ArraySize.max(1)) as usize;
+    let Some(num_sub) = crate::resource_limits::subresource_count(a.MipLevels, a.ArraySize) else {
+        log_error!("DDI CreateResource: subresource cardinality refused mips={} array={}", a.MipLevels, a.ArraySize);
+        set_runtime_error(h, E_INVALIDARG);
+        return;
+    };
     if let Some(identity_n) =
         CREATE_RESOURCE_IDENTITY_LOG_COUNT.first_n_then_every_from_one(512, 2048)
     {

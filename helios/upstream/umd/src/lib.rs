@@ -110,3 +110,5 @@ pub(crate) use log::{log_self_module_path, trace_enabled};
 pub(crate) use log::log_line;
 
 pub(crate) use caps::get_caps;
+
+mod resource_limits;

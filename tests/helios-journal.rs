@@ -9,3 +9,6 @@ mod forward {
 }
 #[path = "../helios/upstream/umd/src/diagnostics.rs"]
 mod diagnostics;
+
+#[path = "../helios/upstream/umd/src/resource_limits.rs"]
+mod resource_limits;

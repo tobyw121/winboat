@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/build-helios-validation.yml'
       - 'tests/helios-opengl-pixels.c'
+      - 'tests/helios-format-contract.cpp'
       - 'helios/upstream/tools/d3d11_msaa_present_probe.cpp'
       - 'guest_server/scripts/Test-HeliosAcceptance.ps1'
 permissions:
@@ -27,6 +28,8 @@ jobs:
             'if errorlevel 1 exit /b 1',
             'cl /nologo /W4 /WX /EHsc /std:c++17 /MT helios/upstream/tools/d3d11_msaa_present_probe.cpp /Fe:helios-msaa-present.exe /link d3d11.lib dxgi.lib d3dcompiler.lib user32.lib',
             'if errorlevel 1 exit /b 1',
+            'cl /nologo /W4 /WX /EHsc /std:c++17 /MT tests/helios-format-contract.cpp /Fe:helios-format-contract.exe /link d3d11.lib dxgi.lib',
+            'if errorlevel 1 exit /b 1',
             'cl /nologo /W4 /WX /std:c11 /MT tests/helios-opengl-pixels.c /Fe:helios-opengl-pixels.exe /link opengl32.lib user32.lib gdi32.lib',
             'exit /b %errorlevel%'
           ) | Set-Content -Encoding ascii $cmd
@@ -34,7 +37,9 @@ jobs:
           if ($LASTEXITCODE) {throw 'Native probe compilation failed'}
           ./helios-msaa-present.exe --self-test
           if ($LASTEXITCODE) {throw 'MSAA pixel oracle self-test failed'}
-          $files=@('helios-msaa-present.exe','helios-opengl-pixels.exe') | ForEach-Object {
+          ./helios-format-contract.exe --warp
+          if ($LASTEXITCODE) {throw 'Real WARP format/shared-resource contract failed'}
+          $files=@('helios-msaa-present.exe','helios-opengl-pixels.exe','helios-format-contract.exe') | ForEach-Object {
             @{name=$_;sha256=(Get-FileHash $_ -Algorithm SHA256).Hash}
           }
           @{schema=1;sourceCommit='${{ github.sha }}';files=@($files)} | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 tools.json
@@ -45,5 +50,6 @@ jobs:
           path: |
             helios-msaa-present.exe
             helios-opengl-pixels.exe
+            helios-format-contract.exe
             tools.json
             tools-manifest-sha256.txt

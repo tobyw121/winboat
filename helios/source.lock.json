@@ -595,7 +595,7 @@
     "umd/src/forward/present.rs": "259ecf300e09f5968ccf2ee8973a5d466c8297e007f6a601fedba12b255b7db0",
     "umd/src/forward/queries.rs": "7b10d99d32828c97d8db91fb22624f729f3029f7731f9310abf5e7080cf3077d",
     "umd/src/forward/query_contract.rs": "11ba6966bc2035828afe4af9fd705584caea5c9831d224f7c260c838d4529fae",
-    "umd/src/forward/resource.rs": "5a81e74cff0aaa7283c98a40c309028415690c74723ac22142a2324287ae097c",
+    "umd/src/forward/resource.rs": "ad4c54bc2d255fdffbdad00d4cada287e14d8aee9292666b222fc4303702d133",
     "umd/src/forward/shaders.rs": "92b507854828136c701e47827713789e4c62994f0b522a408d657191c3f113bf",
     "umd/src/forward/snapshot.rs": "91511f63ec6e5486f3ecd473915e4fbc7e8351242c0c09f0215b99145019de6a",
     "umd/src/forward/state.rs": "5a11cb49d987c1915a602c238be5826431e91d834366d6d427f78129680720b1",
@@ -606,7 +606,7 @@
     "umd/src/forward/vehicle.rs": "93c3af4f28904a118fb3e15a170d00adc09ff89331d36dc68c36c4b4140211bc",
     "umd/src/forward/views.rs": "b708ab57cf46112ff53085b320738e9cf61887a8cf8fb40dd529d50e5fe7a337",
     "umd/src/knobs.rs": "4b28a4f2474d1ac2f56787620816560df0eef596d292cf2248d60d0dd1469787",
-    "umd/src/lib.rs": "ea44e77896ef2d78b84a58ec7d2107c41c615ca8b8fec8622fe2787fe5f7af90",
+    "umd/src/lib.rs": "564f83a774a8915481d38a161ee740387fafbc8d7e366b13fe4daf77a99fdf2a",
     "umd/src/scanout_acquire.rs": "e2f3e8e8393fba41346acb91202b0bbb3454b079422661a2239aa4cd99aa245a",
     "umd/src/vehicle_exports.rs": "4ac2fc2503f190966f97379d3f199c4d2da47694a87682a6dcb58e8199cb6101",
     "umd12/.cargo/config.toml": "69ff61ec8c9ca9a11ada14e257f3d0869fef2ec9f30c53c49576bb78717a291b",
@@ -659,7 +659,8 @@
     "umd_common/src/refusals.rs": "1d5ed2f3e40eec4aad41b5310cbe621d2c7afb4b8ef66cf9c9e2c62cc535bafc",
     "umd_common/src/slot.rs": "ce935c3ab5a1fe2d7e148ed3d6f94084ee227536342b2728b2be29a62d935090",
     "umd_common/src/throttle.rs": "5d56f746e5fa2c322c0625eadfe17b8ad6dd79b26e5da83ecb9ee50579237fb4",
-    "umd_common/src/window.rs": "fb926bc87c4ca2258f507f957aaba88883a9fe2fcdac060304d23a2b79bd6626"
+    "umd_common/src/window.rs": "fb926bc87c4ca2258f507f957aaba88883a9fe2fcdac060304d23a2b79bd6626",
+    "umd/src/resource_limits.rs": "a8f8651eba6dbd9ba8410d3bd2b927ee66491292ccbd5fd56e75162d219c3320"
   },
   "localChanges": {
     "description": "WinBoat downstream driver correctness and graphics diagnostics; revision/tree identify the upstream baseline, files identify effective sources.",
@@ -729,7 +730,8 @@
       "real-native-probe-drain-and-timeout-tests",
       "shader-hresult-cxx-signature-validation",
       "Exact LUID or unique-adapter selection and loss-aware D3D11 creation errors",
-      "first-DDI-failure-frozen-context-and-resource-parameters"
+      "first-DDI-failure-frozen-context-and-resource-parameters",
+      "bounded-D3D11-subresource-cardinality"
     ],
     "addedFiles": [
       "kmd_logic/src/display_modes.rs",
@@ -740,7 +742,8 @@
       "umd/src/diagnostics.rs",
       "packaging/windows/Test-HeliosDeviceProfiles.ps1",
       "packaging/windows/probes/d3d11-device-probe.cpp",
-      "umd/bridge/adapter_selection.h"
+      "umd/bridge/adapter_selection.h",
+      "umd/src/resource_limits.rs"
     ],
     "validationWorkflows": [
       ".github/workflows/test-helios-game-compatibility.yml",
