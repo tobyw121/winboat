@@ -3,6 +3,7 @@ param([ValidateSet('helios-disable','helios-enable')][string]$Action, [switch]$L
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Initialize-DisplayRecoveryKey.ps1')
+. (Join-Path $PSScriptRoot 'Assert-HeliosStackCoherence.ps1') -LibraryOnly
 $script:rescueStage='preflight'
 function Set-HeliosRescueHold([bool]$Disabled) {
     $key='HKLM:\SOFTWARE\WinBoat\DisplayRecovery'
@@ -34,6 +35,10 @@ function Invoke-HeliosRescue([string]$Operation,[bool]$NoVgaChange=$false) {
     }
     if ($Operation -eq 'helios-enable' -and $devices.helios.Count -ne 1) {
         return @{status='blocked';message='No installed Helios device is available to enable.'}
+    }
+    if($Operation -eq 'helios-enable') {
+        $script:rescueStage='verify-stack-coherence'
+        [void](Assert-HeliosStackCoherence)
     }
     # Persist the hold before any device change; failures leave automatic setup
     # and topology changes suppressed across service and Windows restarts.

@@ -14,6 +14,7 @@ if ($env:OS -eq 'Windows_NT') {
         if((Get-ItemProperty -LiteralPath $nested).ExistingValue -ne 7){throw 'Existing registry data erased'}
     } finally {Remove-Item -LiteralPath $registryTest -Recurse -Force -ErrorAction SilentlyContinue}
 }
+function Assert-HeliosStackCoherence {}
 $script:hold=$false; $script:operations=@(); $script:running=$false; $script:pending=$false
 $script:basic=22; $script:helios=0
 $script:missing=$false
@@ -67,3 +68,9 @@ try {Invoke-HeliosRescue 'helios-disable'} catch {if($_.Exception.Message -notma
 if(-not $blocked -or $script:operations.Count -or -not $script:hold){throw 'Failed task suspension allowed device changes'}
 if($script:rescueStage -ne 'pause-HeliosGraphicsProvisioning'){throw 'Rescue failure lost its stage'}
 Write-Host 'Explicit rescue preserves VGA, serializes with installation, retains its hold and requires deliberate re-enable.'
+
+$script:missing=$false;$script:failPause=$false;$script:operations=@();$script:helios=22
+function Assert-HeliosStackCoherence {throw 'mixed package fixture'}
+$blocked=$false
+try {Invoke-HeliosRescue 'helios-enable'} catch {$blocked=$_.Exception.Message -eq 'mixed package fixture'}
+if(-not $blocked -or $script:operations.Count -or $script:helios -ne 22){throw 'Mixed package was activated'}

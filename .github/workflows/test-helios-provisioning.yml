@@ -192,6 +192,7 @@ jobs:
           ./tests/guest-update-provisioning.test.ps1
           ./tests/vcredist-provisioning.test.ps1
           ./tests/display-adapters.test.ps1
+          ./tests/helios-stack-coherence.test.ps1
           ./tests/helios-rescue.test.ps1
           ./tests/helios-driverstore.test.ps1
           ./tests/helios-diagnostics.test.ps1
@@ -216,6 +217,7 @@ jobs:
           ./tests/guest-update-provisioning.test.ps1
           ./tests/vcredist-provisioning.test.ps1
           ./tests/display-adapters.test.ps1
+          ./tests/helios-stack-coherence.test.ps1
           ./tests/helios-rescue.test.ps1
           ./tests/helios-driverstore.test.ps1
           ./tests/helios-diagnostics.test.ps1
