@@ -440,7 +440,9 @@ fn linear_blob_size(pitch: u64, height: u64) -> u64 {
     pitch
         .saturating_mul(padded_rows)
         .saturating_add(NV_LINEAR_TAIL_SLACK)
-        .max(PAGE as u64)
+        // KMD-created row-major display surfaces only. Dedicated OPTIMAL
+        // images and imported application allocations keep their own contract.
+        .max(helios_kmd_logic::MIN_LINEAR_SCANOUT_BYTES)
 }
 
 /// Blobs whose guessed linear size differed from the Vulkan memory requirement

@@ -4508,3 +4508,16 @@ Default DWM capabilities and synchronization are unchanged. Initialization may
 legitimately fail where backend coverage is insufficient; this mode is evidence,
 not a claim of FL11 conformance. Native shared-process/keyed-mutex pixel tests
 passed Windows WARP CI; real Helios/NVIDIA execution remains required.
+
+
+### Downstream .300 candidate: retained 16-MiB LINEAR display floor
+User-requested persistent minimum for KMD-created row-major standard display
+surfaces and the non-dedicated LINEAR scanout fallback. Larger Vulkan requirements
+still win, with checked page alignment; invalid/overflowing sizes are refused.
+`SdgLAlc` records allocated fallback bytes separately from required `SdgLReq`.
+Allocation, exported HOST3D blob and ownership ledger use the same actual size.
+Dedicated OPTIMAL image memory and already-imported buffers are unchanged: a
+larger nominal size cannot repair an incompatible image layout. Existing reuse
+and completion-before-free rules remain; no permanent retention of obsolete
+buffers after resize/teardown. Default bundled installer remains .291. Physical
+Windows/NVIDIA acceptance and a matching new driver build are still required.

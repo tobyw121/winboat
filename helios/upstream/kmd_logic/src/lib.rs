@@ -122,6 +122,21 @@ pub mod vsync_deadline {
 /// byte-identical copies of the constant and of [`round_up_page`].
 pub const PAGE_BYTES: u64 = 4096;
 
+/// Persistent floor for KMD-owned LINEAR display backing, not imported images,
+/// dedicated OPTIMAL image allocations, general application textures or rings.
+pub const MIN_LINEAR_SCANOUT_BYTES: u64 = 16 * 1024 * 1024;
+
+/// Preserve the real memory requirement above the floor. Refuse an impossible
+/// page alignment rather than wrapping to zero or returning undersized memory.
+pub const fn linear_scanout_allocation_size(required: u64) -> Option<u64> {
+    if required == 0 { return None; }
+    let bytes = if required < MIN_LINEAR_SCANOUT_BYTES { MIN_LINEAR_SCANOUT_BYTES } else { required };
+    match bytes.checked_add(PAGE_BYTES - 1) {
+        Some(aligned) => Some(aligned & !(PAGE_BYTES - 1)),
+        None => None,
+    }
+}
+
 /// Cross-adapter row-major textures require a 256-byte row-pitch alignment
 /// (`D3D12_TEXTURE_DATA_PITCH_ALIGNMENT`). The IddCx composition surface is a
 /// cross-adapter resource (created as a standard allocation, opened on the Helios
@@ -1344,6 +1359,17 @@ mod tests {
                 "width {width}"
             );
         }
+    }
+
+    #[test]
+    fn linear_scanout_floor_preserves_real_requirement_and_checks_overflow() {
+        for required in [4096, 4_096_000, 4_587_520, 8_294_400, 16_777_216] {
+            assert_eq!(linear_scanout_allocation_size(required), Some(16_777_216));
+        }
+        assert_eq!(linear_scanout_allocation_size(16_777_217), Some(16_781_312));
+        assert_eq!(linear_scanout_allocation_size(33_177_600), Some(33_177_600));
+        assert_eq!(linear_scanout_allocation_size(0), None);
+        assert_eq!(linear_scanout_allocation_size(u64::MAX), None);
     }
 
     #[test]

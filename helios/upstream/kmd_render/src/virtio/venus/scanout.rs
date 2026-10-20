@@ -674,7 +674,11 @@ impl VenusClient {
             b"SdgMf",
             self.memory_type_flags[memory_type_index as usize],
         );
-        let alloc_size = round_up_page(req_size.max(4096));
+        // Non-dedicated LINEAR backing: retain the 16-MiB minimum while
+        // honoring larger driver requirements. Export the actual allocation.
+        let alloc_size = helios_kmd_logic::linear_scanout_allocation_size(req_size)
+            .ok_or(VirtioError::OutOfMemory)?;
+        crate::diag::record_named_bytes(b"SdgLAlc", alloc_size as u32);
 
         crate::diag::record_named_bytes(b"SdgLStg", 4);
         let memory_id =
