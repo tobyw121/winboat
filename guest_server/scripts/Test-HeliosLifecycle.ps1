@@ -23,7 +23,10 @@ function Invoke-HeliosLifecycleRestart {
     for($i=0;$i -lt 10;$i++) {
         Start-Sleep -Seconds 1
         $next=Invoke-RestMethod 'http://127.0.0.1:7148/graphics/adapters' -TimeoutSec 3
-        if($next.helios.state -eq 'running' -and $next.basic.state -eq 'running'){return}
+        if($next.updatedAtUtc -ne $data.updatedAtUtc -and $next.helios.state -eq 'running' -and $next.basic.state -eq 'running'){
+            Assert-HeliosRestartObservation $next ([Diagnostics.Process]::GetCurrentProcess().SessionId)
+            return
+        }
     }
     throw 'Helios did not recover within the observation window.'
 }
