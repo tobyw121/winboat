@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdarg.h>
+#include <sys/stat.h>
 #include <string.h>
 #include <gio/gio.h>
 #include <epoxy/gl.h>
@@ -32,7 +33,7 @@ typedef struct DisplaySurface { GLuint texture; uint8_t pixels[64]; int width,he
 typedef int QemuGLShader;
 typedef struct DisplayGLCtx { QemuGLShader *gls; } DisplayGLCtx;
 typedef struct DisplayChangeListener { void *con; } DisplayChangeListener;
-typedef struct QemuDmaBuf { uint64_t modifier,allocation; bool optimal,top; unsigned width,height; GLuint texture; } QemuDmaBuf;
+typedef struct QemuDmaBuf { uint64_t modifier,allocation; bool optimal,top; unsigned width,height; GLuint texture; int fd; } QemuDmaBuf;
 typedef struct egl_fb { int width,height,x,y;GLuint texture,framebuffer;bool delete_texture;QemuDmaBuf *dmabuf; } egl_fb;
 #define EGL_FB_INIT {0}
 typedef struct HeliosVulkanReadback {int unused;} HeliosVulkanReadback;
@@ -50,6 +51,7 @@ typedef struct DBusDisplayListener {
     DisplaySurface *vk_surface;
     bool vk_announced,vk_failed,copy_requested,copy_active;
     uint64_t frame_sequence;
+    uint64_t frame_inode;
     uint32_t frame_source;
     int64_t frame_send_us;
     bool frame_software;
@@ -104,6 +106,7 @@ static DisplaySurface *qemu_create_displaysurface(unsigned w,unsigned h) {
     assert(w<=4 && h<=4);DisplaySurface *s=g_new0(DisplaySurface,1);s->width=w;s->height=h;return s;
 }
 static void qemu_free_displaysurface(DisplaySurface *s) {g_free(s);}
+static const int *qemu_dmabuf_get_fds(QemuDmaBuf *d,int *count){*count=1;return &d->fd;}
 static uint32_t qemu_dmabuf_get_width(QemuDmaBuf *b) {return b->width?b->width:4;}
 static uint32_t qemu_dmabuf_get_height(QemuDmaBuf *b) {return b->height?b->height:4;}
 static uint32_t qemu_dmabuf_get_source_id(QemuDmaBuf *b) {(void)b;return 4;}

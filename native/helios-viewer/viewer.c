@@ -55,6 +55,7 @@ struct Viewer {
  GdkCursor *cursor;
  GLuint program, external_program, vao, texture, source, fbo, source_renderbuffer, source_fbo;
  guint source_x, source_y;
+ guint64 source_inode;
  gboolean source_external;
  GLenum image_error;
  EGLImageKHR image;
@@ -346,7 +347,7 @@ static gboolean render(GtkGLArea *area,GdkGLContext *context,Viewer *v) {
  return TRUE;
 }
 static void discard_source(Viewer *v) {
- v->source_external=FALSE;
+ v->source_external=FALSE;v->source_inode=0;
  if (v->source) {glDeleteTextures(1,&v->source);v->source=0;}
  if (v->source_fbo) {glDeleteFramebuffers(1,&v->source_fbo);v->source_fbo=0;}
  if (v->source_renderbuffer) {glDeleteRenderbuffers(1,&v->source_renderbuffer);v->source_renderbuffer=0;}
@@ -474,10 +475,12 @@ static gboolean import_dma(Viewer *v,GDBusMethodInvocation *inv,GVariant *handle
  }
  attrs[n]=EGL_NONE;
  EGLImageKHR image=ok?eglCreateImageKHR(v->display,EGL_NO_CONTEXT,EGL_LINUX_DMA_BUF_EXT,NULL,attrs):EGL_NO_IMAGE_KHR;
+ struct stat identity;guint64 inode=fstat(fds[0],&identity)==0?identity.st_ino:0;
  for (guint p=0;p<planes;p++) if (fds[p]>=0) close(fds[p]);
  if (image==EGL_NO_IMAGE_KHR) {g_snprintf(v->frame_problem,sizeof(v->frame_problem),"EGL DMA-BUF import failed: egl=0x%04x, fourcc=0x%08x, modifier=0x%016" G_GINT64_MODIFIER "x",eglGetError(),fourcc,modifier);return FALSE;}
  discard_source(v);v->image=image;
  if (!bind_egl_image(v,image,fourcc,modifier,planes)) {discard_source(v);return FALSE;}
+ v->source_inode=inode;
  dma_geometry(v,x,y,w,h,bw,bh,top);v->frame_problem[0]=0;return TRUE;
 }
 static gboolean copy_dma(Viewer *v) {
@@ -1050,10 +1053,10 @@ static gboolean stats(Viewer *v) {
   ",\"dmabufFrames\":%" G_GUINT64_FORMAT ",\"softwareFrames\":%" G_GUINT64_FORMAT
   ",\"renderedFrames\":%" G_GUINT64_FORMAT ",\"sourceCopyWallUs\":%" G_GUINT64_FORMAT
   ",\"completionWaitUs\":%" G_GUINT64_FORMAT ",\"copySamples\":%" G_GUINT64_FORMAT
-  ",\"skippedRedraws\":%" G_GUINT64_FORMAT ",\"coalescedUpdates\":%" G_GUINT64_FORMAT "}\n",
+  ",\"skippedRedraws\":%" G_GUINT64_FORMAT ",\"coalescedUpdates\":%" G_GUINT64_FORMAT ",\"sourceInode\":%" G_GUINT64_FORMAT "}\n",
   getpid(),d->console_id,g_get_monotonic_time(),d->dma_frames,d->software_frames,
   v->rendered_frames,d->copy_wall_us,d->completion_wait_us,d->copy_samples,
-  v->skipped_redraws,d->coalesced_updates);
+  v->skipped_redraws,d->coalesced_updates,d->source_inode);
  return G_SOURCE_CONTINUE;
 }
 static gboolean smoke_done(Viewer *v) {

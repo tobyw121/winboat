@@ -54,6 +54,24 @@ class TestGraphicsCollector(unittest.TestCase):
         self.assertEqual(graphics.parse_transport_errors('import-held source=4 ino=99 attempts=2 delay_ns=500000000')[0]['kind'],'import-backoff')
         self.assertNotIn('PRIVATE',json.dumps(result))
         self.assertEqual(graphics.parse_frame_metrics('frame-ack source=4 sequence=1 wait_us=-1 success=1 in_flight=1 transport=copy'),[])
+    def test_resource_identity_budget_and_live_heap(self):
+        log=('resource-create id=5 source=2 ino=8 imported=40 snapshot=50 staging=60 owned_total=110 peak=120\n'
+             'resource-frame id=5 source=2 ino=8 sequence=9 published=1\n'
+             'resource-release id=5 source=2 ino=8 imported=40 owned=110 remaining=0 peak=120\n'
+             'frame-region source=2 x=1 y=2 width=3 height=4 bytes=48 partial=1\n'
+             'frame-ack source=2 sequence=9 wait_us=7 success=1 in_flight=1 transport=dmabuf inode=8')
+        rows=graphics.parse_frame_metrics(log)
+        self.assertEqual(len(rows),5)
+        self.assertEqual(rows[0]['ownedBytes'],110)
+        self.assertEqual(rows[-1]['inode'],8)
+        self.assertEqual(graphics.parse_transport_errors('budget-rejected requested=90 owned=110 limit=160')[0]['limitBytes'],160)
+        with patch.object(graphics.subprocess,'check_output',return_value='{"ready":true,"devices":[]}') as run:
+            self.assertTrue(graphics.collect_gpu_heap('WinBoat','/dev/dri/renderD128')['observation']['ready'])
+            run.assert_called_once()
+        with patch.object(graphics.subprocess,'check_output') as run:
+            self.assertIn('error',graphics.collect_gpu_heap('WinBoat','/private/path'))
+            run.assert_not_called()
+
     def test_old_host_runtime_is_reported_separately_from_guest_driver(self):
         inspect='"winboat/helios:test"\n"sha256:abc"\n"running"\n'
         with patch.object(graphics.subprocess, 'check_output', side_effect=[inspect, 'glvnd-v4\ndbus-v8\n',OSError('old runtime')]), \

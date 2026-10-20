@@ -110,6 +110,8 @@ def record(container, minutes, interval, output, clock=time.monotonic, sleeper=t
                     stamp=row['runtime'].get('driver',{}).get('collectedAtUtc')
                     if baseline is None and stamp: baseline=stamp
                     row['baselineGuestUtc']=baseline
+                    host=diagnostics.collect_host(container)
+                    row['gpuHeap']=host.get('gpuHeap',{'error':'Explicit DRM render node unavailable'})
                     next_slow=elapsed+300
                 if viewer_log:
                     try:

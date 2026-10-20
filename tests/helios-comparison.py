@@ -48,6 +48,13 @@ class ComparisonTests(unittest.TestCase):
             with path.open('a') as output: output.write('game.exe,4,30\n')
             with self.assertRaises(ValueError): metrics.read_frame_times(path,'game.exe')
 
+    def test_resource_lifecycle_keeps_host_scope(self):
+        rows=[{'kind':kind,'resourceId':1,'source':2,'inode':3} for kind in ('resource-create','resource-frame','resource-release')]
+        result=correlation.correlate({'host':{'frameMetrics':rows,'transportErrors':[{'kind':'budget-rejected'}]}})
+        self.assertEqual(len(result['resourceTimeline']),1)
+        self.assertEqual(len(result['resourceTimeline'][0]['events']),3)
+        self.assertEqual(result['firstObservedHostFailure']['kind'],'budget-rejected')
+
     def test_clock_skew_is_an_interval_and_missing_clock_unknown(self):
         report={'graphics/diagnostics/runtime':{'driver':{'collectedAtUtc':'2026-10-19T12:01:00Z'}},
                 'requestTiming':{'graphics/diagnostics/runtime':{'startUtc':'2026-10-19T12:00:00Z','endUtc':'2026-10-19T12:00:02Z'}}}

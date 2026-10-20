@@ -15,6 +15,10 @@ build_time graphics_protocol runtime_protocol commit_hash errors status state sc
 host runtimeVersion displayVersion expectedRuntimeVersion runtimeMatches containerState
 qemuBackend backend vnc gpuCount venus blob sharedMemfd vgaRescue renderNode issues
 transportErrors kind requiredBytes bufferBytes releasedBytes usedBytes hostAtUtc
+gpuPreflight gpuHeap sampledAtUtc observation devices matchingDevices ready vendorId deviceId apiVersion selected
+externalMemoryFd memoryBudgetAvailable pciMatchesDrm deviceUuid driverUuid heaps sizeBytes deviceLocal
+resourceTimeline firstObservedHostFailure resourceId importedBytes snapshotBytes stagingBytes ownedBytes peakBytes
+limitBytes requestedBytes partial x y sourceInode
 frameMetrics inode sequence published width height submitNanoseconds waitNanoseconds
 cpuNanoseconds source waitMicroseconds success inFlight transport capture intervalSeconds
 observations adapters sampleAgeMs helios basic problemCode desktopState recovery policy goal
@@ -47,6 +51,7 @@ created format msaa msaa-refused msaa-policy runtime-error resource view shader 
 returned device-ready device-create-failed device-destroyed no-present-observed adapter-open
 producer-init-failed producer-submit-failed buffer-size-mismatch egl-image-error
 egl-import-error memory-accounting-error device-selection-mismatch import-backoff
+budget-rejected resource-create resource-release resource-frame frame-region ack capture
 kvm tcg host max qemu64 qemu32 other unspecified virtio-net-pci e1000 e1000e rtl8139
 writeback writethrough directsync unsafe native io_uring unmap on off raw qcow2
 software-cpu-emulation cpu-model-not-host unsafe-disk-cache emulated-network-adapter vcpu-affinity-oversubscribed

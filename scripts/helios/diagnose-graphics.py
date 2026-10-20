@@ -27,6 +27,7 @@ def parse_transport_errors(text):
         ('egl-import-error', r'EGL DMA-BUF import failed for fourcc=(0x[0-9a-fA-F]+) modifier=(0x[0-9a-fA-F]+)', ('fourcc', 'modifier')),
         ('memory-accounting-error', r'invalid device-local memory accounting: release=(\d+) used=(\d+)', ('releasedBytes', 'usedBytes')),
         ('device-selection-mismatch', r'no unique Vulkan device matches DRM render node (\d+):(\d+)', ('drmMajor', 'drmMinor')),
+        ('budget-rejected', r'budget-rejected requested=(\d{1,20}) owned=(\d{1,20}) limit=(\d{1,20})', ('requestedBytes','ownedBytes','limitBytes')),
         ('import-backoff', r'import-held source=(\d+) ino=(\d+) attempts=(\d+) delay_ns=(\d+)', ('source','inode','attempts','delayNanoseconds')),
     )
     # Capture fixed numeric fields only, never arbitrary container log messages.
@@ -46,8 +47,16 @@ def parse_transport_errors(text):
 def parse_frame_metrics(text):
     records=[]
     patterns=(
-        ('ack',r'frame-ack source=(\d+) sequence=(\d+) wait_us=(\d+) success=([01]) in_flight=(\d+) transport=(copy|dmabuf)',
-         ('source','sequence','waitMicroseconds','success','inFlight','transport')),
+        ('ack',r'frame-ack source=(\d+) sequence=(\d+) wait_us=(\d+) success=([01]) in_flight=(\d+) transport=(copy|dmabuf)(?: inode=(\d{1,20}))?',
+         ('source','sequence','waitMicroseconds','success','inFlight','transport','inode')),
+        ('resource-create',r'resource-create id=(\d{1,20}) source=(\d{1,20}) ino=(\d{1,20}) imported=(\d{1,20}) snapshot=(\d{1,20}) staging=(\d{1,20}) owned_total=(\d{1,20}) peak=(\d{1,20})',
+         ('resourceId','source','inode','importedBytes','snapshotBytes','stagingBytes','ownedBytes','peakBytes')),
+        ('resource-release',r'resource-release id=(\d{1,20}) source=(\d{1,20}) ino=(\d{1,20}) imported=(\d{1,20}) owned=(\d{1,20}) remaining=(\d{1,20}) peak=(\d{1,20})',
+         ('resourceId','source','inode','importedBytes','releasedBytes','ownedBytes','peakBytes')),
+        ('resource-frame',r'resource-frame id=(\d{1,20}) source=(\d{1,20}) ino=(\d{1,20}) sequence=(\d{1,20}) published=([01])',
+         ('resourceId','source','inode','sequence','published')),
+        ('frame-region',r'frame-region source=(\d{1,20}) x=(\d{1,10}) y=(\d{1,10}) width=(\d{1,10}) height=(\d{1,10}) bytes=(\d{1,20}) partial=([01])',
+         ('source','x','y','width','height','bytes','partial')),
         ('capture',r'helios_vulkan_capture ino (\d+) seq (\d+) publish ([01]) (\d+)x(\d+) submit_ns (\d+) wait_ns (\d+) cpu_ns (\d+)',
          ('inode','sequence','published','width','height','submitNanoseconds','waitNanoseconds','cpuNanoseconds')),
     )
@@ -56,9 +65,22 @@ def parse_frame_metrics(text):
             match=re.search(pattern,line)
             if match:
                 record={'kind':kind}
-                record.update({key:value if key=='transport' else int(value) for key,value in zip(names,match.groups())})
+                record.update({key:value if key=='transport' else int(value) for key,value in zip(names,match.groups()) if value is not None})
                 if all(type(v) is not int or 0<=v<2**64 for v in record.values()): records.append(record)
     return records[-64:]
+
+
+def collect_gpu_heap(container, render_node):
+    if not isinstance(render_node,str) or not re.fullmatch(r'/dev/dri/renderD[0-9]{1,6}',render_node):
+        return {'error':'Explicit DRM render node unavailable'}
+    try:
+        raw=subprocess.check_output(['docker','exec',container,'/opt/helios/gpu-preflight',render_node],text=True,timeout=20)
+        if len(raw)>32768: raise ValueError('Oversized preflight report')
+        report=json.loads(raw)
+        if not isinstance(report,dict) or report.get('ready') is not True: raise ValueError('GPU identity not ready')
+        return {'sampledAtUtc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'observation':report}
+    except (OSError,ValueError,subprocess.SubprocessError):
+        return {'error':'Live Vulkan heap observation unavailable'}
 
 
 def collect_host(container):
@@ -109,6 +131,8 @@ def collect_host(container):
         result['gpuPreflight']=json.loads(raw)
     except (OSError,ValueError,subprocess.SubprocessError):
         result['gpuPreflight']={'error':'GPU preflight unavailable; update host runtime'}
+    node=result.get('qemuBackend',{}).get('renderNode')
+    if node: result['gpuHeap']=collect_gpu_heap(container,node)
     try:
         bundle=(pathlib.Path(__file__).parent.parent/'helios') if pathlib.Path(__file__).parent.name=='graphics-tools' else root/'resources/helios'
         receipt = json.loads((bundle/'helios-build.json').read_text())

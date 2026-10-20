@@ -16,7 +16,7 @@ import subprocess
 import time
 
 VIEWER_FIELDS = ('pid','console','monotonicUs','dmabufFrames','softwareFrames','renderedFrames',
-                 'sourceCopyWallUs','completionWaitUs','copySamples','skippedRedraws','coalescedUpdates')
+                 'sourceCopyWallUs','completionWaitUs','copySamples','skippedRedraws','coalescedUpdates','sourceInode')
 
 
 def read_frame_times(path, application):

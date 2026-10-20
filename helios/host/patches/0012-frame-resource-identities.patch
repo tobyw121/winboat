@@ -1,0 +1,57 @@
+diff --git a/ui/dbus-listener.c b/ui/dbus-listener.c
+index 9799b0a..4f3138b 100644
+--- a/ui/dbus-listener.c
++++ b/ui/dbus-listener.c
+@@ -103,6 +103,7 @@ struct _DBusDisplayListener {
+     bool copy_requested;
+     bool copy_active;
+     uint64_t frame_sequence;
++    uint64_t frame_inode;
+     uint32_t frame_source;
+     int64_t frame_send_us;
+     bool frame_software;
+@@ -207,6 +208,15 @@ static void dbus_helios_frame_sent(DBusDisplayListener *ddl, bool software)
+     ddl->frame_sequence++;
+     ddl->frame_source = ddl->active_dmabuf
+         ? qemu_dmabuf_get_source_id(ddl->active_dmabuf) : UINT32_MAX;
++    ddl->frame_inode = 0;
++    if (ddl->active_dmabuf && !g_strcmp0(g_getenv("HELIOS_FRAME_TRACE"), "1")) {
++        int count;
++        const int *fds = qemu_dmabuf_get_fds(ddl->active_dmabuf, &count);
++        struct stat info;
++        if (count == 1 && fds[0] >= 0 && fstat(fds[0], &info) == 0) {
++            ddl->frame_inode = info.st_ino;
++        }
++    }
+     ddl->frame_send_us = g_get_monotonic_time();
+     ddl->frame_software = software;
+ }
+@@ -216,9 +226,9 @@ static void dbus_helios_frame_ack(DBusDisplayListener *ddl, bool success)
+     int64_t wait_us = g_get_monotonic_time() - ddl->frame_send_us;
+     if (!g_strcmp0(g_getenv("HELIOS_FRAME_TRACE"), "1") || wait_us > 50000) {
+         error_report("dbus: frame-ack source=%u sequence=%" PRIu64
+-                     " wait_us=%" PRId64 " success=%d in_flight=1 transport=%s",
++                     " wait_us=%" PRId64 " success=%d in_flight=1 transport=%s inode=%" PRIu64,
+                      ddl->frame_source, ddl->frame_sequence, wait_us,
+-                     success, ddl->frame_software ? "copy" : "dmabuf");
++                     success, ddl->frame_software ? "copy" : "dmabuf", ddl->frame_inode);
+     }
+ }
+ 
+diff --git a/ui/vulkan-readback.c b/ui/vulkan-readback.c
+index fd2b220..80aee72 100644
+--- a/ui/vulkan-readback.c
++++ b/ui/vulkan-readback.c
+@@ -1180,6 +1180,12 @@ bool helios_vulkan_readback_capture(HeliosVulkanReadback *readback,
+         readback->dmabuf_ino, readback->flushes, publish != NULL,
+         captured.width, captured.height,
+         submit_ns - start_ns, wait_ns - submit_ns, copy_ns - wait_ns);
++    if (!g_strcmp0(g_getenv("HELIOS_FRAME_TRACE"), "1")) {
++        error_report("vulkan-readback: resource-frame id=%" PRIu64
++                     " source=%u ino=%" PRIu64 " sequence=%" PRIu64 " published=%d",
++                     readback->memory_id, readback->source_id, (uint64_t)readback->dmabuf_ino,
++                     readback->flushes, publish != NULL);
++    }
+     if (readback->flushes == 1 || copy_ns - start_ns > 50000000 ||
+         (readback->flushes % 4096) == 0) {
+         error_report("vulkan-readback: frame source=%u ino=%" PRIu64

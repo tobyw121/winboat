@@ -35,6 +35,15 @@ def correlate(report):
     for entry in application.get('umdLogs',[])[:8]:
         if re.fullmatch(r'umd(?:12)?-\d{1,10}\.log',str(entry.get('file',''))):
             logs.append({key:entry[key] for key in ('file','updatedAtUtc','signals','codes') if key in entry})
+    resources={}
+    for row in report.get('host',{}).get('frameMetrics',[]):
+        if row.get('kind') not in ('resource-create','resource-release','resource-frame'): continue
+        key=(row['resourceId'],row['source'],row['inode'])
+        group=resources.setdefault(key,{'resourceId':key[0],'source':key[1],'inode':key[2],'events':[]})
+        group['events'].append(row)
+    first_failure=next(iter(report.get('host',{}).get('transportErrors',[])),None)
     return {'schema':1,'captureId':report.get('captureId'),'guestMinusHostClockRange':offset,
+            'resourceTimeline':list(resources.values()),'firstObservedHostFailure':first_failure,
+            'resourceScope':'Process-local IDs and bounded historical tail; no inferred equality with guest KMD IDs or Vulkan object handles.',
             'guestEvents':events,'umdFiles':logs,'hostEvents':report.get('host',{}).get('transportErrors',[])[-32:],
             'scope':'Separate clock domains. File modification times and reused PIDs do not establish crash causality. Missing evidence is unknown.'}
