@@ -1,0 +1,286 @@
+diff --git a/src/venus/vkr_context.c b/src/venus/vkr_context.c
+index d33aa78..3dc50b3 100644
+--- a/src/venus/vkr_context.c
++++ b/src/venus/vkr_context.c
+@@ -195,6 +195,8 @@ vkr_context_free_resource(struct hash_entry *entry)
+       munmap(res->u.data, res->size);
+    else if (res->u.fd >= 0)
+       close(res->u.fd);
++   if(res->budget_ref.valid && helios_vram_reference_change(NULL,-1,&res->budget_ref,0,2)<0)
++      vkr_log("shared VRAM context-reference release failed");
+    free(res);
+ }
+ 
+@@ -232,7 +234,7 @@ vkr_context_import_resource_internal(struct vkr_context *ctx,
+ {
+    assert(!vkr_context_get_resource(ctx, res_id));
+ 
+-   struct vkr_resource *res = malloc(sizeof(*res));
++   struct vkr_resource *res = calloc(1,sizeof(*res));
+    if (!res)
+       return false;
+ 
+@@ -247,7 +249,10 @@ vkr_context_import_resource_internal(struct vkr_context *ctx,
+    else
+       res->u.fd = fd;
+ 
++   if(fd_type==VIRGL_RESOURCE_FD_DMABUF && fd>=0 &&
++      helios_vram_reference_change(NULL,fd,&res->budget_ref,0,1)<0) {free(res);return false;}
+    if (!vkr_context_add_resource(ctx, res)) {
++      if(res->budget_ref.valid) helios_vram_reference_change(NULL,-1,&res->budget_ref,0,2);
+       free(res);
+       return false;
+    }
+@@ -342,6 +347,7 @@ vkr_context_create_resource_from_device_memory(struct vkr_context *ctx,
+    if (mem->might_export) {
+       res_fd = os_dupfd_cloexec(blob.u.fd);
+       if (res_fd < 0) {
++         if(blob.type==VIRGL_RESOURCE_FD_DMABUF) helios_vram_reference_change(NULL,blob.u.fd,NULL,0,2);
+          close(blob.u.fd);
+          return false;
+       }
+@@ -351,6 +357,7 @@ vkr_context_create_resource_from_device_memory(struct vkr_context *ctx,
+                                              NULL)) {
+       if (res_fd >= 0)
+          close(res_fd);
++      if(blob.type==VIRGL_RESOURCE_FD_DMABUF) helios_vram_reference_change(NULL,blob.u.fd,NULL,0,2);
+       close(blob.u.fd);
+       return false;
+    }
+diff --git a/src/venus/vkr_context.h b/src/venus/vkr_context.h
+index 96271b5..e1ec5de 100644
+--- a/src/venus/vkr_context.h
++++ b/src/venus/vkr_context.h
+@@ -7,6 +7,7 @@
+ #define VKR_CONTEXT_H
+ 
+ #include "vkr_common.h"
++#include "helios-vram-refs.h"
+ #include "vkr_library.h"
+ 
+ #include "vn_protocol_renderer_defines.h"
+@@ -20,6 +21,7 @@
+  * vkr_resource is created, and is valid until vkr_context_destroy_resource.
+  */
+ struct vkr_resource {
++   struct helios_vram_reference budget_ref;
+    uint32_t res_id;
+ 
+    enum virgl_resource_fd_type fd_type;
+diff --git a/src/venus/vkr_device_memory.c b/src/venus/vkr_device_memory.c
+index efc740e..05cd306 100644
+--- a/src/venus/vkr_device_memory.c
++++ b/src/venus/vkr_device_memory.c
+@@ -563,10 +563,15 @@ vkr_dispatch_vkAllocateMemory(struct vn_dispatch_context *dispatch,
+          valid_fd_types |= 1 << VIRGL_RESOURCE_FD_DMABUF;
+    }
+ 
+-   const uint64_t budget_charge = !res_info && (property_flags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
++   struct helios_vram_reference imported_ref={0};
++   int retained=0;
++   if(local_import_info.fd>=0 && local_import_info.handleType==VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT)
++      retained=helios_vram_reference_change(physical_dev->id_properties.deviceUUID,local_import_info.fd,&imported_ref,0,1);
++   const uint64_t budget_charge = !imported_ref.valid && (property_flags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+                                      ? alloc_info->allocationSize
+                                      : 0;
+-   if (!vkr_device_memory_budget_reserve(budget_charge)) {
++   if (retained<0 || !vkr_device_memory_budget_reserve(budget_charge)) {
++      if(imported_ref.valid) helios_vram_reference_change(NULL,-1,&imported_ref,0,2);
+       if (local_import_info.fd >= 0)
+          close(local_import_info.fd);
+       if (udmabuf_fd >= 0)
+@@ -579,6 +584,7 @@ vkr_dispatch_vkAllocateMemory(struct vn_dispatch_context *dispatch,
+    }
+ 
+    if (!vkr_vm_budget(physical_dev, budget_charge, false)) {
++      if(imported_ref.valid) helios_vram_reference_change(NULL,-1,&imported_ref,0,2);
+       vkr_device_memory_budget_release(budget_charge);
+       if (local_import_info.fd >= 0) close(local_import_info.fd);
+       if (udmabuf_fd >= 0) close(udmabuf_fd);
+@@ -603,6 +609,7 @@ vkr_dispatch_vkAllocateMemory(struct vn_dispatch_context *dispatch,
+    VKR_FAULT_TRACE(ctx, "allocate_memory_result id=%" PRIu64 " host=0x%" PRIx64 " result=%d",
+                    mem ? mem->base.id : 0, mem ? mem->base.handle.u64 : 0, args->ret);
+    if (!mem) {
++      if(imported_ref.valid) helios_vram_reference_change(NULL,-1,&imported_ref,0,2);
+       vkr_vm_budget(physical_dev, budget_charge, true);
+       vkr_device_memory_budget_release(budget_charge);
+       if (local_import_info.fd >= 0)
+@@ -625,6 +632,7 @@ vkr_dispatch_vkAllocateMemory(struct vn_dispatch_context *dispatch,
+    mem->allocation_size = alloc_info->allocationSize;
+    mem->memory_type_index = mem_type_index;
+    mem->budget_charge = budget_charge;
++   mem->budget_ref=imported_ref;
+ }
+ 
+ static void
+@@ -644,12 +652,16 @@ vkr_dispatch_vkFreeMemory(struct vn_dispatch_context *dispatch,
+     * locally and prevent the backing cleanup from releasing it early.
+     */
+    const uint64_t budget_charge = mem->budget_charge;
++   struct helios_vram_reference reference=mem->budget_ref;
++   mem->budget_ref.valid=false;
+    mem->budget_charge = 0;
+    struct vkr_physical_device *physical = mem->device->physical_device;
+    vkr_device_memory_release(mem);
+    vkr_device_memory_destroy_and_remove(dispatch->data, args);
+    vkr_device_memory_budget_release(budget_charge);
+-   vkr_vm_budget(physical, budget_charge, true);
++   if(reference.valid) {
++      if(helios_vram_reference_change(NULL,-1,&reference,0,2)<0) vkr_log("shared VRAM allocation-reference release failed");
++   } else vkr_vm_budget(physical, budget_charge, true);
+ }
+ 
+ static void
+@@ -749,7 +761,9 @@ vkr_device_memory_release(struct vkr_device_memory *mem)
+    if (mem->udmabuf_fd >= 0)
+       close(mem->udmabuf_fd);
+    vkr_device_memory_budget_release(mem->budget_charge);
+-   if (mem->budget_charge) vkr_vm_budget(mem->device->physical_device, mem->budget_charge, true);
++   if(mem->budget_ref.valid) {
++      if(helios_vram_reference_change(NULL,-1,&mem->budget_ref,0,2)<0) vkr_log("shared VRAM teardown-reference release failed");
++   } else if (mem->budget_charge) vkr_vm_budget(mem->device->physical_device, mem->budget_charge, true);
+    mem->budget_charge = 0;
+ }
+ 
+@@ -872,6 +886,12 @@ vkr_device_memory_export_blob(struct vkr_device_memory *mem,
+       }
+    }
+ 
++   if(fd_type==VIRGL_RESOURCE_FD_DMABUF) {
++      int tracked=0;
++      if(mem->budget_ref.valid) tracked=helios_vram_reference_change(NULL,fd,&mem->budget_ref,0,1);
++      else if(mem->budget_charge) tracked=helios_vram_reference_change(mem->device->physical_device->id_properties.deviceUUID,fd,&mem->budget_ref,mem->budget_charge,0);
++      if(tracked<0) {close(fd);return false;}
++   }
+    static atomic_uint_fast64_t contract_sequence;
+    uint_fast64_t sequence=atomic_fetch_add_explicit(&contract_sequence,1,memory_order_relaxed);
+    struct stat contract;
+diff --git a/src/venus/vkr_device_memory.h b/src/venus/vkr_device_memory.h
+index 087c107..c8d8ec8 100644
+--- a/src/venus/vkr_device_memory.h
++++ b/src/venus/vkr_device_memory.h
+@@ -7,6 +7,7 @@
+ #define VKR_DEVICE_MEMORY_H
+ 
+ #include "vkr_common.h"
++#include "helios-vram-refs.h"
+ 
+ struct gbm_bo;
+ struct vkr_mtl_shm;
+@@ -33,6 +34,7 @@ struct vkr_device_memory {
+    uint64_t allocation_size;
+    uint32_t memory_type_index;
+    uint64_t budget_charge;
++   struct helios_vram_reference budget_ref;
+ 
+    bool exported;
+ };
+diff --git a/src/virgl_resource.c b/src/virgl_resource.c
+index 0ee5468..26d5c43 100644
+--- a/src/virgl_resource.c
++++ b/src/virgl_resource.c
+@@ -50,6 +50,9 @@ virgl_resource_destroy_func(void *val)
+        (res->fd_type != VIRGL_RESOURCE_OPAQUE_HANDLE))
+       close(res->fd);
+ 
++#ifdef ENABLE_VENUS
++   if(res->budget_ref.valid) helios_vram_reference_change(NULL,-1,&res->budget_ref,0,2);
++#endif
+    free(res);
+ }
+ 
+@@ -136,7 +139,7 @@ virgl_resource_create_from_fd(uint32_t res_id,
+                               int fd,
+                               const struct iovec *iov,
+                               int iov_count,
+-                              const struct virgl_resource_vulkan_info *vulkan_info)
++                              const struct virgl_resource_vulkan_info *vulkan_info, bool adopt_export)
+ {
+    struct virgl_resource *res;
+ 
+@@ -144,6 +147,9 @@ virgl_resource_create_from_fd(uint32_t res_id,
+ 
+    res = virgl_resource_create(res_id);
+    if (!res) {
++#ifdef ENABLE_VENUS
++      if(adopt_export && fd_type==VIRGL_RESOURCE_FD_DMABUF) helios_vram_reference_change(NULL,fd,NULL,0,2);
++#endif
+       close(fd);
+       return NULL;
+    }
+@@ -151,6 +157,20 @@ virgl_resource_create_from_fd(uint32_t res_id,
+    res->fd_type = fd_type;
+    /* take ownership */
+    res->fd = fd;
++#ifdef ENABLE_VENUS
++   if(fd_type==VIRGL_RESOURCE_FD_DMABUF) {
++      int tracked=helios_vram_reference_change(NULL,fd,&res->budget_ref,0,1);
++      if(tracked<0) {
++         if(adopt_export) helios_vram_reference_change(NULL,fd,NULL,0,2);
++         virgl_resource_remove(res_id);return NULL;
++      }
++      /* Adopting the sender's in-transit FD lease: retain established its
++       * identity; remove just the extra reference introduced by lookup. */
++      if(adopt_export && res->budget_ref.valid) helios_vram_reference_change(NULL,fd,NULL,0,2);
++   }
++#else
++   (void)adopt_export;
++#endif
+ 
+    res->iov = iov;
+    res->iov_count = iov_count;
+diff --git a/src/virgl_resource.h b/src/virgl_resource.h
+index 8eb770e..c7e6ab4 100644
+--- a/src/virgl_resource.h
++++ b/src/virgl_resource.h
+@@ -27,6 +27,9 @@
+ 
+ #include <stdbool.h>
+ #include <stdint.h>
++#ifdef ENABLE_VENUS
++#include "venus/helios-vram-refs.h"
++#endif
+ 
+ struct iovec;
+ struct pipe_resource;
+@@ -79,6 +82,9 @@ struct virgl_resource_vulkan_info {
+  * typed when interop is expected.
+  */
+ struct virgl_resource {
++#ifdef ENABLE_VENUS
++   struct helios_vram_reference budget_ref;
++#endif
+    uint32_t res_id;
+ 
+    struct pipe_resource *pipe_resource;
+@@ -145,7 +151,7 @@ virgl_resource_create_from_fd(uint32_t res_id,
+                               int fd,
+                               const struct iovec *iov,
+                               int iov_count,
+-                              const struct virgl_resource_vulkan_info *vulkan_info);
++                              const struct virgl_resource_vulkan_info *vulkan_info, bool adopt_export);
+ 
+ struct virgl_resource *
+ virgl_resource_create_from_opaque_handle(struct virgl_context *ctx,
+diff --git a/src/virglrenderer.c b/src/virglrenderer.c
+index a37b108..2a1affc 100644
+--- a/src/virglrenderer.c
++++ b/src/virglrenderer.c
+@@ -1207,7 +1207,7 @@ int virgl_renderer_resource_create_blob(const struct virgl_renderer_resource_cre
+                                           blob.u.fd,
+                                           args->iovecs,
+                                           args->num_iovs,
+-                                          &blob.vulkan_info);
++                                          &blob.vulkan_info, true);
+       if (!res)
+          return -ENOMEM;
+    } else {
+@@ -1471,7 +1471,7 @@ virgl_renderer_resource_import_blob(const struct virgl_renderer_resource_import_
+                                        args->fd,
+                                        NULL,
+                                        0,
+-                                       NULL);
++                                       NULL, false);
+    if (!res)
+       return -ENOMEM;
+ 

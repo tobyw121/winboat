@@ -7,6 +7,7 @@
 #include <cwchar>
 #include <cstdlib>
 #include <cstdint>
+#include <functional>
 using Microsoft::WRL::ComPtr;
 static HRESULT create(bool warp,ComPtr<ID3D11Device>& device,ComPtr<ID3D11DeviceContext>& context){
     ComPtr<IDXGIFactory1> factory;HRESULT hr=CreateDXGIFactory1(IID_PPV_ARGS(&factory));if(FAILED(hr))return hr;
@@ -40,16 +41,17 @@ static HRESULT pixels(ID3D11Device* device,ID3D11DeviceContext* context,ID3D11Te
     }
     context->Unmap(staging.Get(),0);return ok?S_OK:E_FAIL;
 }
-static HRESULT exchange(ID3D11Device* device,ID3D11DeviceContext* context,HANDLE handle){
+static HRESULT exchange(ID3D11Device* device,ID3D11DeviceContext* context,HANDLE handle,const std::function<void()>& dropProducer={}){
     ComPtr<ID3D11Device1> device1;ComPtr<ID3D11Texture2D> texture;ComPtr<IDXGIKeyedMutex> mutex;
     HRESULT hr=device->QueryInterface(IID_PPV_ARGS(&device1));
     if(SUCCEEDED(hr))hr=device1->OpenSharedResource1(handle,IID_PPV_ARGS(&texture));
     if(SUCCEEDED(hr))hr=texture.As(&mutex);if(FAILED(hr))return hr;
+    if(dropProducer)dropProducer();
     hr=mutex->AcquireSync(1,3000);if(hr!=S_OK)return FAILED(hr)?hr:E_FAIL;
     hr=pixels(device,context,texture.Get(),false);
     ComPtr<ID3D11RenderTargetView> view;
     if(SUCCEEDED(hr))hr=device->CreateRenderTargetView(texture.Get(),nullptr,&view);
-    if(SUCCEEDED(hr)){const float green[]={0,1,0,1};context->ClearRenderTargetView(view.Get(),green);context->Flush();}
+    if(SUCCEEDED(hr)){const float green[]={0,1,0,1};context->ClearRenderTargetView(view.Get(),green);context->Flush();hr=pixels(device,context,texture.Get(),true);}
     HRESULT release=mutex->ReleaseSync(2);return FAILED(hr)?hr:release;
 }
 int wmain(int argc,wchar_t** argv){
@@ -68,7 +70,7 @@ int wmain(int argc,wchar_t** argv){
         return SUCCEEDED(hr)?0:4;
     }
     // Test both a second device in this process and a separate child process.
-    for(int mode=0;mode<2;mode++){
+    for(int mode=0;mode<3;mode++){
         D3D11_TEXTURE2D_DESC desc{};desc.Width=31;desc.Height=17;desc.MipLevels=1;desc.ArraySize=1;
         desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;desc.SampleDesc.Count=1;desc.BindFlags=D3D11_BIND_RENDER_TARGET;
         desc.MiscFlags=D3D11_RESOURCE_MISC_SHARED_NTHANDLE|D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX;
@@ -82,11 +84,17 @@ int wmain(int argc,wchar_t** argv){
         hr=mutex->AcquireSync(0,3000);
         if(hr==S_OK){const float red[]={1,0,0,1};context->ClearRenderTargetView(view.Get(),red);context->Flush();hr=mutex->ReleaseSync(1);}
         else hr=E_FAIL;
-        if(SUCCEEDED(hr) && mode==0){
+        if(SUCCEEDED(hr) && mode!=1){
             ComPtr<ID3D11Device> other;ComPtr<ID3D11DeviceContext> otherContext;
             hr=create(warp,other,otherContext);
             if(SUCCEEDED(hr)){LUID a=adapter_id(device.Get()),b=adapter_id(other.Get());if(a.LowPart!=b.LowPart||a.HighPart!=b.HighPart)hr=E_FAIL;}
-            if(SUCCEEDED(hr))hr=exchange(other.Get(),otherContext.Get(),handle);
+            if(SUCCEEDED(hr)) {
+                if(mode==2)hr=exchange(other.Get(),otherContext.Get(),handle,[&]{
+                    context->ClearState();context->Flush();view.Reset();resource.Reset();mutex.Reset();texture.Reset();
+                    CloseHandle(handle);handle=nullptr;
+                });
+                else hr=exchange(other.Get(),otherContext.Get(),handle);
+            }
         }else if(SUCCEEDED(hr)){
             wchar_t executable[32768],command[33000];DWORD length=GetModuleFileNameW(nullptr,executable,32768);
             if(!length||length>=32768){CloseHandle(handle);return 6;}
@@ -109,13 +117,13 @@ int wmain(int argc,wchar_t** argv){
                 CloseHandle(process.hThread);CloseHandle(process.hProcess);
             }
         }
-        if(SUCCEEDED(hr)){
+        if(SUCCEEDED(hr) && mode!=2){
             HRESULT acquired=mutex->AcquireSync(2,3000);
             if(acquired==S_OK){hr=pixels(device.Get(),context.Get(),texture.Get(),true);HRESULT released=mutex->ReleaseSync(0);if(SUCCEEDED(hr))hr=released;}
             else hr=E_FAIL;
         }
-        CloseHandle(handle);
-        std::printf("shared mode=%s HRESULT=0x%08x\n",mode?"process":"device",static_cast<unsigned>(hr));
+        if(handle)CloseHandle(handle);
+        std::printf("shared mode=%s HRESULT=0x%08x\n",mode==2?"producer-release":mode?"process":"device",static_cast<unsigned>(hr));
         if(FAILED(hr))return 7;
     }
     return 0;

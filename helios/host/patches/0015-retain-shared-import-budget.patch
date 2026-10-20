@@ -1,0 +1,68 @@
+diff --git a/ui/vulkan-readback.c b/ui/vulkan-readback.c
+index 8af32ca..ba7384f 100644
+--- a/ui/vulkan-readback.c
++++ b/ui/vulkan-readback.c
+@@ -2,6 +2,7 @@
+ #include "ui/helios-cache-policy.h"
+ #include "ui/helios-memory-budget.h"
+ #include "ui/helios-vram-budget.h"
++#include "ui/helios-vram-refs.h"
+ #include "qemu/error-report.h"
+ #include "qemu/timer.h"
+ #include "ui/console.h"
+@@ -165,6 +166,8 @@ struct HeliosVulkanReadback {
+     uint64_t memory_id, imported_bytes, snapshot_bytes, staging_bytes;
+     uint8_t vram_uuid[VK_UUID_SIZE];
+     uint64_t snapshot_vram, staging_vram;
++    uint64_t unknown_import_owned, unknown_import_vram;
++    struct helios_vram_reference import_reference;
+ };
+ 
+ /* QEMU's native readback instance is separate from the Venus renderer. */
+@@ -494,12 +497,16 @@ void helios_vulkan_readback_free(HeliosVulkanReadback *readback)
+     if (readback->image_memory) {
+         vkFreeMemory(readback->device, readback->image_memory, NULL);
+     }
+-    uint64_t vram = readback->snapshot_vram + readback->staging_vram;
++    if(readback->import_reference.valid &&
++       helios_vram_reference_change(NULL,-1,&readback->import_reference,0,2)<0) {
++        error_report("vulkan-readback: shared import reference release failed");
++    }
++    uint64_t vram = readback->snapshot_vram + readback->staging_vram + readback->unknown_import_vram;
+     if (vram && !helios_vram_change(readback->vram_uuid, 0, 0, vram, true, NULL, NULL)) {
+         error_report("vulkan-readback: VM VRAM release accounting failed");
+     }
+     G_LOCK(helios_budget_lock);
+-    uint64_t owned = readback->snapshot_bytes + readback->staging_bytes;
++    uint64_t owned = readback->snapshot_bytes + readback->staging_bytes + readback->unknown_import_owned;
+     if (!helios_budget_release(&helios_owned_memory, owned)) {
+         error_report("vulkan-readback: owned-memory accounting underflow");
+     }
+@@ -696,6 +703,14 @@ HeliosVulkanReadback *helios_vulkan_readback_new(QemuDmaBuf *dmabuf,
+     VkPhysicalDeviceProperties properties;
+     vkGetPhysicalDeviceProperties(readback->physical_device, &properties);
+     error_report("vulkan-readback: device: %s", properties.deviceName);
++    VkPhysicalDeviceIDProperties producer_identity={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES};
++    VkPhysicalDeviceProperties2 identity_properties={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,.pNext=&producer_identity};
++    vkGetPhysicalDeviceProperties2(readback->physical_device,&identity_properties);
++    memcpy(readback->vram_uuid,producer_identity.deviceUUID,VK_UUID_SIZE);
++    if(helios_vram_reference_change(readback->vram_uuid,fds[0],&readback->import_reference,0,1)<0) {
++        error_report("vulkan-readback: shared import reference refused");
++        goto fail;
++    }
+     g_clear_pointer(&physical_devices, g_free);
+ 
+     vkGetPhysicalDeviceQueueFamilyProperties(readback->physical_device,
+@@ -877,8 +892,10 @@ HeliosVulkanReadback *helios_vulkan_readback_new(QemuDmaBuf *dmabuf,
+             .allocationSize = image_requirements.size,
+             .memoryTypeIndex = image_memory_type,
+         };
+-        result = vkAllocateMemory(readback->device, &image_memory_info, NULL,
+-                                  &readback->image_memory);
++        result = readback->import_reference.valid
++            ? vkAllocateMemory(readback->device, &image_memory_info, NULL, &readback->image_memory)
++            : helios_allocate_vm_owned(readback,&image_memory_info,&readback->image_memory,
++                                      &readback->unknown_import_owned,&readback->unknown_import_vram);
+         trace_helios_vulkan_readback_call(readback, 0,
+                                         "vkAllocateMemory (import)", result);
+         if (result != VK_SUCCESS) {

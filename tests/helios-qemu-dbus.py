@@ -59,6 +59,7 @@ with tempfile.TemporaryDirectory(prefix='winboat-qemu-dbus-') as temporary:
             pre_native_listener = (source / 'ui/dbus-listener.c').read_text()
         subprocess.run(['git', '-C', str(source), 'apply', '--check', '--index', str(patch)], check=True)
         subprocess.run(['git', '-C', str(source), 'apply', '--index', str(patch)], check=True)
+    (source/'ui/helios-vram-refs.h').write_bytes((ROOT/'helios/host/vram-refs.h').read_bytes())
     (source/'ui/helios-vram-budget.h').write_bytes((ROOT/'helios/host/vram-budget.h').read_bytes())
     selection_binary = source / 'test-device-selection'
     subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-I', str(source),
