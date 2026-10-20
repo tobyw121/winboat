@@ -36,6 +36,7 @@ cp docs/helios-investigation.md /out/helios-investigation.md
 cp docs/helios-deep-diagnostics.md /out/helios-deep-diagnostics.md
 cp docs/helios-298-validation.md /out/helios-298-validation.md
 cp docs/helios-299-cross-layer.md /out/helios-299-cross-layer.md
+cp docs/helios-vram-budget.md /out/helios-vram-budget.md
 cp docs/shared-folders.md /out/SHARED-FOLDERS.md
 cp docs/vm-hardware-profile.md /out/vm-hardware-profile.md
 cp docs/atlas-installation.md /out/atlas-installation.md
@@ -52,6 +53,8 @@ console.log(JSON.stringify({ winboatCommit: process.env.WINBOAT_BUILD_COMMIT,
     atlasIsoCapability: ATLAS_ISO_VERSION,
     viewerSha256: crypto.createHash('sha256').update(fs.readFileSync('build/native/winboat-helios-viewer')).digest('hex'),
     hostPatchset: fs.readFileSync('helios/host/patches/SHA256SUMS', 'utf8').trim(),
+    rendererPatchset: fs.readFileSync('helios/host/renderer-patches/SHA256SUMS', 'utf8').trim(),
+    vramPolicySha256: crypto.createHash('sha256').update(fs.readFileSync('helios/host/vram-budget.h')).digest('hex'),
     node: process.version, builtAt: new Date().toISOString() }, null, 2));
 JS
 (cd /out && sha256sum -- *.AppImage *.exe *.json *.md > SHA256SUMS)

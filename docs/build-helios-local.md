@@ -331,3 +331,7 @@ keine GPU-Beschleunigung, Windows-Treiberinstallation oder Spielekompatibilität
 Diese müssen auf dem Zielrechner geprüft werden. Die Standard-Bildausgabe ist
 noVNC; ein optionaler lokaler Viewer ist ebenfalls enthalten. Details stehen in
 [helios.md](helios.md).
+
+
+Dynamic 85-percent VM GPU-memory admission requires host runtime `glvnd-v10`;
+see [VRAM budget](helios-vram-budget.md) for activation, accounting scope and tests.
