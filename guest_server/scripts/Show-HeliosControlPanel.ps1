@@ -38,6 +38,13 @@ function Invoke-HeliosPanel([scriptblock]$Work) {
     catch {$details.Text=$_.Exception.Message}
     finally {$form.UseWaitCursor=$false}
 }
+Add-HeliosLabel 'Optional: DWM-Minidumps fuer 30 Minuten (maximal 3 Dateien). Sie koennen private Speicherinhalte enthalten und bleiben lokal. Keine vollstaendigen Speicherabbilder; WER garantiert nicht fuer jeden Grafikfehler einen Dump.'
+Add-HeliosButton 'DWM-Minidumps 30 Minuten aktivieren' {
+    Invoke-HeliosPanel {& (Join-Path $PSScriptRoot 'Manage-HeliosCrashCapture.ps1') -Action Enable | ConvertFrom-Json}
+}
+Add-HeliosButton 'DWM-Minidumps deaktivieren / Status' {
+    Invoke-HeliosPanel {& (Join-Path $PSScriptRoot 'Manage-HeliosCrashCapture.ps1') -Action Disable | ConvertFrom-Json}
+}
 Add-HeliosButton 'Status und geladene Grafikmodule' {
     Invoke-HeliosPanel {& (Join-Path $PSScriptRoot 'Get-HeliosDiagnostics.ps1') | ConvertFrom-Json}
 }
