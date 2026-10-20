@@ -1,0 +1,81 @@
+diff --git a/ui/dbus-listener.c b/ui/dbus-listener.c
+index d05cd10..9799b0a 100644
+--- a/ui/dbus-listener.c
++++ b/ui/dbus-listener.c
+@@ -294,7 +294,8 @@ static bool dbus_helios_copy_capture(DBusDisplayListener *ddl)
+     return ok;
+ }
+ 
+-static bool dbus_helios_readback_update(DBusDisplayListener *ddl)
++static bool dbus_helios_readback_update(DBusDisplayListener *ddl,
++                                         int x, int y, int w, int h)
+ {
+     GVariant *data;
+     GBytes *pixels;
+@@ -307,12 +308,16 @@ static bool dbus_helios_readback_update(DBusDisplayListener *ddl)
+     width = surface_width(ddl->vk_surface);
+     height = surface_height(ddl->vk_surface);
+     stride = surface_stride(ddl->vk_surface);
++    bool partial = !g_strcmp0(g_getenv("HELIOS_READBACK_DAMAGE"), "1") &&
++        ddl->vk_announced && !ddl->vk_failed && x >= 0 && y >= 0 &&
++        w > 0 && h > 0 && (uint64_t)x + w <= width && (uint64_t)y + h <= height;
++    if (!partial) { x = 0; y = 0; w = width; h = height; }
+     /* Complete the Vulkan external-ownership round trip before acknowledging
+      * the producer. An unsuccessful capture must never publish stale pixels
+      * or fall through to UpdateDMABUF without a DMA-BUF baseline. */
+     bool captured = ddl->copy_active ? dbus_helios_copy_capture(ddl)
+         : helios_vulkan_readback_flush(ddl->vk_readback, ddl->vk_surface,
+-                                      0, 0, width, height);
++                                      x, y, w, h);
+     if (!captured) {
+         if (!ddl->vk_failed) {
+             error_report("dbus: validated readback failed; keeping last frame");
+@@ -324,7 +329,29 @@ static bool dbus_helios_readback_update(DBusDisplayListener *ddl)
+     bytes = (size_t)stride * height;
+     /* GDBus serializes asynchronously. Own an immutable pixel snapshot rather
+      * than a reference to the reusable staging surface of the next frame. */
+-    pixels = g_bytes_new(surface_data(ddl->vk_surface), bytes);
++    if (partial) {
++        size_t row_bytes = (size_t)w * 4;
++        if (row_bytes > UINT32_MAX || (size_t)h > SIZE_MAX / row_bytes) {
++            ddl->vk_failed = true;
++            return true;
++        }
++        bytes = row_bytes * h;
++        uint8_t *snapshot = g_malloc(bytes);
++        const uint8_t *source = surface_data(ddl->vk_surface);
++        source += (size_t)y * stride + (size_t)x * 4;
++        for (int row = 0; row < h; row++) {
++            memcpy(snapshot + row * row_bytes, source + row * (size_t)stride, row_bytes);
++        }
++        pixels = g_bytes_new_take(snapshot, bytes);
++        stride = row_bytes;
++    } else {
++        pixels = g_bytes_new(surface_data(ddl->vk_surface), bytes);
++    }
++    if (!g_strcmp0(g_getenv("HELIOS_FRAME_TRACE"), "1")) {
++        error_report("dbus: frame-region source=%u x=%d y=%d width=%d height=%d bytes=%zu partial=%d",
++                     ddl->active_dmabuf ? qemu_dmabuf_get_source_id(ddl->active_dmabuf) : UINT32_MAX,
++                     x, y, w, h, bytes, partial);
++    }
+     data = g_variant_new_from_bytes(G_VARIANT_TYPE("ay"), pixels, true);
+     g_bytes_unref(pixels);
+     dbus_helios_frame_sent(ddl, true);
+@@ -337,7 +364,7 @@ static bool dbus_helios_readback_update(DBusDisplayListener *ddl)
+             G_DBUS_CALL_FLAGS_NONE, DBUS_DEFAULT_TIMEOUT, NULL,
+             dbus_helios_frame_done, g_object_ref(ddl));
+     } else {
+-        qemu_dbus_display1_listener_call_update(ddl->proxy, 0, 0, width, height,
++        qemu_dbus_display1_listener_call_update(ddl->proxy, x, y, w, h,
+             stride, surface_format(ddl->vk_surface), data,
+             G_DBUS_CALL_FLAGS_NONE, DBUS_DEFAULT_TIMEOUT, NULL,
+             dbus_helios_frame_done, g_object_ref(ddl));
+@@ -506,7 +533,7 @@ static void dbus_call_update_gl(DisplayChangeListener *dcl,
+     trace_dbus_update_gl(x, y, w, h);
+ 
+ #if defined(CONFIG_GBM) && defined(CONFIG_LINUX)
+-    if (dbus_helios_readback_update(ddl)) {
++    if (dbus_helios_readback_update(ddl, x, y, w, h)) {
+         return;
+     }
+ #endif

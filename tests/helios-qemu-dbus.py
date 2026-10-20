@@ -64,6 +64,7 @@ with tempfile.TemporaryDirectory(prefix='winboat-qemu-dbus-') as temporary:
                     str(ROOT / 'tests/helios-qemu-device.c'), '-o', str(selection_binary)], check=True)
     subprocess.run([str(selection_binary)], check=True)
     readback = (source / 'ui/vulkan-readback.c').read_text()
+    (source/'memory-helper.inc').write_text(readback[readback.index('G_LOCK_DEFINE_STATIC(helios_budget_lock)'):readback.index('struct HeliosVulkanReadback {')])
     start = readback.index('typedef struct HeliosImportFailure')
     end = readback.index('\n};', readback.index('struct HeliosVulkanReadbackCache', start)) + 3
     helper = readback.index('static HeliosImportFailure *helios_import_failure')
@@ -73,6 +74,13 @@ with tempfile.TemporaryDirectory(prefix='winboat-qemu-dbus-') as temporary:
     subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-I', str(source),
                     str(ROOT / 'tests/helios-qemu-import-cache.c'), '-o', str(cache_binary)], check=True)
     subprocess.run([str(cache_binary)], check=True)
+    memory_binary=source/'test-memory-budget'
+    subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-I',str(source),str(ROOT/'tests/helios-qemu-memory.c'),'-o',str(memory_binary)],check=True)
+    subprocess.run([str(memory_binary)],check=True)
+    if os.environ.get('HELIOS_TEST_VULKAN')=='1':
+        vk_binary=source/'test-vulkan-budget'
+        subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-I',str(source),str(ROOT/'tests/helios-qemu-budget-vulkan.c'),*shlex.split(subprocess.check_output(['pkg-config','--cflags','--libs','glib-2.0','vulkan'],text=True)),'-o',str(vk_binary)],check=True)
+        subprocess.run([str(vk_binary)],check=True)
     print('Host patches apply to the checksum-verified pinned QEMU sources.', flush=True)
     # Use QEMU's actual Error prototype: substituting a GError-taking fixture
     # previously hid a production compile failure in the native frame callback.

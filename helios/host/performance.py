@@ -35,6 +35,10 @@ def options(args, env, huge_free=None):
         return args
     if env.get('HELIOS_READBACK_CACHE_ENTRIES','8') not in ('1','2','4','8'):
         raise ValueError('Readback cache entries must be 1, 2, 4 or 8')
+    budget=env.get('HELIOS_READBACK_BUDGET_MIB','0')
+    if not re.fullmatch(r'\d{1,5}',budget) or not 0<=int(budget)<=16384:
+        raise ValueError('Readback owned-memory budget must be 0..16384 MiB')
+    number(env,'HELIOS_READBACK_DAMAGE',1)
     if number(env,'HELIOS_FRAME_TRACE',1):
         if '-trace' in args: raise ValueError('Existing QEMU trace configuration must be preserved')
         args += ['-trace','enable=helios_vulkan_capture']

@@ -122,7 +122,7 @@ static HeliosVulkanReadback *helios_vulkan_readback_cache_activate(HeliosVulkanR
     assert(optimal);vulkan_imports++;if(!b->optimal)return NULL;c->active=b;return &c->image;
 }
 static bool helios_vulkan_readback_flush(HeliosVulkanReadback *r,DisplaySurface *s,unsigned x,unsigned y,unsigned w,unsigned h) {
-    assert(r && x==0 && y==0 && w==(unsigned)surface_width(s) && h==(unsigned)surface_height(s));
+    assert(r && x+w<=(unsigned)surface_width(s) && y+h<=(unsigned)surface_height(s));
     if(readback_failure)return false;
     memset(s->pixels,97,sizeof(s->pixels));return true;
 }
@@ -140,6 +140,7 @@ static void qemu_dbus_display1_listener_call_scanout(void *p,unsigned w,unsigned
 }
 static void qemu_dbus_display1_listener_call_update(void *p,int x,int y,int w,int h,unsigned stride,unsigned format,GVariant *pixels,
     GDBusCallFlags flags,int timeout,GCancellable *cancel,GAsyncReadyCallback cb,gpointer opaque) {
+    update_rect[0]=x;update_rect[1]=y;update_rect[2]=w;update_rect[3]=h;
     software_updates++;record_pixels(pixels,cb,opaque);
 }
 static bool map_format(int format, GLenum *glformat, GLenum *gltype) {
@@ -309,6 +310,18 @@ int main(void) {
     assert(!listener.vk_announced && !last_block && diagnostics>=previous_diagnostics+1);
     dbus_call_update_gl(&listener.dcl,0,0,4,4);assert(software_baselines==2);
     pending_callback(NULL,NULL,pending_opaque);
+    g_setenv("HELIOS_READBACK_DAMAGE","1",TRUE);
+    dbus_call_update_gl(&listener.dcl,1,2,2,1);
+    copy=g_variant_get_fixed_array(last_pixels,&n,1);
+    assert(n==8 && copy[0]==97 && update_rect[0]==1 && update_rect[1]==2 && update_rect[2]==2 && update_rect[3]==1);
+    memset(canvas->pixels,0,64);assert(copy[0]==97);
+    pending_callback(NULL,NULL,pending_opaque);
+    readback_failure=true;dbus_call_update_gl(&listener.dcl,1,2,2,1);readback_failure=false;
+    dbus_call_update_gl(&listener.dcl,1,2,2,1);
+    copy=g_variant_get_fixed_array(last_pixels,&n,1);
+    assert(n==64 && update_rect[0]==0 && update_rect[2]==4); /* full repair after missed damage */
+    pending_callback(NULL,NULL,pending_opaque);
+    g_unsetenv("HELIOS_READBACK_DAMAGE");
     QemuDmaBuf explicit_linear={.allocation=64,.optimal=true};
     int imports=vulkan_imports;
     dbus_scanout_dmabuf(&listener.dcl,&explicit_linear);

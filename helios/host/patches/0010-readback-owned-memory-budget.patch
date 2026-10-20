@@ -1,0 +1,173 @@
+diff --git a/ui/helios-memory-budget.h b/ui/helios-memory-budget.h
+new file mode 100644
+index 0000000..bf67f83
+--- /dev/null
++++ b/ui/helios-memory-budget.h
+@@ -0,0 +1,20 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later */
++#ifndef HELIOS_MEMORY_BUDGET_H
++#define HELIOS_MEMORY_BUDGET_H
++#include <stdbool.h>
++#include <stdint.h>
++typedef struct HeliosMemoryBudget { uint64_t used, peak, limit; } HeliosMemoryBudget;
++static inline bool helios_budget_reserve(HeliosMemoryBudget *b, uint64_t bytes)
++{
++    if (bytes > UINT64_MAX-b->used || (b->limit && (b->used>b->limit || bytes > b->limit-b->used))) return false;
++    b->used += bytes;
++    if (b->used>b->peak) b->peak=b->used;
++    return true;
++}
++static inline bool helios_budget_release(HeliosMemoryBudget *b, uint64_t bytes)
++{
++    if (bytes>b->used) return false;
++    b->used-=bytes;
++    return true;
++}
++#endif
+diff --git a/ui/vulkan-readback.c b/ui/vulkan-readback.c
+index 1126b20..fd2b220 100644
+--- a/ui/vulkan-readback.c
++++ b/ui/vulkan-readback.c
+@@ -1,5 +1,6 @@
+ #include "qemu/osdep.h"
+ #include "ui/helios-cache-policy.h"
++#include "ui/helios-memory-budget.h"
+ #include "qemu/error-report.h"
+ #include "qemu/timer.h"
+ #include "ui/console.h"
+@@ -74,6 +75,53 @@ static int helios_vulkan_readback_device_index(VkPhysicalDevice *devices,
+     return selected;
+ }
+ 
++G_LOCK_DEFINE_STATIC(helios_budget_lock);
++static HeliosMemoryBudget helios_owned_memory;
++static uint64_t helios_memory_serial;
++static uint64_t helios_memory_rejected;
++static gsize helios_budget_initialized;
++static void helios_budget_initialize(void)
++{
++    if (g_once_init_enter(&helios_budget_initialized)) {
++        const char *text = g_getenv("HELIOS_READBACK_BUDGET_MIB");
++        if (text && *text) {
++            char *end;
++            uint64_t mib = g_ascii_strtoull(text, &end, 10);
++            if (*end || mib > 16384) {
++                error_report("vulkan-readback: invalid owned-memory budget; using 64 MiB");
++                mib = 64;
++            }
++            helios_owned_memory.limit = mib * 1048576;
++        }
++        g_once_init_leave(&helios_budget_initialized, 1);
++    }
++}
++static VkResult helios_allocate_owned(VkDevice device,
++    const VkMemoryAllocateInfo *info, VkDeviceMemory *memory, uint64_t *accounted)
++{
++    helios_budget_initialize();
++    G_LOCK(helios_budget_lock);
++    bool allowed = helios_budget_reserve(&helios_owned_memory, info->allocationSize);
++    uint64_t used = helios_owned_memory.used, limit = helios_owned_memory.limit;
++    if (!allowed) helios_memory_rejected++;
++    G_UNLOCK(helios_budget_lock);
++    if (!allowed) {
++        error_report("vulkan-readback: budget-rejected requested=%" PRIu64
++                     " owned=%" PRIu64 " limit=%" PRIu64,
++                     (uint64_t)info->allocationSize, used, limit);
++        return VK_ERROR_OUT_OF_DEVICE_MEMORY;
++    }
++    VkResult result = vkAllocateMemory(device, info, NULL, memory);
++    if (result == VK_SUCCESS) {
++        *accounted = info->allocationSize;
++    } else {
++        G_LOCK(helios_budget_lock);
++        helios_budget_release(&helios_owned_memory, info->allocationSize);
++        G_UNLOCK(helios_budget_lock);
++    }
++    return result;
++}
++
+ struct HeliosVulkanReadback {
+     QemuDmaBuf *dmabuf;
+     uint32_t source_id;
+@@ -113,6 +161,7 @@ struct HeliosVulkanReadback {
+     uint64_t flushes;
+     uint64_t publishes;
+     uint64_t operations;
++    uint64_t memory_id, imported_bytes, snapshot_bytes, staging_bytes;
+ };
+ 
+ /* QEMU's native readback instance is separate from the Venus renderer. */
+@@ -403,6 +452,17 @@ void helios_vulkan_readback_free(HeliosVulkanReadback *readback)
+     if (readback->image_memory) {
+         vkFreeMemory(readback->device, readback->image_memory, NULL);
+     }
++    G_LOCK(helios_budget_lock);
++    uint64_t owned = readback->snapshot_bytes + readback->staging_bytes;
++    if (!helios_budget_release(&helios_owned_memory, owned)) {
++        error_report("vulkan-readback: owned-memory accounting underflow");
++    }
++    uint64_t used = helios_owned_memory.used, peak = helios_owned_memory.peak;
++    G_UNLOCK(helios_budget_lock);
++    error_report("vulkan-readback: resource-release id=%" PRIu64 " source=%u ino=%" PRIu64
++                 " imported=%" PRIu64 " owned=%" PRIu64 " remaining=%" PRIu64 " peak=%" PRIu64,
++                 readback->memory_id, readback->source_id, (uint64_t)readback->dmabuf_ino,
++                 readback->imported_bytes, owned, used, peak);
+     if (readback->device) {
+         vkDestroyDevice(readback->device, NULL);
+     }
+@@ -466,6 +526,10 @@ HeliosVulkanReadback *helios_vulkan_readback_new(QemuDmaBuf *dmabuf,
+     }
+ 
+     readback = g_new0(HeliosVulkanReadback, 1);
++    readback->source_id = qemu_dmabuf_get_source_id(dmabuf);
++    G_LOCK(helios_budget_lock);
++    readback->memory_id = ++helios_memory_serial;
++    G_UNLOCK(helios_budget_lock);
+     readback->dmabuf = dmabuf;
+     readback->source_id = qemu_dmabuf_get_source_id(dmabuf);
+     readback->backing_width = qemu_dmabuf_get_backing_width(dmabuf);
+@@ -758,6 +822,7 @@ HeliosVulkanReadback *helios_vulkan_readback_new(QemuDmaBuf *dmabuf,
+             continue;
+         }
+         import_fd = -1;
++        readback->imported_bytes = image_memory_info.allocationSize;
+         VK_NEW(vkBindImageMemory(readback->device, readback->image,
+                                  readback->image_memory, 0));
+         trace_helios_vulkan_readback_memory(
+@@ -803,8 +868,8 @@ HeliosVulkanReadback *helios_vulkan_readback_new(QemuDmaBuf *dmabuf,
+         .allocationSize = snapshot_requirements.size,
+         .memoryTypeIndex = snapshot_memory_type,
+     };
+-    VK_NEW(vkAllocateMemory(readback->device, &snapshot_memory_info, NULL,
+-                            &readback->snapshot_memory));
++    VK_NEW(helios_allocate_owned(readback->device, &snapshot_memory_info,
++                            &readback->snapshot_memory, &readback->snapshot_bytes));
+     VK_NEW(vkBindBufferMemory(readback->device, readback->snapshot,
+                               readback->snapshot_memory, 0));
+     trace_helios_vulkan_readback_memory(
+@@ -832,8 +897,8 @@ HeliosVulkanReadback *helios_vulkan_readback_new(QemuDmaBuf *dmabuf,
+         .allocationSize = staging_requirements.size,
+         .memoryTypeIndex = staging_memory_type,
+     };
+-    VK_NEW(vkAllocateMemory(readback->device, &staging_memory_info, NULL,
+-                            &readback->staging_memory));
++    VK_NEW(helios_allocate_owned(readback->device, &staging_memory_info,
++                            &readback->staging_memory, &readback->staging_bytes));
+     VK_NEW(vkBindBufferMemory(readback->device, readback->staging,
+                               readback->staging_memory, 0));
+     trace_helios_vulkan_readback_memory(
+@@ -867,6 +932,14 @@ HeliosVulkanReadback *helios_vulkan_readback_new(QemuDmaBuf *dmabuf,
+                  "modifier=0x%" PRIx64,
+                  direct_optimal ? "OPTIMAL" : "LINEAR",
+                  readback->backing_width, readback->backing_height, modifier);
++    G_LOCK(helios_budget_lock);
++    uint64_t used = helios_owned_memory.used, peak = helios_owned_memory.peak;
++    G_UNLOCK(helios_budget_lock);
++    error_report("vulkan-readback: resource-create id=%" PRIu64 " source=%u ino=%" PRIu64
++                 " imported=%" PRIu64 " snapshot=%" PRIu64 " staging=%" PRIu64
++                 " owned_total=%" PRIu64 " peak=%" PRIu64,
++                 readback->memory_id, readback->source_id, (uint64_t)readback->dmabuf_ino,
++                 readback->imported_bytes, readback->snapshot_bytes, readback->staging_bytes, used, peak);
+     return readback;
+ 
+ fail:

@@ -165,7 +165,7 @@ jobs:
           python3 -c 'import json; p=json.load(open("/tmp/preflight.json")); assert p["devices"] and p["ready"] is False'
           if /tmp/preflight /dev/null; then exit 1; fi
       - name: Test pinned QEMU patches with real Mesa and protocol fixtures
-        run: python3 tests/helios-qemu-dbus.py
+        run: HELIOS_TEST_VULKAN=1 python3 tests/helios-qemu-dbus.py
 
   viewer:
     runs-on: ubuntu-24.04
