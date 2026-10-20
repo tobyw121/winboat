@@ -1,0 +1,3 @@
+db642f81f6431e45338d90dd2ce56cd294c0c77d1255c87eb4b2afcd0ed9b620  src/venus/vkr_device_memory.c
+7139a21f575f4e135fecdd08c2c4e6cb365b2b0fb74c260783fdc306f6a0f4d6  src/venus/vkr_physical_device.c
+4ff733db1786370573097d0dd3157b8c911224bf6fef2918a362a196cf56a97b  src/venus/vkr_physical_device.h

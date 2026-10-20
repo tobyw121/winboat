@@ -27,6 +27,7 @@ def parse_transport_errors(text):
         ('egl-import-error', r'EGL DMA-BUF import failed for fourcc=(0x[0-9a-fA-F]+) modifier=(0x[0-9a-fA-F]+)', ('fourcc', 'modifier')),
         ('memory-accounting-error', r'invalid device-local memory accounting: release=(\d+) used=(\d+)', ('releasedBytes', 'usedBytes')),
         ('device-selection-mismatch', r'no unique Vulkan device matches DRM render node (\d+):(\d+)', ('drmMajor', 'drmMinor')),
+        ('vram-budget-refused',r'vram-budget refused: release=([01]) requested=(\d{1,20}) used=(\d{1,20}) cap=(\d{1,20})',('release','requestedBytes','usedBytes','limitBytes')),
         ('budget-rejected', r'budget-rejected requested=(\d{1,20}) owned=(\d{1,20}) limit=(\d{1,20})', ('requestedBytes','ownedBytes','limitBytes')),
         ('import-backoff', r'import-held source=(\d+) ino=(\d+) attempts=(\d+) delay_ns=(\d+)', ('source','inode','attempts','delayNanoseconds')),
     )

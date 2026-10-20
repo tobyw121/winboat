@@ -30,7 +30,7 @@ HASHES = {
 
 
 def function(source, name):
-    match = re.search(r'(?:static\s+)?(?:void|bool)\s+' + name + r'\([^;]*?\)\s*\{', source)
+    match = re.search(r'(?:static\s+)?(?:void|bool|VkResult)\s+' + name + r'\([^;]*?\)\s*\{', source)
     assert match, name
     end, depth = match.end(), 1
     while depth:
@@ -59,11 +59,13 @@ with tempfile.TemporaryDirectory(prefix='winboat-qemu-dbus-') as temporary:
             pre_native_listener = (source / 'ui/dbus-listener.c').read_text()
         subprocess.run(['git', '-C', str(source), 'apply', '--check', '--index', str(patch)], check=True)
         subprocess.run(['git', '-C', str(source), 'apply', '--index', str(patch)], check=True)
+    (source/'ui/helios-vram-budget.h').write_bytes((ROOT/'helios/host/vram-budget.h').read_bytes())
     selection_binary = source / 'test-device-selection'
     subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-I', str(source),
                     str(ROOT / 'tests/helios-qemu-device.c'), '-o', str(selection_binary)], check=True)
     subprocess.run([str(selection_binary)], check=True)
     readback = (source / 'ui/vulkan-readback.c').read_text()
+    (source/'vm-memory-helper.inc').write_text(function(readback,'helios_allocate_vm_owned'))
     (source/'memory-helper.inc').write_text(readback[readback.index('G_LOCK_DEFINE_STATIC(helios_budget_lock)'):readback.index('struct HeliosVulkanReadback {')])
     start = readback.index('typedef struct HeliosImportFailure')
     end = readback.index('\n};', readback.index('struct HeliosVulkanReadbackCache', start)) + 3

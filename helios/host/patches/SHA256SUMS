@@ -10,3 +10,4 @@ f3f88bad00ab7083a5405a94f687ed46b0175f6453c4bb241304c92d3b2c7f88  0009-readback-
 6d380f76b59a84856365bac04b7d137a11d84f9e4d42a788b05e29b494bcb8a3  0010-readback-owned-memory-budget.patch
 286ed90a369b382dd7f1aa97e325356f10787d6632346f3fe4f3097d762a6377  0011-dbus-bounded-damage-readback.patch
 f62d31d44c2598c72884bbe7b1a29ba76ce4559f6da03393343a064eaadd4aac  0012-frame-resource-identities.patch
+c0a840762b1b4e7ca8f97d3eba94ff2d50afe65f01a632f6925ab9c9dcf4a2e1  0013-shared-vm-vram-budget.patch

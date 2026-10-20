@@ -16,6 +16,7 @@ host runtimeVersion displayVersion expectedRuntimeVersion runtimeMatches contain
 qemuBackend backend vnc gpuCount venus blob sharedMemfd vgaRescue renderNode issues
 transportErrors kind requiredBytes bufferBytes releasedBytes usedBytes hostAtUtc
 gpuPreflight gpuHeap sampledAtUtc observation devices matchingDevices ready vendorId deviceId apiVersion selected
+vramBudgetPercent vramHardCapBytes
 timelineSemaphore synchronization2 dynamicRendering bgraOptimalImportable imageQueryResult
 externalMemoryFd memoryBudgetAvailable pciMatchesDrm deviceUuid driverUuid heaps sizeBytes deviceLocal
 resourceTimeline firstObservedHostFailure resourceId importedBytes snapshotBytes stagingBytes ownedBytes peakBytes
@@ -53,7 +54,7 @@ created format msaa msaa-refused msaa-policy runtime-error resource view shader 
 returned device-ready device-create-failed device-destroyed no-present-observed adapter-open
 producer-init-failed producer-submit-failed buffer-size-mismatch egl-image-error
 egl-import-error memory-accounting-error device-selection-mismatch import-backoff
-budget-rejected resource-create resource-release resource-frame frame-region ack capture
+vram-budget-refused budget-rejected resource-create resource-release resource-frame frame-region ack capture
 kvm tcg host max qemu64 qemu32 other unspecified virtio-net-pci e1000 e1000e rtl8139
 writeback writethrough directsync unsafe native io_uring unmap on off raw qcow2
 software-cpu-emulation cpu-model-not-host unsafe-disk-cache emulated-network-adapter vcpu-affinity-oversubscribed

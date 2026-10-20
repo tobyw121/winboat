@@ -8,6 +8,9 @@ on:
       - 'helios/host/**'
       - 'helios/source.lock.json'
       - 'tests/helios-qemu-dbus.*'
+      - 'tests/helios-renderer-budget.py'
+      - 'tests/helios-vram-budget.c'
+      - 'tests/helios-qemu-budget-vulkan.c'
       - 'tests/helios-qemu-device.c'
       - 'tests/helios-frame-memory.c'
       - 'tests/helios-qemu-import-cache.c'
@@ -54,6 +57,9 @@ on:
       - 'helios/host/**'
       - 'helios/source.lock.json'
       - 'tests/helios-qemu-dbus.*'
+      - 'tests/helios-renderer-budget.py'
+      - 'tests/helios-vram-budget.c'
+      - 'tests/helios-qemu-budget-vulkan.c'
       - 'tests/helios-qemu-device.c'
       - 'tests/helios-frame-memory.c'
       - 'tests/helios-qemu-import-cache.c'
@@ -160,6 +166,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends gcc pkg-config libglib2.0-dev libepoxy-dev libpixman-1-dev libegl-mesa0 libgl1-mesa-dri libvulkan-dev mesa-vulkan-drivers
+      - name: Test pinned renderer memory accounting
+        run: python3 tests/helios-renderer-budget.py
       - name: Test shared VRAM ledger across processes and threads
         run: cc -std=c11 -Wall -Wextra -Werror -pthread tests/helios-vram-budget.c -o /tmp/vram-budget && /tmp/vram-budget
       - name: Test real Vulkan preflight inventory and rejected DRM device

@@ -120,7 +120,7 @@ def cache_environment(env, storage, fingerprint):
     return result
 
 
-def vram_environment(env,report,directory='/run'):
+def vram_environment(env,report,directory='/dev/shm'):
     selected=[d for d in report.get('devices',[]) if d.get('selected') is True]
     if len(selected)!=1: raise ValueError('Unique selected GPU required for VRAM budget')
     heaps=selected[0].get('heaps',[])

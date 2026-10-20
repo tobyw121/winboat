@@ -55,6 +55,7 @@ class TestGraphicsCollector(unittest.TestCase):
         self.assertNotIn('PRIVATE',json.dumps(result))
         self.assertEqual(graphics.parse_frame_metrics('frame-ack source=4 sequence=1 wait_us=-1 success=1 in_flight=1 transport=copy'),[])
     def test_resource_identity_budget_and_live_heap(self):
+        self.assertEqual(graphics.parse_transport_errors('vram-budget refused: release=0 requested=4096 used=6000 cap=7000')[0]['limitBytes'],7000)
         log=('resource-create id=5 source=2 ino=8 imported=40 snapshot=50 staging=60 owned_total=110 peak=120\n'
              'resource-frame id=5 source=2 ino=8 sequence=9 published=1\n'
              'resource-release id=5 source=2 ino=8 imported=40 owned=110 remaining=0 peak=120\n'

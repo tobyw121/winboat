@@ -1,0 +1,100 @@
+diff --git a/ui/vulkan-readback.c b/ui/vulkan-readback.c
+index 80aee72..319b4b1 100644
+--- a/ui/vulkan-readback.c
++++ b/ui/vulkan-readback.c
+@@ -1,6 +1,7 @@
+ #include "qemu/osdep.h"
+ #include "ui/helios-cache-policy.h"
+ #include "ui/helios-memory-budget.h"
++#include "ui/helios-vram-budget.h"
+ #include "qemu/error-report.h"
+ #include "qemu/timer.h"
+ #include "ui/console.h"
+@@ -162,6 +163,8 @@ struct HeliosVulkanReadback {
+     uint64_t publishes;
+     uint64_t operations;
+     uint64_t memory_id, imported_bytes, snapshot_bytes, staging_bytes;
++    uint8_t vram_uuid[VK_UUID_SIZE];
++    uint64_t snapshot_vram, staging_vram;
+ };
+ 
+ /* QEMU's native readback instance is separate from the Venus renderer. */
+@@ -410,6 +413,45 @@ static uint32_t find_memory_type(VkPhysicalDevice physical_device,
+     return UINT32_MAX;
+ }
+ 
++/* Charge only owned DEVICE_LOCAL memory; imported producer memory was charged
++ * by Venus. The shared ledger spans all worker processes in this VM launch. */
++static VkResult helios_allocate_vm_owned(HeliosVulkanReadback *rb,
++    const VkMemoryAllocateInfo *info, VkDeviceMemory *memory, uint64_t *owned, uint64_t *vram)
++{
++    VkPhysicalDeviceIDProperties id = { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES };
++    VkPhysicalDeviceProperties2 props = { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, .pNext = &id };
++    vkGetPhysicalDeviceProperties2(rb->physical_device, &props);
++    memcpy(rb->vram_uuid, id.deviceUUID, VK_UUID_SIZE);
++    uint32_t count = 0; bool supports_budget = false;
++    if (vkEnumerateDeviceExtensionProperties(rb->physical_device, NULL, &count, NULL) != VK_SUCCESS || count > 1024) return VK_ERROR_INITIALIZATION_FAILED;
++    VkExtensionProperties *extensions = g_new0(VkExtensionProperties, count);
++    VkResult query = vkEnumerateDeviceExtensionProperties(rb->physical_device, NULL, &count, extensions);
++    if (query == VK_SUCCESS) for (uint32_t i = 0; i < count; i++) supports_budget |= !strcmp(extensions[i].extensionName, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
++    g_free(extensions);
++    if (query != VK_SUCCESS) return query;
++    VkPhysicalDeviceMemoryBudgetPropertiesEXT budget = { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT };
++    VkPhysicalDeviceMemoryProperties2 mem = { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2, .pNext = supports_budget ? &budget : NULL };
++    vkGetPhysicalDeviceMemoryProperties2(rb->physical_device, &mem);
++    if (info->memoryTypeIndex >= mem.memoryProperties.memoryTypeCount) return VK_ERROR_INITIALIZATION_FAILED;
++    uint64_t bytes = (mem.memoryProperties.memoryTypes[info->memoryTypeIndex].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) ? info->allocationSize : 0;
++    uint64_t total = 0, available = 0, used = 0, cap = 0;
++    for (uint32_t i = 0; i < mem.memoryProperties.memoryHeapCount; i++) {
++        if (!(mem.memoryProperties.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)) continue;
++        uint64_t size = mem.memoryProperties.memoryHeaps[i].size;
++        uint64_t allowance = supports_budget ? MIN(budget.heapBudget[i], size) : size;
++        if (UINT64_MAX-total < size || UINT64_MAX-available < allowance) return VK_ERROR_OUT_OF_DEVICE_MEMORY;
++        total += size; available += allowance;
++    }
++    if (bytes && !helios_vram_change(rb->vram_uuid, total, available, bytes, false, &used, &cap)) {
++        error_report("vram-budget refused: release=0 requested=%" PRIu64 " used=%" PRIu64 " cap=%" PRIu64, bytes, used, cap);
++        return VK_ERROR_OUT_OF_DEVICE_MEMORY;
++    }
++    VkResult result = helios_allocate_owned(rb->device, info, memory, owned);
++    if (result == VK_SUCCESS) *vram = bytes;
++    else if (bytes) helios_vram_change(rb->vram_uuid, 0, 0, bytes, true, NULL, NULL);
++    return result;
++}
++
+ void helios_vulkan_readback_free(HeliosVulkanReadback *readback)
+ {
+     if (!readback) {
+@@ -452,6 +494,10 @@ void helios_vulkan_readback_free(HeliosVulkanReadback *readback)
+     if (readback->image_memory) {
+         vkFreeMemory(readback->device, readback->image_memory, NULL);
+     }
++    uint64_t vram = readback->snapshot_vram + readback->staging_vram;
++    if (vram && !helios_vram_change(readback->vram_uuid, 0, 0, vram, true, NULL, NULL)) {
++        error_report("vulkan-readback: VM VRAM release accounting failed");
++    }
+     G_LOCK(helios_budget_lock);
+     uint64_t owned = readback->snapshot_bytes + readback->staging_bytes;
+     if (!helios_budget_release(&helios_owned_memory, owned)) {
+@@ -868,8 +914,8 @@ HeliosVulkanReadback *helios_vulkan_readback_new(QemuDmaBuf *dmabuf,
+         .allocationSize = snapshot_requirements.size,
+         .memoryTypeIndex = snapshot_memory_type,
+     };
+-    VK_NEW(helios_allocate_owned(readback->device, &snapshot_memory_info,
+-                            &readback->snapshot_memory, &readback->snapshot_bytes));
++    VK_NEW(helios_allocate_vm_owned(readback, &snapshot_memory_info,
++                            &readback->snapshot_memory, &readback->snapshot_bytes, &readback->snapshot_vram));
+     VK_NEW(vkBindBufferMemory(readback->device, readback->snapshot,
+                               readback->snapshot_memory, 0));
+     trace_helios_vulkan_readback_memory(
+@@ -897,8 +943,8 @@ HeliosVulkanReadback *helios_vulkan_readback_new(QemuDmaBuf *dmabuf,
+         .allocationSize = staging_requirements.size,
+         .memoryTypeIndex = staging_memory_type,
+     };
+-    VK_NEW(helios_allocate_owned(readback->device, &staging_memory_info,
+-                            &readback->staging_memory, &readback->staging_bytes));
++    VK_NEW(helios_allocate_vm_owned(readback, &staging_memory_info,
++                            &readback->staging_memory, &readback->staging_bytes, &readback->staging_vram));
+     VK_NEW(vkBindBufferMemory(readback->device, readback->staging,
+                               readback->staging_memory, 0));
+     trace_helios_vulkan_readback_memory(
