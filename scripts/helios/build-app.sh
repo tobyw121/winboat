@@ -34,6 +34,7 @@ cp docs/helios-performance.md /out/helios-performance.md
 cp docs/helios-control-and-validation.md /out/helios-control-and-validation.md
 cp docs/helios-investigation.md /out/helios-investigation.md
 cp docs/helios-deep-diagnostics.md /out/helios-deep-diagnostics.md
+cp docs/helios-298-validation.md /out/helios-298-validation.md
 cp docs/shared-folders.md /out/SHARED-FOLDERS.md
 cp docs/vm-hardware-profile.md /out/vm-hardware-profile.md
 cp docs/atlas-installation.md /out/atlas-installation.md

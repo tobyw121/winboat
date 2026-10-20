@@ -8,7 +8,7 @@ gebaut und anschließend auf echter Hardware geprüft werden.
 ## Aktualisierung und unveränderte Rettung
 
 WinBoat neu bauen und den Guest Service aktualisieren: neue Hilfsprogramme werden
-mit `helios-watchdog-v14` ausgeliefert. Die Host-Messwerkzeuge können direkt aus dem
+mit `helios-watchdog-v15` ausgeliefert. Die Host-Messwerkzeuge können direkt aus dem
 Repository auf dem Linux-Host gestartet werden. Das zusätzliche QEMU-Profil benötigt
 ein aus diesem Stand neu gebautes Helios-Host-Image; ein bereits laufender Container
 übernimmt geänderte Startparameter erst nach explizitem Neuerstellen mit denselben
@@ -206,3 +206,5 @@ Streaming/Unterbrechungslogik und echte QEMU-I/O-Thread-Eigenschaften via QMP.
 Sie aktivieren keine DWM-Dump-Regel auf CI und installieren dort keinen Helios-
 Treiber. Mehrstündige echte Windows-/NVIDIA-Tests, DWM-Abstürze, sichtbare Ausgabe
 und Leistungsgewinne müssen auf der Ziel-VM geprüft werden.
+
+Aktueller Kandidat: [Helios .298, Vertragstests und QEMU-Speicherprofil](helios-298-validation.md).

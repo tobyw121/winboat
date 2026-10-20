@@ -31,7 +31,7 @@ Den Gastdienst einer laufenden VM unabhängig davon aktualisieren:
 python3 scripts/atlas/diagnose-vm.py --update-guest
 ```
 
-Das aktuelle Grafikprotokoll lautet `helios-watchdog-v14`. Eine alte AppImage
+Das aktuelle Grafikprotokoll lautet `helios-watchdog-v15`. Eine alte AppImage
 kann beim nächsten Start wieder ihren älteren Gastdienst einspielen.
 Details zum Build stehen in [build-helios-local.md](build-helios-local.md).
 
@@ -162,3 +162,5 @@ DWM-/MSAA-Problem der neueren Treiber bleibt getrennt zu untersuchen; weder
 Softwarekopie noch Umbenennen des Adapters beheben diesen Treibervertrag.
 
 Erweiterte Messwerkzeuge und das neue QEMU-I/O-Profil: [Helios Deep Diagnostics](helios-deep-diagnostics.md).
+
+Aktueller Kandidat: [Helios .298, Vertragstests und QEMU-Speicherprofil](helios-298-validation.md).
