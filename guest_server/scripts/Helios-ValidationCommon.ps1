@@ -24,7 +24,7 @@ function Read-HeliosValidationJson([string]$Path) {
     return Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
 }
 function Write-HeliosValidationJson([string]$Name,$Data) {
-    if ($Name -notmatch '^(acceptance|transaction|last-good|comparison|comparison-session|resume|release|dump-policy)\.json$') {throw 'Unknown validation state.'}
+    if ($Name -notmatch '^(acceptance|transaction|last-good|comparison|comparison-session|resume|lifecycle|release|dump-policy)\.json$') {throw 'Unknown validation state.'}
     $root=Initialize-HeliosValidationRoot
     $path=Join-Path $root $Name
     $temporary=Join-Path $root ([guid]::NewGuid().ToString('N')+'.tmp')

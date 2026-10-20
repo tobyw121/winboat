@@ -79,7 +79,7 @@ Add-HeliosButton 'Ursprüngliche Optionen wiederherstellen' {
 Add-HeliosLabel 'Vulkan/Mesa Venus wird auch von D3D11/12 und OpenGL genutzt. Globales Abschalten ist daher kein unabhängiger API-Schalter und wird hier nicht angeboten.'
 Add-HeliosLabel 'Anwendungsprofil: nur fuer eine x64-EXE, ohne globale Registry-Aenderung. Diagnoseprofile koennen die Grafikfunktionen einschraenken; alte Treiber ohne Unterstuetzung werden abgewiesen.'
 $applicationMode=New-Object Windows.Forms.ComboBox;$applicationMode.DropDownStyle='DropDownList';$applicationMode.Width=330
-[void]$applicationMode.Items.AddRange(@('driver-default','d3d11-fl10','d3d11-fl11'));$applicationMode.SelectedIndex=0;$layout.Controls.Add($applicationMode)
+[void]$applicationMode.Items.AddRange(@('driver-default','d3d11-fl10','d3d11-fl11','d3d11-backend-caps'));$applicationMode.SelectedIndex=0;$layout.Controls.Add($applicationMode)
 Add-HeliosButton 'Anwendungs-Verknuepfung erstellen' {
     Invoke-HeliosPanel {
         $dialog=New-Object Windows.Forms.OpenFileDialog;$dialog.Filter='Windows x64 application|*.exe'
@@ -106,6 +106,14 @@ Add-HeliosButton 'Grafiktests starten (kurze Testfenster)' {
         }
         $child=Start-Process "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList $arguments -PassThru
         return @{status='running';processId=$child.Id;message='Tests run in a separate interactive window. Export the result after completion.'}
+    }
+}
+Add-HeliosButton 'Drei Wiederholungen der Grafiktests (ohne Geräteneustart)' {
+    Invoke-HeliosPanel {
+        $script=Join-Path $PSScriptRoot 'Test-HeliosLifecycle.ps1'
+        $arguments='-NoProfile -NoExit -ExecutionPolicy Bypass -File "'+$script+'" -Cycles 3'
+        Start-Process "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList $arguments | Out-Null
+        return @{status='running';message='Three bounded acceptance cycles; no adapter or VGA changes.'}
     }
 }
 $resumeScenario=New-Object Windows.Forms.ComboBox;$resumeScenario.DropDownStyle='DropDownList';$resumeScenario.Width=330

@@ -13,7 +13,7 @@ func graphicsValidationStatus(root string) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		result := map[string]interface{}{"scope": "Saved interactive observations; not a live rendering guarantee"}
-		for _, name := range []string{"acceptance", "transaction", "last-good", "comparison", "resume", "release", "dump-policy"} {
+		for _, name := range []string{"acceptance", "transaction", "last-good", "comparison", "resume", "lifecycle", "release", "dump-policy"} {
 			path := filepath.Join(root, "WinBoat", "GraphicsValidation", name+".json")
 			info, err := os.Lstat(path)
 			if os.IsNotExist(err) {

@@ -206,6 +206,7 @@ jobs:
           ./tests/helios-release.test.ps1
           ./tests/helios-application-profile.test.ps1
           ./tests/helios-resume.test.ps1
+          ./tests/helios-lifecycle.test.ps1
           ./tests/helios-validation.test.ps1
           ./tests/helios-validation-storage.test.ps1
           ./tests/helios-transaction.test.ps1
