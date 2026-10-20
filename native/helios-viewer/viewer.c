@@ -12,6 +12,7 @@
 #include <epoxy/gl.h>
 #include <epoxy/egl.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <stdint.h>
 #include <math.h>
@@ -68,6 +69,7 @@ struct Viewer {
  guint64 dma_frames, software_frames, rendered_frames;
  guint64 copy_wall_us, completion_wait_us, copy_samples, skipped_redraws;
  guint64 coalesced_updates;
+ guint8 *software_scratch;gsize software_scratch_capacity;
  guint background_fps;
  gboolean background_paused;
  FramePacer frame_pacer;
@@ -434,7 +436,7 @@ static gboolean import_dma(Viewer *v,GDBusMethodInvocation *inv,GVariant *handle
  const guint rgb[]={0x34325258,0x34325241,0x34324258,0x34324241};
  gboolean known=FALSE;for (guint i=0;i<G_N_ELEMENTS(rgb);i++) known|=fourcc==rgb[i];
  g_snprintf(v->frame_problem,sizeof(v->frame_problem),"DMA-BUF geometry/format invalid: fourcc=0x%08x, backing=%ux%u, crop=%u,%u %ux%u, planes=%u",fourcc,bw,bh,x,y,w,h,planes);
- if (!known || !dimensions(bw,bh) || !dimensions(w,h) || (guint64)x+w>bw || (guint64)y+h>bh || !planes || planes>4
+ if (!known || !dimensions(bw,bh) || !dimensions(w,h) || (guint64)x+w>bw || (guint64)y+h>bh || planes!=1
   || g_variant_n_children(handles)!=planes || g_variant_n_children(offsets)!=planes || g_variant_n_children(strides)!=planes) return FALSE;
  g_strlcpy(v->frame_problem,"DMA-BUF import requires an EGL context with EGL_EXT_image_dma_buf_import and GL_OES_EGL_image",sizeof(v->frame_problem));
  v->display=eglGetCurrentDisplay();
@@ -455,6 +457,15 @@ static gboolean import_dma(Viewer *v,GDBusMethodInvocation *inv,GVariant *handle
   g_variant_get_child(handles,p,"h",&handle);g_variant_get_child(offsets,p,"u",&offset);g_variant_get_child(strides,p,"u",&stride);
   fds[p]=g_unix_fd_list_get(list,handle,NULL);
   if (fds[p]<0 || !stride || stride>INT32_MAX || offset>INT32_MAX) {ok=FALSE;break;}
+  if (modifier==0) {
+   struct stat info;
+   /* Explicit LINEAR only. Size 0 is unknown for some exporters; EGL remains
+    * the authority there. Never reinterpret an INVALID modifier as linear. */
+   if (stride<(guint64)bw*4 || (fstat(fds[p],&info)==0 && info.st_size>0 &&
+       !frame_linear_fits(bw,bh,stride,offset,(guint64)info.st_size))) {
+    g_strlcpy(v->frame_problem,"LINEAR DMA-BUF stride or allocation extent invalid",sizeof(v->frame_problem));ok=FALSE;break;
+   }
+  }
   attrs[n++]=fdkeys[p];attrs[n++]=fds[p];attrs[n++]=offkeys[p];attrs[n++]=(EGLint)offset;attrs[n++]=pitchkeys[p];attrs[n++]=(EGLint)stride;
   if (mods && modifier!=MOD_INVALID) {
    attrs[n++]=EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT+2*p;attrs[n++]=(EGLint)modifier;
@@ -501,15 +512,20 @@ static void upload_software(Viewer *v,gint x,gint y,gint w,gint h,guint stride,g
  /* BGRA subimage uploads into RGBA8 storage are not portable across GLES.
   * Convert only software frames; DMA-BUFs remain on the GPU. */
  if (bgra && !epoxy_is_desktop_gl()) {
-  converted=g_memdup2(bytes,(gsize)stride*h);
-  for (gint row=0;row<h;row++) for (gint col=0;col<w;col++) {
-   guint8 *pixel=converted+(gsize)row*stride+col*4;guint8 blue=pixel[0];pixel[0]=pixel[2];pixel[2]=blue;
-  }
+  gsize needed=(gsize)stride*h;
+  gboolean reuse=!g_strcmp0(g_getenv("HELIOS_REUSE_SOFTWARE_BUFFER"),"1");
+  if(reuse) {
+   if(v->software_scratch_capacity<needed) {
+    v->software_scratch=g_realloc(v->software_scratch,needed);v->software_scratch_capacity=needed;
+   }
+   converted=v->software_scratch;
+  } else converted=g_malloc(needed);
+  frame_bgra_to_rgba(converted,bytes,w,h,stride);
   bytes=converted;bgra=FALSE;
  }
  glBindTexture(GL_TEXTURE_2D,v->texture);glPixelStorei(GL_UNPACK_ROW_LENGTH,stride/4);
  glTexSubImage2D(GL_TEXTURE_2D,0,x,y,w,h,bgra?GL_BGRA:GL_RGBA,GL_UNSIGNED_BYTE,bytes);
- glPixelStorei(GL_UNPACK_ROW_LENGTH,0);g_free(converted);
+ glPixelStorei(GL_UNPACK_ROW_LENGTH,0);if(converted!=v->software_scratch) g_free(converted);
 }
 static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,const gchar *iface,
  const gchar *name,GVariant *params,GDBusMethodInvocation *inv,gpointer data) {
@@ -1211,9 +1227,9 @@ int main(int argc,char **argv) {
   Viewer *d=g_ptr_array_index(v.consoles,i);
   if (d->reconnect_timer) g_source_remove(d->reconnect_timer);
   if (d->peer) {g_signal_handlers_disconnect_by_data(d->peer,d);g_dbus_connection_close_sync(d->peer,NULL,NULL);g_object_unref(d->peer);}
-  g_clear_object(&d->mouse);g_clear_object(&d->cursor);g_free(d->console_path);g_free(d);
+  g_clear_object(&d->mouse);g_clear_object(&d->cursor);g_free(d->console_path);g_free(d->software_scratch);g_free(d);
  }
- g_ptr_array_free(v.consoles,TRUE);
+ g_ptr_array_free(v.consoles,TRUE);g_free(v.software_scratch);
  g_signal_handlers_disconnect_by_data(v.bus,&v);
  g_clear_object(&v.mouse);g_clear_object(&v.bus);g_clear_object(&v.cursor);g_dbus_node_info_unref(v.info);g_main_loop_unref(v.loop);
  return v.exit_code;
