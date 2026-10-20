@@ -126,11 +126,13 @@ jobs:
         run: |
           docker run --rm --entrypoint cat winboat-helios-test:drm-node /opt/helios/host-patches.sha256 > /tmp/compiled-patches.sha256
           cmp helios/host/patches/SHA256SUMS /tmp/compiled-patches.sha256
+          docker run --rm --entrypoint cat winboat-helios-test:drm-node /opt/helios/renderer-patches.sha256 > /tmp/renderer-patches.sha256
+          cmp helios/host/renderer-patches/SHA256SUMS /tmp/renderer-patches.sha256
       - name: Verify actual QEMU I/O polling properties without a guest disk
         run: docker run --rm --network none -e LD_LIBRARY_PATH=/opt/helios/renderer/lib:/opt/helios/lib --entrypoint python3 -v "$PWD:/src:ro" -w /src winboat-helios-test:drm-node tests/helios-io-poll-qemu.py
       - name: Verify runtime capability label
         run: |
-          test "$(docker image inspect --format '{{index .Config.Labels "org.winboat.helios.runtime"}}' winboat-helios-test:drm-node)" = glvnd-v9
+          test "$(docker image inspect --format '{{index .Config.Labels "org.winboat.helios.runtime"}}' winboat-helios-test:drm-node)" = glvnd-v10
   capture:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -158,6 +160,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends gcc pkg-config libglib2.0-dev libepoxy-dev libpixman-1-dev libegl-mesa0 libgl1-mesa-dri libvulkan-dev mesa-vulkan-drivers
+      - name: Test shared VRAM ledger across processes and threads
+        run: cc -std=c11 -Wall -Wextra -Werror -pthread tests/helios-vram-budget.c -o /tmp/vram-budget && /tmp/vram-budget
       - name: Test real Vulkan preflight inventory and rejected DRM device
         run: |
           cc -std=c11 -O2 -Wall -Wextra -Werror helios/host/gpu-preflight.c -lvulkan -o /tmp/preflight

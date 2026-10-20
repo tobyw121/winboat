@@ -23,3 +23,6 @@ printf '%s\n' "$revision" > /opt/helios/revision
 cp /build/patches/SHA256SUMS /opt/helios/host-patches.sha256
 
 cc -std=c11 -O2 -Wall -Wextra -Werror /context/helios/host/gpu-preflight.c -lvulkan -o /opt/helios/gpu-preflight
+
+cp /context/helios/host/renderer-patches/SHA256SUMS /opt/helios/renderer-patches.sha256
+sha256sum /context/helios/host/vram-budget.h | cut -d' ' -f1 > /opt/helios/vram-budget.sha256

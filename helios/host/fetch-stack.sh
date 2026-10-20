@@ -31,3 +31,12 @@ while read -r checksum patch; do
     git -C /build/helios/qemu-helios apply --check --index "/build/patches/$patch"
     git -C /build/helios/qemu-helios apply --index "/build/patches/$patch"
 done < /build/patches/SHA256SUMS
+
+# Renderer allocations share one VM ledger with QEMU's owned GPU readback memory.
+cp /context/helios/host/vram-budget.h /build/helios/virglrenderer/src/venus/helios-vram-budget.h
+cp /context/helios/host/vram-budget.h /build/helios/qemu-helios/ui/helios-vram-budget.h
+(cd /context/helios/host/renderer-patches && sha256sum -c SHA256SUMS)
+while read -r checksum patch; do
+    git -C /build/helios/virglrenderer apply --check --index "/context/helios/host/renderer-patches/$patch"
+    git -C /build/helios/virglrenderer apply --index "/context/helios/host/renderer-patches/$patch"
+done < /context/helios/host/renderer-patches/SHA256SUMS

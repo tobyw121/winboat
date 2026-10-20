@@ -1,0 +1,142 @@
+diff --git a/src/venus/vkr_device_memory.c b/src/venus/vkr_device_memory.c
+index af60d02..9ace477 100644
+--- a/src/venus/vkr_device_memory.c
++++ b/src/venus/vkr_device_memory.c
+@@ -14,6 +14,7 @@
+ #include "vkr_image.h"
+ #include "vkr_metal_helpers.h"
+ #include "vkr_physical_device.h"
++#include "helios-vram-budget.h"
+ 
+ /* This budget is shared by all contexts in this process.  A render server must
+  * use thread workers for the budget to cover the whole VM; process workers each
+@@ -71,11 +72,14 @@ vkr_device_memory_budget_clamp_properties(
+       if (!(heap->flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT))
+          continue;
+ 
++      uint64_t raw_size = heap->size;
+       heap->size = MIN2(heap->size, remaining);
+       remaining -= heap->size;
+       if (budget_properties) {
+          budget_properties->heapBudget[i] =
+-            MIN2(budget_properties->heapBudget[i], heap->size);
++            MIN2(getenv("HELIOS_VRAM_BUDGET_FILE") ?
++                 helios_vram_cap(raw_size, budget_properties->heapBudget[i]) :
++                 budget_properties->heapBudget[i], heap->size);
+          budget_properties->heapUsage[i] =
+             MIN2(budget_properties->heapUsage[i], heap->size);
+       }
+@@ -86,13 +90,13 @@ static bool
+ vkr_device_memory_budget_reserve(uint64_t size)
+ {
+    const uint64_t limit = vkr_device_memory_budget_limit;
+-   if (!limit || !size)
++   if (!size)
+       return true;
+ 
+    uint_fast64_t used =
+       atomic_load_explicit(&vkr_device_memory_budget_used, memory_order_relaxed);
+    do {
+-      if (size > limit || used > limit - size) {
++      if (size > UINT64_MAX - used || (limit && (size > limit || used > limit - size))) {
+          vkr_log("device-local memory limit exceeded: requested=%" PRIu64
+                  " used=%" PRIuFAST64 " limit=%" PRIu64,
+                  size, used, limit);
+@@ -118,7 +122,6 @@ vkr_device_memory_budget_release(uint64_t size)
+          vkr_log("invalid device-local memory accounting: release=%" PRIu64
+                  " used=%" PRIuFAST64,
+                  size, used);
+-         atomic_store_explicit(&vkr_device_memory_budget_used, 0, memory_order_relaxed);
+          return;
+       }
+    } while (!atomic_compare_exchange_weak_explicit(&vkr_device_memory_budget_used, &used,
+@@ -126,6 +129,36 @@ vkr_device_memory_budget_release(uint64_t size)
+                                                    memory_order_relaxed));
+ }
+ 
++/* Query this worker's live driver budget, not a temporary probe process. */
++static bool
++vkr_vm_budget(struct vkr_physical_device *physical, uint64_t bytes, bool release)
++{
++   if (!bytes || !getenv("HELIOS_VRAM_BUDGET_FILE")) return true;
++   if (release) return helios_vram_change(physical->id_properties.deviceUUID, 0, 0, bytes, true, NULL, NULL);
++   VkPhysicalDeviceMemoryBudgetPropertiesEXT budget = {
++      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT };
++   bool supported = false;
++   for (uint32_t i = 0; i < physical->extension_count; i++)
++      supported |= !strcmp(physical->extensions[i].extensionName, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
++   VkPhysicalDeviceMemoryProperties2 props = {
++      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2,
++      .pNext = supported ? &budget : NULL };
++   physical->proc_table.GetPhysicalDeviceMemoryProperties2(physical->base.handle.physical_device, &props);
++   uint64_t total = 0, available = 0;
++   for (uint32_t i = 0; i < props.memoryProperties.memoryHeapCount; i++) {
++      if (!(props.memoryProperties.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)) continue;
++      uint64_t size = props.memoryProperties.memoryHeaps[i].size;
++      uint64_t allowance = supported ? MIN2(budget.heapBudget[i], size) : size;
++      if (UINT64_MAX-total < size || UINT64_MAX-available < allowance) return false;
++      total += size; available += allowance;
++   }
++   uint64_t used = 0, cap = 0;
++   bool ok = helios_vram_change(physical->id_properties.deviceUUID, total, available, bytes, release, &used, &cap);
++   if (!ok) vkr_log("vram-budget refused: release=%d requested=%" PRIu64 " used=%" PRIu64 " cap=%" PRIu64,
++                   release, bytes, used, cap);
++   return ok;
++}
++
+ static bool
+ vkr_get_fd_info_from_resource_info(struct vkr_context *ctx,
+                                    const VkImportMemoryResourceInfoMESA *res_info,
+@@ -528,7 +561,7 @@ vkr_dispatch_vkAllocateMemory(struct vn_dispatch_context *dispatch,
+          valid_fd_types |= 1 << VIRGL_RESOURCE_FD_DMABUF;
+    }
+ 
+-   const uint64_t budget_charge = property_flags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
++   const uint64_t budget_charge = !res_info && (property_flags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+                                      ? alloc_info->allocationSize
+                                      : 0;
+    if (!vkr_device_memory_budget_reserve(budget_charge)) {
+@@ -543,6 +576,15 @@ vkr_dispatch_vkAllocateMemory(struct vn_dispatch_context *dispatch,
+       return;
+    }
+ 
++   if (!vkr_vm_budget(physical_dev, budget_charge, false)) {
++      vkr_device_memory_budget_release(budget_charge);
++      if (local_import_info.fd >= 0) close(local_import_info.fd);
++      if (udmabuf_fd >= 0) close(udmabuf_fd);
++      if (gbm_bo) vkr_gbm_bo_destroy(gbm_bo);
++      vkr_mtl_shm_free(mtl_shm);
++      args->ret = VK_ERROR_OUT_OF_DEVICE_MEMORY;
++      return;
++   }
+    if (VKR_DEBUG(FAULT)) {
+       const VkMemoryDedicatedAllocateInfo *dedicated = vkr_find_struct(
+          alloc_info->pNext, VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO);
+@@ -559,6 +601,7 @@ vkr_dispatch_vkAllocateMemory(struct vn_dispatch_context *dispatch,
+    VKR_FAULT_TRACE(ctx, "allocate_memory_result id=%" PRIu64 " host=0x%" PRIx64 " result=%d",
+                    mem ? mem->base.id : 0, mem ? mem->base.handle.u64 : 0, args->ret);
+    if (!mem) {
++      vkr_vm_budget(physical_dev, budget_charge, true);
+       vkr_device_memory_budget_release(budget_charge);
+       if (local_import_info.fd >= 0)
+          close(local_import_info.fd);
+@@ -600,9 +643,11 @@ vkr_dispatch_vkFreeMemory(struct vn_dispatch_context *dispatch,
+     */
+    const uint64_t budget_charge = mem->budget_charge;
+    mem->budget_charge = 0;
++   struct vkr_physical_device *physical = mem->device->physical_device;
+    vkr_device_memory_release(mem);
+    vkr_device_memory_destroy_and_remove(dispatch->data, args);
+    vkr_device_memory_budget_release(budget_charge);
++   vkr_vm_budget(physical, budget_charge, true);
+ }
+ 
+ static void
+@@ -702,6 +747,7 @@ vkr_device_memory_release(struct vkr_device_memory *mem)
+    if (mem->udmabuf_fd >= 0)
+       close(mem->udmabuf_fd);
+    vkr_device_memory_budget_release(mem->budget_charge);
++   if (mem->budget_charge) vkr_vm_budget(mem->device->physical_device, mem->budget_charge, true);
+    mem->budget_charge = 0;
+ }
+ 

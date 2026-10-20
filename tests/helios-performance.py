@@ -12,6 +12,19 @@ BASE = ['-m','2G','-device','virtio-scsi-pci,id=scsi','-drive','file=disk.raw,ca
 
 
 class PerformanceTests(unittest.TestCase):
+    def test_vram_admission_uses_85_percent_and_private_launch_ledger(self):
+        report={'devices':[{'selected':True,'heaps':[{'deviceLocal':True,'sizeBytes':8*1024**3},{'deviceLocal':False,'sizeBytes':32*1024**3}]}]}
+        with tempfile.TemporaryDirectory() as folder:
+            result=perf.vram_environment({},report,folder)
+            self.assertEqual(int(result['VKR_DEVICE_MEMORY_LIMIT_BYTES']),8*1024**3*85//100)
+            self.assertEqual(result['HELIOS_VRAM_CAP_BYTES'],result['VKR_DEVICE_MEMORY_LIMIT_BYTES'])
+            self.assertEqual(Path(result['HELIOS_VRAM_BUDGET_FILE']).stat().st_mode & 0o777,0o600)
+            limited=perf.vram_environment({'VKR_DEVICE_MEMORY_LIMIT_BYTES':'1048576'},report,folder)
+            self.assertEqual(limited['HELIOS_VRAM_CAP_BYTES'],'1048576')
+            self.assertNotEqual(result['HELIOS_VRAM_BUDGET_FILE'],limited['HELIOS_VRAM_BUDGET_FILE'])
+            for bad in ({'devices':[]},{'devices':report['devices']*2}):
+                with self.assertRaises(ValueError): perf.vram_environment({},bad,folder)
+
     def test_default_and_rescue_preserve_every_argument(self):
         self.assertEqual(perf.options(BASE,{}),BASE)
         self.assertEqual(perf.options(BASE,{'HELIOS_RESCUE':'1','HELIOS_NET_QUEUES':'invalid'}),BASE)

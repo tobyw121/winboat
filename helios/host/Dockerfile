@@ -56,12 +56,14 @@ RUN --mount=type=secret,id=proxy_ca \
     rm -rf /var/lib/apt/lists/*
 LABEL org.winboat.helios.revision="d82ce565ac792eb48da5e59f2a82a12ff221851d"
 LABEL org.winboat.helios.display="dbus-v9"
-LABEL org.winboat.helios.runtime="glvnd-v9"
+LABEL org.winboat.helios.runtime="glvnd-v10"
 RUN --mount=from=compiled,source=/opt/helios,target=/build/runtime \
     --mount=type=bind,source=helios/host,target=/build/host \
     cp -a /build/runtime /opt/helios && \
     test "$(cat /opt/helios/revision)" = d82ce565ac792eb48da5e59f2a82a12ff221851d && \
     cmp /build/host/patches/SHA256SUMS /opt/helios/host-patches.sha256 && \
+    cmp /build/host/renderer-patches/SHA256SUMS /opt/helios/renderer-patches.sha256 && \
+    test "$(sha256sum /build/host/vram-budget.h | cut -d' ' -f1)" = "$(cat /opt/helios/vram-budget.sha256)" && \
     install -m 755 /build/host/check-runtime.sh /opt/helios/check-runtime.sh && \
     install -m 755 /build/host/display.sh /run/display.sh && \
     install -m 644 /build/host/display-resolution.sh /opt/helios/display-resolution.sh && \

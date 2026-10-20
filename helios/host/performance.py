@@ -4,6 +4,7 @@ import hashlib
 import os
 import json
 import subprocess
+import tempfile
 from pathlib import Path
 import re
 import sys
@@ -119,6 +120,26 @@ def cache_environment(env, storage, fingerprint):
     return result
 
 
+def vram_environment(env,report,directory='/run'):
+    selected=[d for d in report.get('devices',[]) if d.get('selected') is True]
+    if len(selected)!=1: raise ValueError('Unique selected GPU required for VRAM budget')
+    heaps=selected[0].get('heaps',[])
+    total=sum(h['sizeBytes'] for h in heaps if h.get('deviceLocal') is True and type(h.get('sizeBytes')) is int and h['sizeBytes']>0)
+    if not 0<total<2**64: raise ValueError('Device-local heap size unavailable')
+    cap=total*85//100
+    manual=env.get('VKR_DEVICE_MEMORY_LIMIT_BYTES','0')
+    if not re.fullmatch(r'[0-9]{1,20}',manual) or int(manual)>=2**64: raise ValueError('Invalid renderer memory cap')
+    env=dict(env)
+    env['VKR_DEVICE_MEMORY_LIMIT_BYTES']=str(min(cap,int(manual)) if int(manual) else cap)
+    report['vramBudgetPercent']=85
+    report['vramHardCapBytes']=int(env['VKR_DEVICE_MEMORY_LIMIT_BYTES'])
+    env['HELIOS_VRAM_CAP_BYTES']=env['VKR_DEVICE_MEMORY_LIMIT_BYTES']
+    ledger_fd,ledger_path=tempfile.mkstemp(prefix='helios-vram-',suffix='.ledger',dir=directory)
+    os.close(ledger_fd)
+    env['HELIOS_VRAM_BUDGET_FILE']=ledger_path
+    return env
+
+
 def main():
     env = dict(os.environ)
     args = options(sys.argv[2:],env)
@@ -129,6 +150,7 @@ def main():
             if len(probe.stdout)>32768: raise ValueError('GPU preflight report exceeds limit')
             report=json.loads(probe.stdout)
             if report.get('ready') is not True: raise ValueError('Host GPU identity/capability preflight failed')
+            env=vram_environment(env,report)
             fd=os.open('/run/helios-gpu-preflight.json',os.O_WRONLY|os.O_CREAT|os.O_TRUNC|os.O_NOFOLLOW,0o600)
             with os.fdopen(fd,'w') as output: json.dump(report,output)
     
