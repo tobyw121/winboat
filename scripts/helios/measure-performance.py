@@ -92,6 +92,37 @@ def summarize(samples):
             'medianCpuPercentOfOneCore':statistics.median(values) if values else None}
 
 
+def phase_summary(records):
+    captures=[r for r in records if r.get('kind')=='capture' and r.get('published')==1]
+    result={}
+    for key in ('submitNanoseconds','waitNanoseconds','cpuNanoseconds'):
+        values=[r[key]/1e6 for r in captures if type(r.get(key)) is int and 0<=r[key]<2**63]
+        result[key.replace('Nanoseconds','MeanMs')]=statistics.mean(values) if values else None
+    acks=[r['waitMicroseconds']/1000 for r in records if r.get('kind')=='ack' and r.get('success')==1 and type(r.get('waitMicroseconds')) is int]
+    result.update(captureSamples=len(captures),ackSamples=len(acks),ackMeanMs=statistics.mean(acks) if acks else None,
+                  scope='Independent bounded samples; ACK and capture may overlap. Submit CPU time is not GPU render time. Never sum across transports.')
+    return result
+
+
+def viewer_phase_summary(records):
+    groups={};result=[]
+    for row in records:
+        key=(row['pid'],row['console'])
+        groups.setdefault(key,[]).append(row)
+    for (pid,console),rows in groups.items():
+        first,last=rows[0],rows[-1]
+        if last['monotonicUs']<=first['monotonicUs']: continue
+        item={'pid':pid,'console':console,'elapsedSeconds':(last['monotonicUs']-first['monotonicUs'])/1e6}
+        for field in ('sourceCopyWallUs','completionWaitUs','copySamples','renderedFrames','coalescedUpdates','skippedRedraws'):
+            if field in first and field in last and last[field]>=first[field]: item[field+'Delta']=last[field]-first[field]
+        count=item.get('copySamplesDelta',0)
+        if count:
+            for field in ('sourceCopyWallUs','completionWaitUs'):
+                if field+'Delta' in item: item[field+'MeanMs']=item[field+'Delta']/count/1000
+        result.append(item)
+    return result
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--container',default='WinBoat')
@@ -127,6 +158,7 @@ def main():
         with args.viewer_log.open('rb') as stream:
             stream.seek(max(0,args.viewer_log.stat().st_size-262144))
             report['viewer']=viewer_metrics(stream.read(262144).decode('utf-8',errors='replace'))
+        report['viewerPhases']=viewer_phase_summary(report['viewer'])
         report['viewerScope']='Fixed counters from a bounded log tail; verify PID, console and monotonic interval before comparing.'
     descriptor=os.open(args.output,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
     with os.fdopen(descriptor,'w') as output: json.dump(report,output,indent=2);output.write('\n')

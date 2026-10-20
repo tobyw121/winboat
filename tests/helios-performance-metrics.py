@@ -31,5 +31,25 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(result['devices'][0]['powerWatts'],75.5)
         self.assertNotIn('utilizationPercent',result['devices'][1])
 
+    def test_phase_samples_do_not_sum_overlapping_transports(self):
+        result=metrics.phase_summary([{'kind':'capture','published':1,'submitNanoseconds':1000000,'waitNanoseconds':2000000,'cpuNanoseconds':3000000},
+                                      {'kind':'capture','published':0,'cpuNanoseconds':999999999},
+                                      {'kind':'ack','success':1,'waitMicroseconds':5000}])
+        self.assertEqual(result['submitMeanMs'],1)
+        self.assertEqual(result['waitMeanMs'],2)
+        self.assertEqual(result['ackMeanMs'],5)
+        self.assertNotIn('total',result)
+        self.assertIsNone(metrics.phase_summary([])['cpuMeanMs'])
+
+    def test_viewer_phases_reject_reset_and_keep_console_identity(self):
+        rows=[{'pid':1,'console':0,'monotonicUs':100,'copySamples':2,'sourceCopyWallUs':1000},
+              {'pid':2,'console':0,'monotonicUs':100,'copySamples':100},
+              {'pid':1,'console':0,'monotonicUs':1000100,'copySamples':4,'sourceCopyWallUs':5000}]
+        result=metrics.viewer_phase_summary(rows)
+        self.assertEqual(len(result),1)
+        self.assertEqual(result[0]['sourceCopyWallUsMeanMs'],2)
+        rows[-1]['copySamples']=1
+        self.assertNotIn('sourceCopyWallUsMeanMs',metrics.viewer_phase_summary(rows)[0])
+
 
 if __name__ == '__main__': unittest.main()

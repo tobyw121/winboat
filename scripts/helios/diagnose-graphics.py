@@ -70,6 +70,13 @@ def collect_host(container):
         logs = subprocess.run(['docker', 'logs', '--timestamps', '--tail', '300', container], capture_output=True, text=True, timeout=10, check=True)
         result['transportErrors'] = parse_transport_errors((logs.stdout + '\n' + logs.stderr)[-262144:])
         result['frameMetrics'] = parse_frame_metrics((logs.stdout + '\n' + logs.stderr)[-262144:])
+        # Use the same fixed phase decoder as performance comparisons when
+        # running from the source tree; packaged capture still retains counters.
+        helper=pathlib.Path(__file__).with_name('measure-performance.py')
+        if helper.is_file():
+            spec=importlib.util.spec_from_file_location('performance_metrics',helper)
+            metrics=importlib.util.module_from_spec(spec);spec.loader.exec_module(metrics)
+            result['framePhases']=metrics.phase_summary(result['frameMetrics'])
         result['frameMetricsScope'] = 'Bounded log tail; ACK wall time and Vulkan capture phases, not guest FPS or end-to-end input latency. Frame tracing is optional.'
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         result['error'] = type(error).__name__ + ': host graphics details unavailable'
