@@ -1,6 +1,6 @@
 # Dynamic VM GPU-memory budget: at most 85 percent
 
-The managed accelerated host runtime (`glvnd-v10`) creates a private per-launch
+The managed accelerated host runtime (`glvnd-v11`) creates a private per-launch
 ledger in `/dev/shm`. All Venus worker processes and QEMU's owned DEVICE_LOCAL
 snapshot/staging allocations use this same ledger and the Vulkan device UUID.
 VGA rescue and inspection-only commands do not require it. The existing .300
@@ -33,13 +33,18 @@ ceiling merely because the budget is available. A falling live budget prevents
 additional allocations until use drops; it does not evict resources behind the
 application's back. Applications must handle allocation failure.
 
-Guest imports of existing renderer resources and QEMU DMA-BUF imports are not
-charged as another newly owned allocation. This ledger limits **accounted
-allocation bytes**, not exact physical VRAM residency. Driver-internal memory,
-shader caches, host applications and backing retained through external aliases
-have different lifetimes and are not fully measured by it. The 15-percent
-reserve and live driver estimate provide headroom; this is not a guarantee that
-the hardware's whole-device usage counter will always remain at 85 percent.
+Known DMA-BUF backing references share the original allocation charge across
+renderer imports/resources and QEMU. The charge survives producer teardown
+until the last tracked reference is released. Unknown or opaque imports are
+charged conservatively; they are not deduplicated by a guessed handle identity.
+The private reference ledger has 256 backing slots and rejects overflow.
+
+This ledger limits **accounted allocation bytes**, not exact physical VRAM
+residency. Driver-internal memory, shader caches, host applications and external
+aliases outside the instrumented paths are not fully measured. Lost handoffs
+can retain charges until the next whole-VM launch. The 15-percent reserve and
+live driver estimate provide headroom; this is not a guarantee that the
+hardware's whole-device usage counter will always remain at 85 percent.
 
 Dead-worker charges are retained conservatively: exported buffers can outlive
 their producer. A new whole-VM launch gets a fresh ledger. Corrupt, insecure,

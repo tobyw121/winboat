@@ -44,3 +44,21 @@ test('the effective Electron file matchers exclude VM disks over 4 GB and privat
     assert.ok(!packed.some(name => /winboat|\.env|upstream/.test(name)), packed.join('\n'));
     assert.ok((await fs.stat(archive)).size < 10000);
 });
+
+test('packaged graphics tools retain their local imports and VGA rescue scripts', async t => {
+    const {FileMatcher}=require('app-builder-lib/out/fileMatcher');
+    const {execFileSync}=require('node:child_process');
+    const root=await fs.mkdtemp(path.join(os.tmpdir(),'winboat-graphics-tools-'));
+    t.after(()=>fs.rm(root,{recursive:true,force:true}));
+    const config=JSON.parse(await fs.readFile('electron-builder.json','utf8'));
+    const resources=config.extraResources.filter(item=>item.to.startsWith('graphics-tools'));
+    const matchers=resources.map(item=>new FileMatcher(path.resolve(item.from),path.join(root,item.to),s=>s,item.filter));
+    await copyFiles(matchers,null,true);
+    const tools=path.join(root,'graphics-tools');
+    for(const name of ['display.sh','qemu.sh'])await fs.access(path.join(tools,'rescue-host',name));
+    // Import from the copied package, without the original checkout on sys.path.
+    const report=path.join(root,'report.json');await fs.writeFile(report,'{"errors":[]}');
+    const preview=JSON.parse(execFileSync('python3',[path.join(tools,'support-bundle.py'),report],{cwd:root,encoding:'utf8'}));
+    assert.match(preview.sha256,/^[a-f0-9]{64}$/);
+    assert.match(execFileSync('python3',[path.join(tools,'graphics-trial.py'),'--help'],{cwd:root,encoding:'utf8'}),/--start/);
+});
