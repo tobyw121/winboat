@@ -33,6 +33,9 @@ function Invoke-HeliosAcceptance([string]$RunLabel) {
         if(@((Read-HeliosValidationJson (Join-Path $toolRoot 'tools.json')).files | Where-Object {$_.name -eq 'helios-format-contract.exe'}).Count -eq 1) {
             $plan+=@{name='D3D11 format contracts';exe='helios-format-contract.exe';arguments=@();coverage='Advertised formats/MSAA versus texture/view creation and shared readback';external=$true}
         }
+        if(@((Read-HeliosValidationJson (Join-Path $toolRoot 'tools.json')).files | Where-Object {$_.name -eq 'helios-shared-process.exe'}).Count -eq 1) {
+            $plan+=@{name='D3D11 shared processes';exe='helios-shared-process.exe';arguments=@();coverage='Two-device and two-process NT handles, keyed mutex and exact bidirectional readback';external=$true}
+        }
     }
     foreach($test in $plan) {
         $path=Join-Path ([string]$state.installRoot) ('runtime\smoke\'+$test.exe)
@@ -77,8 +80,9 @@ function Initialize-HeliosAcceptanceTools([string]$Folder,[string]$Pin) {
     if ($Pin -notmatch '^[a-fA-F0-9]{64}$' -or (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ine $Pin) {throw 'Independently verified tools-manifest SHA-256 required.'}
     $manifest=Read-HeliosValidationJson $path
     $expected=@('helios-msaa-present.exe','helios-opengl-pixels.exe')
-    if ($manifest.schema -ne 1 -or @($manifest.files).Count -notin @(2,3)) {throw 'Unsupported tools manifest.'}
-    if (@($manifest.files).Count -eq 3) {$expected+='helios-format-contract.exe'}
+    if ($manifest.schema -ne 1 -or @($manifest.files).Count -notin @(2,3,4)) {throw 'Unsupported tools manifest.'}
+    if (@($manifest.files).Count -ge 3) {$expected+='helios-format-contract.exe'}
+    if (@($manifest.files).Count -eq 4) {$expected+='helios-shared-process.exe'}
     $target=Join-Path (Initialize-HeliosValidationRoot) ('tools-'+$Pin.ToLowerInvariant())
     if ((Test-Path -LiteralPath $target) -and ((Get-Item $target -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {throw 'Tools directory is a reparse point.'}
     New-Item -ItemType Directory -Path $target -Force | Out-Null
