@@ -1,6 +1,9 @@
 import importlib.util
 from pathlib import Path
 import tempfile
+import subprocess
+import sys
+import json
 import unittest
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -12,6 +15,16 @@ comparison=module('compare-graphics');metrics=module('measure-performance');corr
 
 
 class ComparisonTests(unittest.TestCase):
+    def test_cli_reads_windows_utf8_bom_exports(self):
+        with tempfile.TemporaryDirectory() as root:
+            paths=[]
+            for label in ('A1','B1','A2','B2'):
+                path=Path(root)/(label+'.json')
+                path.write_text(json.dumps({'label':label,'comparisonKey':'same','summary':{'meanCpuPercentOfOneCore':100}}),encoding='utf-8-sig')
+                paths.append(str(path))
+            result=subprocess.run([sys.executable,str(ROOT/'scripts/helios/compare-graphics.py'),*paths],capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual(json.loads(result.stdout)['pairs'][0]['cpuPercentagePointDelta'],0)
     def test_quantiles_and_invalid_durations(self):
         summary=comparison.frame_summary([1,2,3,4,100])
         self.assertEqual(summary['medianMs'],3)

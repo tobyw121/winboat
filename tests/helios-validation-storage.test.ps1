@@ -5,10 +5,16 @@ $previous=$env:ProgramData
 $temporary=Join-Path ([IO.Path]::GetTempPath()) ('helios-storage-'+[guid]::NewGuid().ToString('N'))
 try {
     $env:ProgramData=$temporary
+    $machineId=Get-HeliosMachineIdentity
+    if($machineId -notmatch '^[a-f0-9]{64}$' -or $machineId -ne (Get-HeliosMachineIdentity)){throw 'Real Windows machine identity is unavailable or unstable.'}
     $root=Initialize-HeliosValidationRoot
     Write-HeliosValidationJson 'acceptance.json' @{schema=1;status='fixture'}
     $saved=Read-HeliosValidationJson (Join-Path $root 'acceptance.json')
     if ($saved.status -ne 'fixture') {throw 'Atomic validation write/read failed.'}
+    $unicodePath=Join-Path $root 'unicode-fixture.json'
+    $unicode=[string][char]0xe4
+    [IO.File]::WriteAllText($unicodePath,(@{value=$unicode} | ConvertTo-Json),[Text.UTF8Encoding]::new($false))
+    if((Read-HeliosValidationJson $unicodePath).value -ne $unicode){throw 'UTF-8 without BOM was decoded with the Windows ANSI codepage.'}
     $rules=(Get-Acl $root).GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])
     foreach($rule in $rules) {
         if ($rule.IdentityReference.Value -notin @('S-1-5-18','S-1-5-32-544')) {throw 'Validation storage permits an unexpected identity.'}

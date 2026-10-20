@@ -31,6 +31,11 @@ def compare(reports):
     if all('tests' in r and 'identity' in r for r in reports):
         versions=[r['identity']['version'] for r in reports]
         if versions[0]!=versions[2] or versions[1]!=versions[3]: raise ValueError('Driver version changed within a comparison arm')
+        machines=[r['identity'].get('machineId') for r in reports]
+        if all(machines) and len(set(machines))!=1: raise ValueError('Reports belong to different VM identities')
+        profiles=[r['identity'].get('profile') for r in reports]
+        if all(p is not None for p in profiles) and (profiles[0]!=profiles[2] or profiles[1]!=profiles[3]):
+            raise ValueError('Driver options changed within a comparison arm')
         signatures=[{t['name']:t.get('sha256') for t in r['tests']} for r in reports]
         equal=all(s==signatures[0] for s in signatures) and all(signatures[0].values())
         pairs=[]
@@ -43,6 +48,7 @@ def compare(reports):
                     first={'test':row['name'],'baselineStatus':row.get('status'),'baselineCode':row.get('exitCode'),
                            'candidateStatus':target.get('status') if target else 'missing',
                            'candidateCode':target.get('exitCode') if target else None,
+                           'baselineCodes':row.get('codes',[]),'candidateCodes':target.get('codes',[]) if target else [],
                            'sameProbeBytes':bool(target and row.get('sha256') and row['sha256']==target.get('sha256'))}
                     break
             pairs.append({'baseline':reports[a]['label'],'candidate':reports[b]['label'],'firstDivergence':first})
@@ -70,7 +76,7 @@ def main():
         reports=[]
         for path in args.reports:
             if path.stat().st_size>1048576: raise ValueError('Report exceeds 1 MiB')
-            reports.append(json.loads(path.read_text()))
+            reports.append(json.loads(path.read_text(encoding='utf-8-sig')))
         print(json.dumps(compare(reports),indent=2))
     except (OSError,ValueError,TypeError) as error: parser.exit(1,str(error)+'\n')
 

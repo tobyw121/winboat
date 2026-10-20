@@ -5,10 +5,13 @@ $repo=Split-Path $PSScriptRoot
 $policy=Get-Content (Join-Path $repo 'guest_server/scripts/helios-release-policy.json') -Raw | ConvertFrom-Json
 $receipt=Get-Content (Join-Path $repo 'resources/helios/helios-build.json') -Raw | ConvertFrom-Json
 if($policy.repositoryDefaultVersion -ne $receipt.driverVersion -or $policy.repositoryDefaultManifestSha256 -ine $receipt.manifestSha256){throw 'Release policy differs from pinned bundled default.'}
-$identity=[pscustomobject]@{version='22.22.999.0';manifestSha256='candidate';profile=@{UmdD3D12=1};bootAtUtc='2026-10-20T00:00:00Z'}
-$record=[pscustomobject]@{stage='vm-tested';version=$identity.version;manifestSha256='candidate';profile=$identity.profile}
+$identity=[pscustomobject]@{version='22.22.999.0';machineId='vm-a';manifestSha256='candidate';profile=@{UmdD3D12=1};bootAtUtc='2026-10-20T00:00:00Z'}
+$record=[pscustomobject]@{stage='vm-tested';version=$identity.version;machineId='vm-a';manifestSha256='candidate';profile=$identity.profile}
 $result=Get-HeliosReleaseStatus $policy $identity $record
 if($result.repositoryDefault -or $result.localStage -ne 'vm-tested'){throw 'Local evidence incorrectly changed repository default.'}
+$record.machineId='vm-b'
+if((Get-HeliosReleaseStatus $policy $identity $record).localStage -ne 'experimental'){throw 'Another VM inherited approval.'}
+$record.machineId='vm-a'
 $identity.manifestSha256='different'
 if((Get-HeliosReleaseStatus $policy $identity $record).localStage -ne 'experimental'){throw 'Changed package retained VM approval.'}
 if((Get-HeliosReleaseStatus $policy $identity $null).localStage -ne 'experimental'){throw 'Missing evidence promoted a candidate.'}

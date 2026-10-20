@@ -4,6 +4,8 @@ import io
 import json
 import pathlib
 import unittest
+import tempfile
+import shutil
 from types import SimpleNamespace
 import urllib.error
 from unittest.mock import patch
@@ -24,6 +26,22 @@ class Opener:
         return contextlib.closing(io.BytesIO(b'x' * 131073))
 
 class TestGraphicsCollector(unittest.TestCase):
+    def test_packaged_collector_finds_its_adjacent_bundle(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=pathlib.Path(temporary)/'resources'
+            tools=root/'graphics-tools';tools.mkdir(parents=True)
+            for name in ('diagnose-graphics.py','inspect-qemu-backend.py','graphics-correlation.py'):
+                shutil.copyfile(ROOT/'scripts/helios'/name,tools/name)
+            (root/'helios').mkdir()
+            (root/'helios/helios-build.json').write_text('{"sha256":"packaged-pin"}')
+            packaged_spec=importlib.util.spec_from_file_location('packaged_graphics',tools/'diagnose-graphics.py')
+            packaged=importlib.util.module_from_spec(packaged_spec);packaged_spec.loader.exec_module(packaged)
+            with patch.object(packaged.subprocess,'check_output',side_effect=['"image"\n"sha256:abc"\n"running"\n','glvnd-v7\ndbus-v9\n']), \
+                 patch.object(packaged.subprocess,'run',side_effect=[SimpleNamespace(stdout='',stderr=''),SimpleNamespace(stdout='{}')]):
+                result=packaged.collect_host('WinBoat')
+            self.assertEqual(result['bundledInstaller']['sha256'],'packaged-pin')
+            self.assertEqual(result['runtimeVersion'],'glvnd-v7')
+            self.assertNotIn('runtimeError',result)
     def test_frame_metrics_are_fixed_fields_and_do_not_invent_fps(self):
         text='dbus: frame-ack source=4 sequence=8 wait_us=123 success=1 in_flight=1 transport=copy\n'
         text+='helios_vulkan_capture ino 99 seq 8 publish 1 1280x800 submit_ns 100 wait_ns 200 cpu_ns 300\n'

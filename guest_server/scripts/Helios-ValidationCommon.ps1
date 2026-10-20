@@ -21,7 +21,7 @@ function Initialize-HeliosValidationRoot {
 function Read-HeliosValidationJson([string]$Path) {
     $item=Get-Item -LiteralPath $Path -Force
     if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.Length -gt 1048576) {throw 'Invalid validation JSON file.'}
-    return Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    return Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
 }
 function Write-HeliosValidationJson([string]$Name,$Data) {
     if ($Name -notmatch '^(acceptance|transaction|last-good|comparison|comparison-session|resume|release)\.json$') {throw 'Unknown validation state.'}
@@ -36,11 +36,23 @@ function Write-HeliosValidationJson([string]$Name,$Data) {
         Move-Item -LiteralPath $temporary -Destination $path -Force
     } finally {Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue}
 }
+function Get-HeliosMachineIdentity {
+    $product=Get-CimInstance Win32_ComputerSystemProduct -Property UUID
+    $machineKey=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SOFTWARE\Microsoft\Cryptography')
+    try {$machineGuid=[string]$machineKey.GetValue('MachineGuid',$null)} finally {if($machineKey){$machineKey.Dispose()}}
+    $first=[Guid]::Empty;$second=[Guid]::Empty
+    if (-not [Guid]::TryParse($machineGuid,[ref]$first) -or -not [Guid]::TryParse([string]$product.UUID,[ref]$second) -or
+        $first -eq [Guid]::Empty -or $second -eq [Guid]::Empty) {throw 'VM identity unavailable; local acceptance cannot be bound.'}
+    $hash=[Security.Cryptography.SHA256]::Create()
+    try {return ([BitConverter]::ToString($hash.ComputeHash([Text.Encoding]::UTF8.GetBytes($first.ToString('D')+'|'+$second.ToString('D'))))).Replace('-','').ToLowerInvariant()}
+    finally {$hash.Dispose()}
+}
 function Get-HeliosValidationIdentity {
     $state=Read-HeliosValidationJson (Join-Path $env:ProgramData 'Helios\install-state.json')
     $manifest=Join-Path $env:ProgramData 'Helios\manifest.json'
     $devices=@(Get-CimInstance Win32_VideoController | Where-Object {$_.PNPDeviceID -like 'PCI\VEN_1AF4&DEV_1050*'})
     if ($devices.Count -ne 1 -or $devices[0].ConfigManagerErrorCode -ne 0 -or $devices[0].DriverVersion -ne $state.version) {throw 'One healthy Helios adapter matching the installation state is required.'}
+    $machineId=Get-HeliosMachineIdentity
     $profile=[ordered]@{};$key=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SOFTWARE\Helios')
     try {
         foreach($name in @('UmdD3D12','UmdCommandLists','UmdFreeThreaded','UmdAsyncPresentStream','UmdPresentBatchFold','FeatureLevel11')) {
@@ -52,7 +64,7 @@ function Get-HeliosValidationIdentity {
             $profile[$name]=$value
         }
     } finally {if($null -ne $key){$key.Dispose()}}
-    return [ordered]@{version=[string]$state.version;profile=$profile;manifestSha256=(Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash;
+    return [ordered]@{version=[string]$state.version;machineId=$machineId;profile=$profile;manifestSha256=(Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash;
         bootAtUtc=(Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime().ToString('o')}
 }
 function Invoke-HeliosValidationProcess([string]$Exe,[string[]]$Arguments=@(),[int]$Timeout=45) {

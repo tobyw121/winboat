@@ -3,7 +3,9 @@ $releaseOperation=$Action;$releaseObservation=$ObservedStable;$releaseLibrary=$L
 . (Join-Path $PSScriptRoot 'Manage-HeliosTransaction.ps1') -LibraryOnly
 function Get-HeliosReleaseStatus($Policy,$Identity,$Record) {
     $stage='experimental'
-    if ($null -ne $Record -and $Record.stage -eq 'vm-tested' -and $Record.version -eq $Identity.version -and
+    $sameMachine=$false
+    try {$sameMachine=[bool]$Record.machineId -and $Record.machineId -eq $Identity.machineId} catch {}
+    if ($sameMachine -and $null -ne $Record -and $Record.stage -eq 'vm-tested' -and $Record.version -eq $Identity.version -and
         $Record.manifestSha256 -eq $Identity.manifestSha256 -and
         ($Record.profile | ConvertTo-Json -Compress) -eq ($Identity.profile | ConvertTo-Json -Compress)) {$stage='vm-tested'}
     $default=$Policy.repositoryDefaultVersion -eq $Identity.version -and $Policy.repositoryDefaultManifestSha256 -ieq $Identity.manifestSha256
@@ -19,7 +21,7 @@ function Invoke-HeliosRelease([string]$Operation) {
         if(-not $releaseObservation){throw 'Explicit visible-output and recovery acceptance is required.'}
         $report=Read-HeliosValidationJson (Join-Path (Get-HeliosValidationRoot) 'acceptance.json')
         Assert-HeliosAcceptance $report $identity
-        $record=[ordered]@{schema=1;stage='vm-tested';version=$identity.version;manifestSha256=$identity.manifestSha256;
+        $record=[ordered]@{schema=1;stage='vm-tested';version=$identity.version;machineId=$identity.machineId;manifestSha256=$identity.manifestSha256;
             profile=$identity.profile;acceptedRunId=$report.runId;observedAtUtc=[DateTime]::UtcNow.ToString('o');acceptedBoot=$identity.bootAtUtc}
         Write-HeliosValidationJson 'release.json' $record
     }

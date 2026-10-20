@@ -12,4 +12,14 @@ if((Get-HeliosComparison $reports).sameProbeBytes){throw 'Changed test bytes hid
 $reports[2].identity.version='296';$blocked=$false
 try{Get-HeliosComparison $reports | Out-Null}catch{$blocked=$true}
 if(-not $blocked){throw 'Mixed baseline versions accepted.'}
+$reports[2].identity.version='291'
+foreach($report in $reports){$report.identity | Add-Member NoteProperty profile @{UmdCommandLists=1} -Force}
+$reports[2].identity.profile.UmdCommandLists=0;$blocked=$false
+try{Get-HeliosComparison $reports | Out-Null}catch{$blocked=$true}
+if(-not $blocked){throw 'Changed settings within an arm were accepted.'}
+$reports[2].identity.profile.UmdCommandLists=1
+foreach($report in $reports){$report.identity | Add-Member NoteProperty machineId 'vm-a' -Force}
+$reports[3].identity.machineId='vm-b';$blocked=$false
+try{Get-HeliosComparison $reports | Out-Null}catch{if($_.Exception.Message -notlike '*VM identit*'){throw};$blocked=$true}
+if(-not $blocked){throw 'Another VM was mixed into the comparison.'}
 Write-Host 'Guided comparison reports first reproducible result difference and rejects changing arms.'

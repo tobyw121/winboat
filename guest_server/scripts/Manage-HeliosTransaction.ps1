@@ -7,6 +7,7 @@ function Assert-HeliosAcceptance($Report,$Identity) {
         $Report.identity.manifestSha256 -ne $Identity.manifestSha256 -or $Report.identity.bootAtUtc -ne $Identity.bootAtUtc -or
         $finish -lt [DateTimeOffset]::UtcNow.AddMinutes(-30) -or $finish -gt [DateTimeOffset]::UtcNow.AddSeconds(30)) {throw 'A successful, current-boot acceptance run within 30 minutes is required.'}
     if (($Report.identity.profile | ConvertTo-Json -Compress) -ne ($Identity.profile | ConvertTo-Json -Compress)) {throw 'Driver options changed since the acceptance run.'}
+    if ($Report.identity.machineId -ne $Identity.machineId) {throw 'Acceptance belongs to a different VM identity.'}
     foreach($name in @('Package integrity','D3D11','Vulkan enumeration','Vulkan features','Vulkan presentation','OpenGL')) {
         $rows=@($Report.tests | Where-Object {$_.name -eq $name -and $_.status -eq 'passed' -and $_.sha256 -match '^[a-fA-F0-9]{64}$'})
         if ($rows.Count -ne 1) {throw 'Acceptance report is missing required probe evidence.'}
@@ -14,7 +15,7 @@ function Assert-HeliosAcceptance($Report,$Identity) {
 }
 function Save-HeliosStableRecord($Bundle,$Identity,[string]$RunId) {
     Restore-HeliosStableProfile ($Identity.profile | ConvertTo-Json | ConvertFrom-Json) -ValidateOnly
-    Write-HeliosValidationJson 'last-good.json' ([ordered]@{sha256=$Bundle.sha256;version=$Bundle.version;manifestSha256=$Bundle.manifestSha256;profile=$Identity.profile;
+    Write-HeliosValidationJson 'last-good.json' ([ordered]@{sha256=$Bundle.sha256;version=$Bundle.version;machineId=$Identity.machineId;manifestSha256=$Bundle.manifestSha256;profile=$Identity.profile;
         acceptanceRunId=$RunId;manuallyObservedAtUtc=[DateTime]::UtcNow.ToString('o')})
 }
 function Restore-HeliosStableProfile($Profile,[switch]$ValidateOnly) {
@@ -93,6 +94,7 @@ function Invoke-HeliosTransaction([string]$Operation) {
         $stable=Read-HeliosValidationJson (Join-Path $root 'last-good.json')
         $identity=Get-HeliosValidationIdentity
         if ($stable.version -ne $identity.version -or $stable.manifestSha256 -ine $identity.manifestSha256) {throw 'Current package must match the recorded stable baseline.'}
+        if (-not $stable.PSObject.Properties['machineId'] -or $stable.machineId -ne $identity.machineId) {throw 'Record a stable baseline for this VM identity before updating.'}
         if (-not $stable.PSObject.Properties['profile'] -or
             ($stable.profile | ConvertTo-Json -Compress) -ne ($identity.profile | ConvertTo-Json -Compress)) {throw 'Record a stable baseline with the current driver options before updating.'}
         $bundle=Save-HeliosTransactionBundle $BundlePath $ExpectedSha256

@@ -3,13 +3,13 @@ $ErrorActionPreference='Stop'
 $repo=Split-Path $PSScriptRoot
 . (Join-Path $repo 'guest_server/scripts/Manage-HeliosTransaction.ps1') -LibraryOnly
 $profile=[ordered]@{UmdD3D12=$null;UmdCommandLists=1;UmdFreeThreaded=$null;UmdAsyncPresentStream=$null;UmdPresentBatchFold=$null;FeatureLevel11=$null}
-$identity=[ordered]@{version='22.22.291.0';profile=$profile;manifestSha256=('a'*64);bootAtUtc='2026-10-19T00:00:00Z'}
+$identity=[ordered]@{version='22.22.291.0';machineId=('d'*64);profile=$profile;manifestSha256=('a'*64);bootAtUtc='2026-10-19T00:00:00Z'}
 $report=[pscustomobject]@{schema=1;runId=('c'*32);automatedPassed=$true;identity=$identity;finishedAtUtc=[DateTimeOffset]::UtcNow.ToString('o');tests=@(
     'Package integrity','D3D11','Vulkan enumeration','Vulkan features','Vulkan presentation','OpenGL' | ForEach-Object {
         [pscustomobject]@{name=$_;status='passed';sha256=('b'*64)}
     })}
 Assert-HeliosAcceptance $report $identity
-foreach($kind in @('failed','old-boot','old-result','future','missing-probes','changed-options')) {
+foreach($kind in @('failed','old-boot','old-result','future','missing-probes','changed-options','another-vm')) {
     $copy=$report | ConvertTo-Json -Depth 6 | ConvertFrom-Json
     switch($kind) {
         failed {$copy.automatedPassed=$false}
@@ -18,6 +18,7 @@ foreach($kind in @('failed','old-boot','old-result','future','missing-probes','c
         future {$copy.finishedAtUtc=[DateTimeOffset]::UtcNow.AddHours(1).ToString('o')}
         missing-probes {$copy.tests=@()}
         changed-options {$copy.identity.profile.UmdCommandLists=0}
+        another-vm {$copy.identity.machineId=('e'*64)}
     }
     $blocked=$false
     try {Assert-HeliosAcceptance $copy $identity} catch {$blocked=$true}

@@ -1,9 +1,23 @@
 . (Join-Path $PSScriptRoot 'Helios-ValidationCommon.ps1')
+function Get-HeliosComparisonCodes($Row) {
+    try {return @($Row.codes | Sort-Object -Unique)} catch {return @()}
+}
 function Get-HeliosComparison($Reports) {
     $labels=@('A1','B1','A2','B2')
     if (@($Reports).Count -ne 4 -or (@($Reports.label) -join ',') -ne ($labels -join ',')) {throw 'Four reports in A1/B1/A2/B2 order are required.'}
     if (@($Reports.comparisonKey | Sort-Object -Unique).Count -ne 1) {throw 'Comparison workload differs.'}
     if ($Reports[0].identity.version -ne $Reports[2].identity.version -or $Reports[1].identity.version -ne $Reports[3].identity.version) {throw 'Driver version changed within an arm.'}
+    $machines=@($Reports | ForEach-Object {try{$_.identity.machineId}catch{$null}})
+    $machineIds=@($machines | Where-Object {$_})
+    if($machineIds.Count -eq 4 -and @($machineIds | Sort-Object -Unique).Count -ne 1){throw 'Reports belong to different VM identities.'}
+    $profiles=@($Reports | ForEach-Object {
+        if($_.identity.PSObject.Properties['profile']) {
+            $settings=$_.identity.profile | ConvertTo-Json -Compress | ConvertFrom-Json
+            ($settings.PSObject.Properties | Sort-Object Name | ForEach-Object {$_.Name+'='+[string]$_.Value}) -join ';'
+        } else {$null}
+    })
+    $profilesRecorded=@($profiles | Where-Object {$null -ne $_}).Count -eq 4
+    if($profilesRecorded -and ($profiles[0] -ne $profiles[2] -or $profiles[1] -ne $profiles[3])){throw 'Driver options changed within a comparison arm.'}
     $pairs=@();$allSame=$true
     foreach($index in @(0,2)) {
         $a=$Reports[$index];$b=$Reports[$index+1];$first=$null
@@ -14,11 +28,12 @@ function Get-HeliosComparison($Reports) {
             if($seen.ContainsKey($row.name)){throw 'Duplicate baseline probe name.'};$seen[$row.name]=$true
             $other=$map[$row.name]
             $same=$null -ne $other -and $row.sha256 -and $row.sha256 -eq $other.sha256
+            $aCodes=@(Get-HeliosComparisonCodes $row);$bCodes=@(Get-HeliosComparisonCodes $other)
             if(-not $same){$allSame=$false}
-            if($null -eq $first -and ($null -eq $other -or $row.status -ne $other.status -or $row.exitCode -ne $other.exitCode)) {
+            if($null -eq $first -and ($null -eq $other -or $row.status -ne $other.status -or $row.exitCode -ne $other.exitCode -or ($aCodes -join ',') -ne ($bCodes -join ','))) {
                 $first=[ordered]@{test=$row.name;baselineStatus=$row.status;baselineCode=$row.exitCode;
                     candidateStatus=$(if($null -ne $other){$other.status}else{'missing'});
-                    candidateCode=$(if($null -ne $other){$other.exitCode}else{$null});sameProbeBytes=[bool]$same}
+                    candidateCode=$(if($null -ne $other){$other.exitCode}else{$null});baselineCodes=$aCodes;candidateCodes=$bCodes;sameProbeBytes=[bool]$same}
             }
         }
         if($map.Count -ne $seen.Count){$allSame=$false}
@@ -26,7 +41,7 @@ function Get-HeliosComparison($Reports) {
     }
     $reproduced=$null -ne $pairs[0].firstDivergence -and
         ($pairs[0].firstDivergence | ConvertTo-Json -Compress) -eq ($pairs[1].firstDivergence | ConvertTo-Json -Compress)
-    return [ordered]@{schema=1;sameProbeBytes=$allSame;reproducedFirstDivergence=$reproduced;pairs=$pairs;
+    return [ordered]@{schema=1;sameProbeBytes=$allSame;profilesRecorded=$profilesRecorded;reproducedFirstDivergence=$reproduced;pairs=$pairs;
         scope='First result/exit-code difference, not proof of cause. Different probe bytes limit attribution; manual checks remain separate.'}
 }
 function New-HeliosComparisonSession {
