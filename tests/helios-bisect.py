@@ -39,5 +39,17 @@ class BisectTests(unittest.TestCase):
         with self.assertRaises(ValueError): bisect.plan('guest',CANDIDATES,[base,base],'pixels')
         with self.assertRaises(ValueError): bisect.plan('guest',CANDIDATES,[base,trial(1),trial(2,False)],'pixels')
 
+    def test_resolution_backend_and_gpu_changes_make_trial_inconclusive(self):
+        for field in ('resolution','backend','gpu'):
+            rows=trial(4)
+            for capture in rows:
+                capture['host']['qemuBackend']={'backend':'dbus'}
+                capture['host']['gpuPreflight']={'devices':[{'selected':True,'deviceUuid':'same'}]}
+                capture['graphics/diagnostics']={'driver':{'controllers':[{'CurrentHorizontalResolution':1920,'CurrentVerticalResolution':1080}]}}
+            if field=='resolution': rows[1]['graphics/diagnostics']['driver']['controllers'][0]['CurrentHorizontalResolution']=1280
+            if field=='backend': rows[1]['host']['qemuBackend']['backend']='egl-headless'
+            if field=='gpu': rows[1]['host']['gpuPreflight']['devices'][0]['deviceUuid']='other'
+            with self.assertRaises(ValueError): bisect.plan('guest',CANDIDATES,[rows],'pixels')
+
 
 if __name__=='__main__': unittest.main()

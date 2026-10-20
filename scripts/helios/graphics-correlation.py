@@ -41,8 +41,21 @@ def correlate(report):
         key=(row['resourceId'],row['source'],row['inode'])
         group=resources.setdefault(key,{'resourceId':key[0],'source':key[1],'inode':key[2],'events':[]})
         group['events'].append(row)
+    contracts={}
+    for row in report.get('host',{}).get('frameMetrics',[]):
+        if row.get('kind') in ('dmabuf-export','dmabuf-import'):
+            contracts.setdefault(row['inode'],[]).append(row)
+    contract_rows=[]
+    for inode,events in contracts.items():
+        imports=[row for row in events if row['kind']=='dmabuf-import']
+        comparisons=[{'requiredBytes':r['requiredBytes'],'bufferBytes':r['bufferBytes'],
+                      'verdict':'undersized' if r['requiredBytes']>r['bufferBytes'] else
+                                'size-equal' if r['requiredBytes']==r['bufferBytes'] else 'padded-or-different-layout'} for r in imports]
+        contract_rows.append({'inode':inode,'events':events,'sizeChecks':comparisons,
+                              'multipleExports':sum(row['kind']=='dmabuf-export' for row in events)>1})
     first_failure=next(iter(report.get('host',{}).get('transportErrors',[])),None)
     return {'schema':1,'captureId':report.get('captureId'),'guestMinusHostClockRange':offset,
+            'bufferContracts':contract_rows,
             'resourceTimeline':list(resources.values()),'firstObservedHostFailure':first_failure,
             'resourceScope':'Process-local IDs and bounded historical tail; no inferred equality with guest KMD IDs or Vulkan object handles.',
             'guestEvents':events,'umdFiles':logs,'hostEvents':report.get('host',{}).get('transportErrors',[])[-32:],

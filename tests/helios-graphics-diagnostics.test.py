@@ -54,6 +54,14 @@ class TestGraphicsCollector(unittest.TestCase):
         self.assertEqual(graphics.parse_transport_errors('import-held source=4 ino=99 attempts=2 delay_ns=500000000')[0]['kind'],'import-backoff')
         self.assertNotIn('PRIVATE',json.dumps(result))
         self.assertEqual(graphics.parse_frame_metrics('frame-ack source=4 sequence=1 wait_us=-1 success=1 in_flight=1 transport=copy'),[])
+    def test_export_import_contracts_keep_only_numeric_fields(self):
+        lines=('dmabuf-contract export ino=99 allocated=16777216 blob=16777216 fd_bytes=16777216 memory_type=2 fd_type=1\n'
+               'dmabuf-contract import source=1 ino=99 bytes=16777216 required=4587520 alignment=4096 width=1280 height=800 stride=5120 format=44 tiling=0 modifier=72057594037927935 usage=23 flags=8 image_bits=3 fd_bits=3')
+        rows=graphics.parse_frame_metrics(lines)
+        self.assertEqual([r['kind'] for r in rows],['dmabuf-export','dmabuf-import'])
+        self.assertEqual(rows[1]['requiredBytes'],4587520)
+        self.assertEqual(rows[0]['allocationBytes'],16777216)
+
     def test_resource_identity_budget_and_live_heap(self):
         self.assertEqual(graphics.parse_transport_errors('vram-budget refused: release=0 requested=4096 used=6000 cap=7000')[0]['limitBytes'],7000)
         log=('resource-create id=5 source=2 ino=8 imported=40 snapshot=50 staging=60 owned_total=110 peak=120\n'

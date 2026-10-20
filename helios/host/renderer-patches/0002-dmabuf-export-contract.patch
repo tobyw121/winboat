@@ -1,0 +1,40 @@
+diff --git a/src/venus/vkr_device_memory.c b/src/venus/vkr_device_memory.c
+index 6243def..efc740e 100644
+--- a/src/venus/vkr_device_memory.c
++++ b/src/venus/vkr_device_memory.c
+@@ -798,7 +798,7 @@ vkr_device_memory_export_blob(struct vkr_device_memory *mem,
+    const bool can_export_opaque = mem->valid_fd_types & (1 << VIRGL_RESOURCE_FD_OPAQUE);
+    enum virgl_resource_fd_type fd_type;
+    VkExternalMemoryHandleTypeFlagBits handle_type;
+-   struct virgl_resource_vulkan_info vulkan_info;
++   struct virgl_resource_vulkan_info vulkan_info = {0};
+    if (blob_flags & VIRGL_RENDERER_BLOB_FLAG_USE_CROSS_DEVICE) {
+       if (!can_export_dma_buf) {
+          vkr_log("mem cannot export to dma_buf for cross device blob sharing");
+@@ -860,8 +860,10 @@ vkr_device_memory_export_blob(struct vkr_device_memory *mem,
+       }
+    }
+ 
++   uint64_t measured_fd_bytes = 0;
+    if (fd_type == VIRGL_RESOURCE_FD_DMABUF) {
+       const off_t dma_buf_size = lseek(fd, 0, SEEK_END);
++      if (dma_buf_size >= 0) measured_fd_bytes = (uint64_t)dma_buf_size;
+       if (dma_buf_size < 0 || (uint64_t)dma_buf_size < blob_size) {
+          vkr_log("mem dma_buf_size %lld < blob_size %" PRIu64, (long long)dma_buf_size,
+                  blob_size);
+@@ -870,6 +872,15 @@ vkr_device_memory_export_blob(struct vkr_device_memory *mem,
+       }
+    }
+ 
++   static atomic_uint_fast64_t contract_sequence;
++   uint_fast64_t sequence=atomic_fetch_add_explicit(&contract_sequence,1,memory_order_relaxed);
++   struct stat contract;
++   if ((sequence<64 || sequence%256==0 || (getenv("HELIOS_FRAME_TRACE") && !strcmp(getenv("HELIOS_FRAME_TRACE"),"1"))) && fstat(fd, &contract) == 0) {
++      vkr_log("dmabuf-contract export ino=%" PRIu64 " allocated=%" PRIu64
++              " blob=%" PRIu64 " fd_bytes=%" PRIu64 " memory_type=%u fd_type=%u",
++              (uint64_t)contract.st_ino, mem->allocation_size, blob_size,
++              measured_fd_bytes, mem->memory_type_index, fd_type);
++   }
+    mem->exported = true;
+ 
+    *out_blob = (struct virgl_context_blob){

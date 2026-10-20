@@ -48,6 +48,10 @@ def parse_transport_errors(text):
 def parse_frame_metrics(text):
     records=[]
     patterns=(
+        ('dmabuf-export',r'dmabuf-contract export ino=(\d{1,20}) allocated=(\d{1,20}) blob=(\d{1,20}) fd_bytes=(\d{1,20}) memory_type=(\d{1,10}) fd_type=(\d{1,10})',
+         ('inode','allocationBytes','blobBytes','bufferBytes','memoryType','fdType')),
+        ('dmabuf-import',r'dmabuf-contract import source=(\d{1,10}) ino=(\d{1,20}) bytes=(\d{1,20}) required=(\d{1,20}) alignment=(\d{1,20}) width=(\d{1,10}) height=(\d{1,10}) stride=(\d{1,10}) format=(\d{1,10}) tiling=(\d{1,10}) modifier=(\d{1,20}) usage=(\d{1,10}) flags=(\d{1,10}) image_bits=(\d{1,10}) fd_bits=(\d{1,10})(?: offset=(\d{1,10}) planes=(\d{1,10}))?',
+         ('source','inode','bufferBytes','requiredBytes','alignment','width','height','stride','format','tiling','modifier','usage','flags','imageMemoryBits','fdMemoryBits','offset','planes')),
         ('ack',r'frame-ack source=(\d+) sequence=(\d+) wait_us=(\d+) success=([01]) in_flight=(\d+) transport=(copy|dmabuf)(?: inode=(\d{1,20}))?',
          ('source','sequence','waitMicroseconds','success','inFlight','transport','inode')),
         ('resource-create',r'resource-create id=(\d{1,20}) source=(\d{1,20}) ino=(\d{1,20}) imported=(\d{1,20}) snapshot=(\d{1,20}) staging=(\d{1,20}) owned_total=(\d{1,20}) peak=(\d{1,20})',
@@ -67,6 +71,8 @@ def parse_frame_metrics(text):
             if match:
                 record={'kind':kind}
                 record.update({key:value if key=='transport' else int(value) for key,value in zip(names,match.groups()) if value is not None})
+                stamp=re.match(r'^(\d{4}-\d{2}-\d{2}T[0-9:.]+Z) ',line)
+                if stamp: record['hostAtUtc']=stamp[1]
                 if all(type(v) is not int or 0<=v<2**64 for v in record.values()): records.append(record)
     return records[-64:]
 

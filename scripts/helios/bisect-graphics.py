@@ -32,7 +32,15 @@ def plan(axis,candidates,trials,probe):
             machine=identity.get('machineId')
             if not machine or 'profile' not in identity: raise ValueError('VM identity and explicit driver profile required')
             # Hold the other side and all settings constant across every trial.
-            fixed=(machine,host if axis=='guest' else manifest,json.dumps(identity['profile'],sort_keys=True),acceptance['comparisonKey'])
+            controllers=capture.get('graphics/diagnostics',{}).get('driver',{}).get('controllers',[])
+            dimensions=sorted({(c.get('CurrentHorizontalResolution'),c.get('CurrentVerticalResolution')) for c in controllers
+                               if type(c.get('CurrentHorizontalResolution')) is int and type(c.get('CurrentVerticalResolution')) is int})
+            backend=capture.get('host',{}).get('qemuBackend',{})
+            preflight=capture.get('host',{}).get('gpuPreflight',{})
+            physical_ids=[d.get('deviceUuid') for d in preflight.get('devices',[]) if d.get('selected') is True]
+            context_fields={'dimensions':dimensions,'backend':backend.get('backend'),'gpu':physical_ids,
+                            'performance':backend.get('performance')}
+            fixed=(machine,host if axis=='guest' else manifest,json.dumps(identity['profile'],sort_keys=True),acceptance['comparisonKey'],json.dumps(context_fields,sort_keys=True))
             if context is not None and fixed!=context: raise ValueError('VM, fixed stack side, workload or settings changed')
             context=fixed
             run=acceptance.get('runId')

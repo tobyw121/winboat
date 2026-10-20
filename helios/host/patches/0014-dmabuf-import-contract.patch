@@ -1,0 +1,32 @@
+diff --git a/ui/vulkan-readback.c b/ui/vulkan-readback.c
+index 319b4b1..8af32ca 100644
+--- a/ui/vulkan-readback.c
++++ b/ui/vulkan-readback.c
+@@ -816,6 +816,27 @@ HeliosVulkanReadback *helios_vulkan_readback_new(QemuDmaBuf *dmabuf,
+             readback->dmabuf_size, image_requirements.size,
+             image_requirements.alignment, image_requirements.memoryTypeBits,
+             fd_properties.memoryTypeBits);
++        if (!g_strcmp0(g_getenv("HELIOS_FRAME_TRACE"), "1") ||
++            image_requirements.size > dmabuf_size ||
++            (direct_optimal && image_requirements.size != dmabuf_size)) {
++            int contract_nstrides=0, contract_noffsets=0;
++            const uint32_t *contract_strides=qemu_dmabuf_get_strides(dmabuf,&contract_nstrides);
++            const uint32_t *contract_offsets=qemu_dmabuf_get_offsets(dmabuf,&contract_noffsets);
++            error_report("dmabuf-contract import source=%u ino=%" PRIu64
++                         " bytes=%" PRIu64 " required=%" PRIu64
++                         " alignment=%" PRIu64 " width=%u height=%u stride=%u"
++                         " format=%u tiling=%u modifier=%" PRIu64
++                         " usage=%u flags=%u image_bits=%u fd_bits=%u offset=%u planes=%u",
++                         readback->source_id, (uint64_t)readback->dmabuf_ino,
++                         dmabuf_size, (uint64_t)image_requirements.size,
++                         (uint64_t)image_requirements.alignment,
++                         image_info.extent.width, image_info.extent.height,
++                         contract_nstrides==1 ? contract_strides[0] : 0, image_info.format,
++                         image_info.tiling, modifier, image_info.usage, image_info.flags,
++                         image_requirements.memoryTypeBits, fd_properties.memoryTypeBits,
++                         contract_noffsets==1 ? contract_offsets[0] : 0,
++                         qemu_dmabuf_get_num_planes(dmabuf));
++        }
+         if (direct_optimal && image_requirements.size != dmabuf_size) {
+             error_report("vulkan-readback: OPTIMAL DMA-BUF shape mismatch "
+                          "required=%" PRIu64 " fd_size=%" PRIu64,
