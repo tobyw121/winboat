@@ -52,7 +52,7 @@
     {
       "from": "./scripts/helios",
       "to": "graphics-tools",
-      "filter": ["diagnose-graphics.py", "graphics-correlation.py", "inspect-qemu-backend.py", "measure-performance.py"]
+      "filter": ["diagnose-graphics.py", "graphics-correlation.py", "inspect-qemu-backend.py", "measure-performance.py", "export-support.py", "support-bundle.py"]
     },
     {
       "from": "./resources/shared-folders",

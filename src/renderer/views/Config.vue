@@ -108,7 +108,8 @@
                 <x-card v-if="heliosEnabled" class="p-4 my-0 w-full bg-neutral-800/20">
                     <h1 class="text-lg font-semibold mb-2">Graphics diagnostics</h1>
                     <p class="text-sm text-neutral-400">Record flickering for about a minute. Collects guest status and existing host logs without changing drivers or restarting Windows. Requires Python 3 on Linux.</p>
-                    <x-button :disabled="captureRunning || isApplyingChanges" @click="captureGraphics">{{ captureRunning ? 'Recording…' : 'Capture flickering' }}</x-button>
+                    <x-button :disabled="captureRunning || isApplyingChanges" @click="captureGraphics()">{{ captureRunning ? 'Recording…' : 'Capture flickering' }}</x-button>
+                    <x-button :disabled="captureRunning || isApplyingChanges" @click="captureGraphics(true)">Create support ZIP</x-button>
                     <p v-if="captureMessage" class="text-sm text-neutral-400 mt-2">{{ captureMessage }}</p>
                 </x-card>
 
