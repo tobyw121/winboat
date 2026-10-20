@@ -60,7 +60,7 @@
     "INVESTIGATIONS/exit8-exclusive-fullscreen-rgb10.md": "9c308aa2ff35670d5739f085e2d690175cc8be30fbc5f7ad8f6e259ca3f0979f",
     "NTOSEYE.md": "555acd226f7298aea224a372070e783289a64615663913d82393cccdff612558",
     "README.md": "2119fe6213c753e6115886169c2a51acc4349260a03254729e430c6795e3dcb3",
-    "ROADMAP.md": "c2b18144faeae90649570c7ef539ab565d6799599c0a84f662972ebaf09d6518",
+    "ROADMAP.md": "b2792e7767259609f5cd738988b5a95158c214a0642dddb1ca70d889ae960b75",
     "TOOLCHAIN.md": "6c1d99c8ebffb025cb8e581fcba3dabd70d01f353c0c28d251c0f9923d45b7d9",
     "TRANSPORT.md": "7cbb4f91b03d5e9125b8740444aa15e1d7803b629d0a248d7bbd3f9b56259362",
     "WINDOWS_CI_PACKAGE.md": "30df88e236add10db73c361c1e16987d1e16958e8dc58e247136f9781201bfe2",
@@ -583,7 +583,7 @@
     "umd/src/caps.rs": "bbee18410a1a1b76ed27735ad1f85508b7534c7a7b5891134fe50b00ee1e60d5",
     "umd/src/ddi.rs": "9ab6d0167b76a725f31ae664598ab64fbe563795bfbd3ac0f8c3cd0c784c9897",
     "umd/src/device_funcs.rs": "5acb1102291a68261013fc1ed888b7c29ec5250bfeb75c909cbeb6246685a3fa",
-    "umd/src/diagnostics.rs": "cb9074e51ade640198e105525916e6bd204a83587d80494c4654434e4b4b5723",
+    "umd/src/diagnostics.rs": "5f46273604e5434d165c6a11e335f23a8cd69f50f89f91affcc9f15f4c44017b",
     "umd/src/forward.rs": "fa283758d3cbae1af5ce21a01b9424578bcfbe3726f7e037ac4c4d2cefc44a4d",
     "umd/src/forward/alloc.rs": "7209f94a001b914a4b3f8f7ba5f9471ee2513f578bd9951dc942bf020602bd89",
     "umd/src/forward/bindings.rs": "7ab9b2b06919949b451631412f4d708b0c06d3a1b6b854efd9f4b5c64e4cea63",
@@ -595,7 +595,7 @@
     "umd/src/forward/present.rs": "259ecf300e09f5968ccf2ee8973a5d466c8297e007f6a601fedba12b255b7db0",
     "umd/src/forward/queries.rs": "7b10d99d32828c97d8db91fb22624f729f3029f7731f9310abf5e7080cf3077d",
     "umd/src/forward/query_contract.rs": "11ba6966bc2035828afe4af9fd705584caea5c9831d224f7c260c838d4529fae",
-    "umd/src/forward/resource.rs": "ef95342eb270bcf96f51269716e04009cf8ac2a8246d768845829ef811647550",
+    "umd/src/forward/resource.rs": "5a81e74cff0aaa7283c98a40c309028415690c74723ac22142a2324287ae097c",
     "umd/src/forward/shaders.rs": "92b507854828136c701e47827713789e4c62994f0b522a408d657191c3f113bf",
     "umd/src/forward/snapshot.rs": "91511f63ec6e5486f3ecd473915e4fbc7e8351242c0c09f0215b99145019de6a",
     "umd/src/forward/state.rs": "5a11cb49d987c1915a602c238be5826431e91d834366d6d427f78129680720b1",
@@ -728,7 +728,8 @@
       "context-correct-variant-failure-bounded-probe-teardown",
       "real-native-probe-drain-and-timeout-tests",
       "shader-hresult-cxx-signature-validation",
-      "Exact LUID or unique-adapter selection and loss-aware D3D11 creation errors"
+      "Exact LUID or unique-adapter selection and loss-aware D3D11 creation errors",
+      "first-DDI-failure-frozen-context-and-resource-parameters"
     ],
     "addedFiles": [
       "kmd_logic/src/display_modes.rs",

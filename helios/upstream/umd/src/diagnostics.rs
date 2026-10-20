@@ -21,6 +21,7 @@ struct Journal {
     formats: BTreeMap<u64, u64>,
     mismatches: u64,
     first_mismatch: Option<[u64; 6]>,
+    first_failure: Option<Vec<Event>>,
 }
 impl Journal {
     fn record(&mut self, kind: &'static str, values: [u64; 6]) {
@@ -38,6 +39,11 @@ impl Journal {
         }
         if self.entries.len() == LIMIT { self.entries.pop_front(); }
         self.entries.push_back(Event { seq: self.seq, kind, values });
+        if kind == "runtime-error" && values[0] & 0x8000_0000 != 0 && self.first_failure.is_none() {
+            // Freeze the immediate numeric context; later successful queries
+            // must not erase the first reported DDI failure.
+            self.first_failure = Some(self.entries.iter().rev().take(16).copied().collect::<Vec<_>>());
+        }
     }
 }
 
@@ -47,16 +53,24 @@ pub(crate) struct DeviceDiagnostics {
     started: Instant,
     journal: Mutex<Journal>,
     presented: AtomicBool,
+    failure_dumped: AtomicBool,
 }
 impl DeviceDiagnostics {
     pub(crate) fn new() -> Self {
         Self { id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
             birth: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_micros(),
-            started: Instant::now(), journal: Mutex::new(Journal::default()), presented: AtomicBool::new(false) }
+            started: Instant::now(), journal: Mutex::new(Journal::default()), presented: AtomicBool::new(false),
+            failure_dumped: AtomicBool::new(false) }
     }
     fn record(&self, kind: &'static str, values: [u64; 6]) {
         if kind == "present" && self.presented.swap(true, Ordering::Relaxed) { return; }
         self.journal.lock().unwrap_or_else(|e| e.into_inner()).record(kind, values);
+        if kind == "runtime-error" && values[0] & 0x8000_0000 != 0 &&
+            !self.failure_dumped.swap(true, Ordering::Relaxed) {
+            // No journal mutex is held during dump acquisition. At most once
+            // per device; no per-frame flush or changes to runtime callbacks.
+            self.dump();
+        }
     }
     pub(crate) fn dump(&self) {
         let journal = self.journal.lock().unwrap_or_else(|e| e.into_inner());
@@ -65,6 +79,13 @@ impl DeviceDiagnostics {
         if let Some(v) = journal.first_mismatch {
             crate::log_error!("GPU-DIAG mismatch device={} birth={} fmt={} samples={} flags={} levels={} hr=0x{:08x}",
                 self.id, self.birth, v[0], v[1], v[2], v[3], v[4]);
+        }
+        if let Some(events) = &journal.first_failure {
+            for e in events.iter().rev() {
+                let v = e.values;
+                crate::log_error!("GPU-DIAG first-failure device={} birth={} seq={} kind={} a={} b={} c={} d={} e={} f={}",
+                    self.id, self.birth, e.seq, e.kind, v[0], v[1], v[2], v[3], v[4], v[5]);
+            }
         }
         for e in &journal.entries {
             let v = e.values;
@@ -113,5 +134,19 @@ mod tests {
         assert_eq!(j.mismatches, 0);
         assert!(j.first_mismatch.is_none());
         assert_ne!(DeviceDiagnostics::new().id, DeviceDiagnostics::new().id);
+    }
+    #[test]
+    fn first_failure_context_survives_ring_wrap_and_later_failures() {
+        let mut j = Journal::default();
+        j.record("resource", [28, 1920, 1080, 4, 0, 32]);
+        j.record("runtime-error", [0, 0, 0, 0, 0, 0]);
+        assert!(j.first_failure.is_none());
+        j.record("runtime-error", [0x80070057, 0, 0, 0, 0, 0]);
+        for i in 0..200 { j.record("format", [i, 0, 0, 0, 0, 0]); }
+        j.record("runtime-error", [0x80004005, 0, 0, 0, 0, 0]);
+        let first = j.first_failure.unwrap();
+        assert_eq!(first.len(), 3);
+        assert_eq!(first[0].values[0], 0x80070057);
+        assert_eq!(first[2].values, [28, 1920, 1080, 4, 0, 32]);
     }
 }

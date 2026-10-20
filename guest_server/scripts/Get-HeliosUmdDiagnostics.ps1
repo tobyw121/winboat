@@ -10,11 +10,15 @@ function Read-HeliosGpuJournal([string]$Text,[ValidateRange(1,96)][int]$EventLim
         Select-Object -Last $EventLimit | ForEach-Object {
             [ordered]@{seq=$_.Groups[1].Value;kind=$_.Groups[2].Value;values=@($_.Groups[3..8] | ForEach-Object {$_.Value})}
         })
+    $failure=@([regex]::Matches($tail,$prefix+"first-failure device=$id birth=$birth seq=(\d{1,16}) kind=(created|format|msaa|msaa-refused|msaa-policy|runtime-error|resource|view|shader|present|returned) a=(\d{1,20}) b=(\d{1,20}) c=(\d{1,20}) d=(\d{1,20}) e=(\d{1,20}) f=(\d{1,20})\r?$") |
+        Select-Object -First 16 | ForEach-Object {
+            [ordered]@{seq=$_.Groups[1].Value;kind=$_.Groups[2].Value;values=@($_.Groups[3..8] | ForEach-Object {$_.Value})}
+        })
     $first=[regex]::Match($tail,$prefix+"mismatch device=$id birth=$birth fmt=(\d{1,10}) samples=(\d{1,3}) flags=(\d{1,10}) levels=(\d{1,10}) hr=(0x[0-9a-fA-F]{8})\r?$")
     $mismatch=$null
     if ($first.Success) {$mismatch=[ordered]@{format=$first.Groups[1].Value;samples=$first.Groups[2].Value;flags=$first.Groups[3].Value;levels=$first.Groups[4].Value;hr=$first.Groups[5].Value}}
     return [ordered]@{device=$id;birth=$birth;elapsedMs=$head.Groups[3].Value;queries=$head.Groups[4].Value;
-        mismatches=$head.Groups[5].Value;presented=$(if ($head.Groups[6].Success) {$head.Groups[6].Value -eq '1'} else {$null});firstMismatch=$mismatch;events=$events}
+        mismatches=$head.Groups[5].Value;presented=$(if ($head.Groups[6].Success) {$head.Groups[6].Value -eq '1'} else {$null});firstMismatch=$mismatch;firstFailure=$failure;events=$events}
 }
 function Read-HeliosUmdSummary([string]$Path,[ValidateRange(1,96)][int]$EventLimit=16) {
     $stream=[IO.File]::Open($Path,'Open','Read','ReadWrite')

@@ -688,6 +688,9 @@ pub(crate) unsafe extern "system" fn create_resource(
     };
 
     // Build initial-data array if provided (one entry per subresource).
+    crate::diagnostics::note(h, "resource", [a.Format as u64,
+        mip0.TexelWidth as u64, mip0.TexelHeight as u64,
+        a.SampleDesc.Count as u64, a.SampleDesc.Quality as u64, a.BindFlags as u64]);
     let num_sub = (a.MipLevels.max(1) * a.ArraySize.max(1)) as usize;
     if let Some(identity_n) =
         CREATE_RESOURCE_IDENTITY_LOG_COUNT.first_n_then_every_from_one(512, 2048)
