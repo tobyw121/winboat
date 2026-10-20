@@ -104,9 +104,9 @@ def collect_host(container):
     return result
 
 
-def read_endpoint(opener, base, endpoint):
+def read_endpoint(opener, base, endpoint, timeout=20):
     try:
-        with opener.open(base + '/' + endpoint, timeout=20) as response:
+        with opener.open(base + '/' + endpoint, timeout=timeout) as response:
             raw = response.read(131073)
             if len(raw) > 131072:
                 raise ValueError('Response exceeds 128 KiB')
@@ -143,7 +143,7 @@ def collect(container, opener=None, samples=1, interval=5, sleeper=None):
         observations = []
         for index in range(samples):
             observations.append({'hostAtUtc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                                 'adapters': read_endpoint(opener, base, 'graphics/adapters')})
+                                 'adapters': read_endpoint(opener, base, 'graphics/adapters',timeout=3)})
             if index + 1 < samples:
                 (sleeper or time.sleep)(interval)
         result['capture'] = {'intervalSeconds': interval, 'observations': observations,
@@ -152,7 +152,8 @@ def collect(container, opener=None, samples=1, interval=5, sleeper=None):
     for endpoint in ('version', 'graphics/diagnostics', 'graphics/helios', 'graphics/history',
                      'graphics/diagnostics/journals', 'graphics/diagnostics/runtime','graphics/validation'):
         started=datetime.datetime.now(datetime.timezone.utc).isoformat()
-        result[endpoint] = read_endpoint(opener, base, endpoint)
+        slow=endpoint in ('graphics/diagnostics','graphics/diagnostics/journals','graphics/diagnostics/runtime')
+        result[endpoint] = read_endpoint(opener, base, endpoint,timeout=20 if slow else 3)
         result['requestTiming'][endpoint]={'startUtc':started,'endUtc':datetime.datetime.now(datetime.timezone.utc).isoformat()}
     result['finishedAtUtc'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
     return result

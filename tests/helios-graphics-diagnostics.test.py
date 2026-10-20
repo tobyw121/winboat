@@ -18,7 +18,8 @@ spec.loader.exec_module(graphics)
 class Opener:
     def __init__(self): self.urls = []
     def open(self, url, timeout):
-        assert timeout == 20
+        slow=any(url.endswith('/'+endpoint) for endpoint in ('graphics/diagnostics','graphics/diagnostics/journals','graphics/diagnostics/runtime'))
+        assert timeout == (20 if slow else 3)
         self.urls.append(url)
         if url.endswith('/version'): return contextlib.closing(io.BytesIO(b'{"version":"test"}'))
         if url.endswith('/graphics/diagnostics'):

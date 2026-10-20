@@ -13,7 +13,7 @@ const capture = graphicsCapture(async () => {
     const script = remote.app.isPackaged ? path.join(process.resourcesPath,'graphics-tools','diagnose-graphics.py')
         : path.resolve(remote.app.getAppPath(),'../..','scripts/helios/diagnose-graphics.py');
     const result = await promisify(child.execFile)('python3',[script,'--samples','12','--interval','2','--expected-runtime',HELIOS_RUNTIME_VERSION],{
-        timeout:180000,maxBuffer:2*1024*1024,
+        timeout:240000,maxBuffer:2*1024*1024,
         env:nativeDesktopEnvironment(hostEnvironment(),remote.app.isPackaged?path.dirname(process.resourcesPath):undefined),
     });
     return result.stdout;
