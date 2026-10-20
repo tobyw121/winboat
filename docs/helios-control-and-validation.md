@@ -232,3 +232,7 @@ noch erforderlich. Deshalb bleibt `.291` unverändert die Vorgabe.
 Erweiterte Messwerkzeuge und das neue QEMU-I/O-Profil: [Helios Deep Diagnostics](helios-deep-diagnostics.md).
 
 Aktueller Kandidat: [Helios .298, Vertragstests und QEMU-Speicherprofil](helios-298-validation.md).
+
+
+Host/QEMU/guest additions, `.299` child-only capability comparisons, shared-process
+validation and lifecycle gates: [cross-layer contracts](helios-299-cross-layer.md).
