@@ -9,6 +9,7 @@ on:
       - 'helios/source.lock.json'
       - 'tests/helios-qemu-dbus.*'
       - 'tests/helios-qemu-device.c'
+      - 'tests/helios-frame-memory.c'
       - 'tests/helios-qemu-import-cache.c'
       - 'tests/helios-performance.py'
       - 'scripts/helios/performance-profile.py'
@@ -54,6 +55,7 @@ on:
       - 'helios/source.lock.json'
       - 'tests/helios-qemu-dbus.*'
       - 'tests/helios-qemu-device.c'
+      - 'tests/helios-frame-memory.c'
       - 'tests/helios-qemu-import-cache.c'
       - 'tests/helios-performance.py'
       - 'scripts/helios/performance-profile.py'
@@ -103,6 +105,7 @@ jobs:
         with:
           persist-credentials: false
       - run: python3 tests/helios-performance.py
+      - run: cc -std=c11 -Wall -Wextra -Werror tests/helios-frame-memory.c -o /tmp/frame-memory && /tmp/frame-memory
       - run: python3 tests/helios-performance-metrics.py
       - run: python3 tests/helios-soak.py
       - run: python3 tests/helios-bisect.py
@@ -127,7 +130,7 @@ jobs:
         run: docker run --rm --network none -e LD_LIBRARY_PATH=/opt/helios/renderer/lib:/opt/helios/lib --entrypoint python3 -v "$PWD:/src:ro" -w /src winboat-helios-test:drm-node tests/helios-io-poll-qemu.py
       - name: Verify runtime capability label
         run: |
-          test "$(docker image inspect --format '{{index .Config.Labels "org.winboat.helios.runtime"}}' winboat-helios-test:drm-node)" = glvnd-v7
+          test "$(docker image inspect --format '{{index .Config.Labels "org.winboat.helios.runtime"}}' winboat-helios-test:drm-node)" = glvnd-v8
   capture:
     runs-on: ubuntu-24.04
     timeout-minutes: 5

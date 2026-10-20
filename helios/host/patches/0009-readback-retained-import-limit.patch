@@ -1,0 +1,60 @@
+diff --git a/ui/helios-cache-policy.h b/ui/helios-cache-policy.h
+new file mode 100644
+index 0000000..dc00849
+--- /dev/null
++++ b/ui/helios-cache-policy.h
+@@ -0,0 +1,17 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later */
++#ifndef HELIOS_CACHE_POLICY_H
++#define HELIOS_CACHE_POLICY_H
++/* Retained imports, not a byte budget. Invalid input never expands the cache. */
++static inline unsigned helios_cache_entries(const char *value)
++{
++    if (!value || !*value) return 8;
++    if (value[1]) return 0;
++    switch (value[0]) {
++    case '1': return 1;
++    case '2': return 2;
++    case '4': return 4;
++    case '8': return 8;
++    default: return 0;
++    }
++}
++#endif
+diff --git a/ui/vulkan-readback.c b/ui/vulkan-readback.c
+index ef4ef2c..1126b20 100644
+--- a/ui/vulkan-readback.c
++++ b/ui/vulkan-readback.c
+@@ -1,4 +1,5 @@
+ #include "qemu/osdep.h"
++#include "ui/helios-cache-policy.h"
+ #include "qemu/error-report.h"
+ #include "qemu/timer.h"
+ #include "ui/console.h"
+@@ -148,11 +149,17 @@ struct HeliosVulkanReadbackCache {
+     HeliosVulkanReadback *active;
+     QemuDmaBuf *active_dmabuf;
+     uint32_t next;
++    unsigned limit;
+ };
+ 
+ HeliosVulkanReadbackCache *helios_vulkan_readback_cache_new(void)
+ {
+     HeliosVulkanReadbackCache *cache = g_new0(HeliosVulkanReadbackCache, 1);
++    cache->limit = helios_cache_entries(getenv("HELIOS_READBACK_CACHE_ENTRIES"));
++    if (!cache->limit) {
++        error_report("vulkan-readback: invalid cache entry limit; using 8");
++        cache->limit = HELIOS_VK_READBACK_CACHE_SIZE;
++    }
+     for (size_t i = 0; i < ARRAY_SIZE(cache->failures); i++) {
+         cache->failures[i].fd = -1;
+     }
+@@ -268,7 +275,7 @@ HeliosVulkanReadback *helios_vulkan_readback_cache_activate(
+         failure->retry = (HeliosRetry){0};
+     }
+ 
+-    slot = cache->next++ % ARRAY_SIZE(cache->entries);
++    slot = cache->next++ % cache->limit;
+     g_clear_pointer(&cache->entries[slot], helios_vulkan_readback_free);
+     cache->entries[slot] = readback;
+     cache->active = readback;

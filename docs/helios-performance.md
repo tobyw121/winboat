@@ -19,7 +19,7 @@ git pull --ff-only origin work
 
 Anschließend die neue AppImage unter `dist/` starten. Der vollständige Build
 aktualisiert auch das Host-Image. `--skip-host` eignet sich hier nicht, wenn das
-lokale Image noch die alte Laufzeit enthält. Erwartet werden `glvnd-v7` und
+lokale Image noch die alte Laufzeit enthält. Erwartet werden `glvnd-v8` und
 Anzeigeprotokoll `dbus-v9`; die Quellrevision allein reicht zur Prüfung nicht.
 Eine bereits laufende VM verwendet ihr bisheriges Image bis zum ausdrücklich
 ausgelösten Neuerstellen des Containers mit der bestehenden Konfiguration.

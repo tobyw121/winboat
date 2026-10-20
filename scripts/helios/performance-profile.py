@@ -8,12 +8,13 @@ import re
 
 
 def profile(name, affinity='', queues=0, hugepages='off', preallocate=False):
-    if name not in ('baseline','cache','io-thread','io-thread-low-cpu','custom'):
+    if name not in ('baseline','cache','io-thread','io-thread-low-cpu','readback-small-cache','custom'):
         raise ValueError('Unknown comparison profile')
     if name != 'custom' and (affinity or queues or hugepages != 'off' or preallocate):
         raise ValueError('Use custom for CPU, network or memory options')
     return {'HELIOS_SHADER_CACHE':str(int(name == 'cache')),
             'HELIOS_IO_THREAD':str(int(name in ('io-thread','io-thread-low-cpu'))),
+            'HELIOS_READBACK_CACHE_ENTRIES':'2' if name=='readback-small-cache' else '8',
             'HELIOS_IO_POLL_NS':'0' if name=='io-thread-low-cpu' else '',
             'HELIOS_CPU_AFFINITY':affinity,'HELIOS_NET_QUEUES':str(queues),
             'HELIOS_HUGEPAGES':hugepages,'HELIOS_PREALLOC':str(int(preallocate)),'HELIOS_FRAME_TRACE':'0'}
@@ -21,7 +22,7 @@ def profile(name, affinity='', queues=0, hugepages='off', preallocate=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('profile',choices=('baseline','cache','io-thread','io-thread-low-cpu','custom'))
+    parser.add_argument('profile',choices=('baseline','cache','io-thread','io-thread-low-cpu','readback-small-cache','custom'))
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--service',default='windows')
     parser.add_argument('--cpu-affinity',default='')

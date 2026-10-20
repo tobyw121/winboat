@@ -76,5 +76,10 @@ class PerformanceTests(unittest.TestCase):
                     {'HELIOS_IO_THREAD':'1','HELIOS_IO_POLL_NS':'999999999'}):
             with self.assertRaises(ValueError): perf.options(BASE,env)
 
+    def test_readback_import_limit_is_opt_in_and_bounded(self):
+        self.assertEqual(perf.options(BASE,{'HELIOS_READBACK_CACHE_ENTRIES':'2'}),BASE)
+        for bad in ('0','16','-1','two'):
+            with self.assertRaises(ValueError): perf.options(BASE,{'HELIOS_READBACK_CACHE_ENTRIES':bad})
+
 
 if __name__ == '__main__': unittest.main()

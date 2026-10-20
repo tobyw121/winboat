@@ -31,6 +31,8 @@ def options(args, env, huge_free=None):
     args = list(args)
     if env.get('HELIOS_RESCUE') == '1' or inspection(args):
         return args
+    if env.get('HELIOS_READBACK_CACHE_ENTRIES','8') not in ('1','2','4','8'):
+        raise ValueError('Readback cache entries must be 1, 2, 4 or 8')
     if number(env,'HELIOS_FRAME_TRACE',1):
         if '-trace' in args: raise ValueError('Existing QEMU trace configuration must be preserved')
         args += ['-trace','enable=helios_vulkan_capture']

@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include "ui/helios-retry.h"
+#include "ui/helios-cache-policy.h"
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 #define HELIOS_VK_READBACK_CACHE_SIZE 8
 typedef struct HeliosVulkanReadback { int unused; } HeliosVulkanReadback;
@@ -23,6 +24,9 @@ static uint64_t qemu_dmabuf_get_modifier(QemuDmaBuf *d) { return d->modifier; }
 static uint64_t qemu_dmabuf_get_allocation_size(QemuDmaBuf *d) { return d->size; }
 #include "import-cache.inc"
 int main(void) {
+    assert(helios_cache_entries(NULL)==8 && helios_cache_entries("2")==2);
+    assert(helios_cache_entries("0")==0 && helios_cache_entries("16")==0);
+    assert(helios_cache_entries("-1")==0 && helios_cache_entries("1;bad")==0);
     HeliosVulkanReadbackCache cache={0};
     for (unsigned i=0;i<ARRAY_SIZE(cache.failures);i++) cache.failures[i].fd=-1;
     char path[]="/tmp/helios-cache-XXXXXX";
