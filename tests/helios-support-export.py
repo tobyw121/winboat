@@ -24,6 +24,15 @@ class ExportTests(unittest.TestCase):
         self.assertIsNone(support.filter_report(10**1000))
         self.assertIsNone(support.filter_report(float('nan')))
 
+    def test_numeric_resource_and_heap_observations_survive_filter(self):
+        data={'host':{'gpuHeap':{'observation':{'ready':True,'devices':[{'deviceUuid':'a'*32,'heaps':[{'usageBytes':42,'budgetBytes':99}]}]}},
+                      'frameMetrics':[{'kind':'resource-create','resourceId':8,'inode':9,'ownedBytes':50}],'private':'secret'},
+              'correlation':{'resourceTimeline':[{'resourceId':8,'events':[{'kind':'resource-frame','sequence':2}]}]}}
+        result=support.filter_report(data)
+        self.assertEqual(result['host']['gpuHeap']['observation']['devices'][0]['heaps'][0]['usageBytes'],42)
+        self.assertEqual(result['host']['frameMetrics'][0]['resourceId'],8)
+        self.assertNotIn('secret',json.dumps(result))
+
     def test_real_cli_requires_review_and_exclusive_output(self):
         with tempfile.TemporaryDirectory() as root:
             report=Path(root)/'report.json';out=Path(root)/'support.json'

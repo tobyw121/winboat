@@ -30,13 +30,14 @@ class SoakTests(unittest.TestCase):
         def sleep(seconds): now[0]+=seconds
         def endpoint(opener,base,name,timeout):
             return {'helios':{'state':'running','private':'secret'}} if name.endswith('adapters') else {'driver':{'collectedAtUtc':'2026-10-20T12:00:00Z','dwmCrashes':[]}}
-        with tempfile.TemporaryDirectory() as root,patch.object(soak,'load',side_effect=lambda name: diagnostics if name=='diagnose-graphics' else metrics),patch.object(soak.subprocess,'check_output',return_value='127.0.0.1:7148'),patch.object(metrics,'gpu_sample',return_value={'available':False}),patch.object(metrics,'container_sample',return_value={'cpuPercentOfOneCore':150}),patch.object(diagnostics,'read_endpoint',side_effect=endpoint):
+        with tempfile.TemporaryDirectory() as root,patch.object(soak,'load',side_effect=lambda name: diagnostics if name=='diagnose-graphics' else metrics),patch.object(soak.subprocess,'check_output',return_value='127.0.0.1:7148'),patch.object(metrics,'gpu_sample',return_value={'available':False}),patch.object(metrics,'container_sample',return_value={'cpuPercentOfOneCore':150}),patch.object(diagnostics,'read_endpoint',side_effect=endpoint),patch.object(diagnostics,'collect_host',return_value={'gpuHeap':{'observation':{'ready':True}}}):
             output=Path(root)/'run.jsonl'
             result=soak.record('fixture',1,15,output,clock=lambda:now[0],sleeper=sleep)
             self.assertTrue(result['completed']);self.assertEqual(result['validCpuSamples'],4)
             data=[json.loads(line) for line in output.read_text().splitlines()]
             self.assertEqual(data[0]['kind'],'header');self.assertEqual(data[-1]['kind'],'summary')
             self.assertNotIn('secret',output.read_text())
+            self.assertTrue(data[1]['gpuHeap']['observation']['ready'])
             with self.assertRaises(FileExistsError): soak.record('fixture',1,15,output)
             now[0]=0
             def interrupt(seconds): raise KeyboardInterrupt()

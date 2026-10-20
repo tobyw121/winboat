@@ -51,11 +51,26 @@ int main(int argc,char **argv){
                     pciMatch=domain==pciInfo.pciDomain && bus==pciInfo.pciBus && device==pciInfo.pciDevice && function==pciInfo.pciFunction;
             }
         }
+        VkPhysicalDeviceVulkan12Features f12={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
+        VkPhysicalDeviceVulkan13Features f13={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+        f12.pNext=&f13;
+        VkPhysicalDeviceFeatures2 features={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,.pNext=&f12};
+        vkGetPhysicalDeviceFeatures2(devices[i],&features);
+        VkPhysicalDeviceExternalImageFormatInfo externalInfo={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO,.handleType=VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
+        VkPhysicalDeviceImageFormatInfo2 imageInfo={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,.pNext=&externalInfo,
+            .format=VK_FORMAT_B8G8R8A8_UNORM,.type=VK_IMAGE_TYPE_2D,.tiling=VK_IMAGE_TILING_OPTIMAL,.usage=VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_SAMPLED_BIT};
+        VkExternalImageFormatProperties externalProperties={.sType=VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES};
+        VkImageFormatProperties2 imageProperties={.sType=VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2,.pNext=&externalProperties};
+        VkResult imageResult=VK_ERROR_FORMAT_NOT_SUPPORTED;
+        if(has(extensions,n,VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME)) imageResult=vkGetPhysicalDeviceImageFormatProperties2(devices[i],&imageInfo,&imageProperties);
         if(selected){matched++;valid=properties.properties.apiVersion>=VK_API_VERSION_1_3 && external && pciMatch!=0;}
         if(i) putchar(',');
         printf("{\"vendorId\":%u,\"deviceId\":%u,\"apiVersion\":%u,\"selected\":%s,\"externalMemoryFd\":%s,\"memoryBudgetAvailable\":%s,\"pciMatchesDrm\":",
             properties.properties.vendorID,properties.properties.deviceID,properties.properties.apiVersion,selected?"true":"false",external?"true":"false",budget?"true":"false");
         if(pciMatch<0) printf("null");else printf("%s",pciMatch?"true":"false");
+        printf(",\"timelineSemaphore\":%s,\"synchronization2\":%s,\"dynamicRendering\":%s,\"bgraOptimalImportable\":%s,\"imageQueryResult\":%d",
+            f12.timelineSemaphore?"true":"false",f13.synchronization2?"true":"false",f13.dynamicRendering?"true":"false",
+            imageResult==VK_SUCCESS && (externalProperties.externalMemoryProperties.externalMemoryFeatures&VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT)?"true":"false",imageResult);
         printf(",\"deviceUuid\":\"");for(unsigned j=0;j<VK_UUID_SIZE;j++) printf("%02x",identity.deviceUUID[j]);
         printf("\",\"driverUuid\":\"");for(unsigned j=0;j<VK_UUID_SIZE;j++) printf("%02x",identity.driverUUID[j]);
         printf("\",\"heaps\":[");
@@ -73,7 +88,7 @@ int main(int argc,char **argv){
         }
         printf("]}");
     }
-    printf("],\"matchingDevices\":%u,\"ready\":%s,\"scope\":\"Vulkan/DRM identity and existing heap observations; no rendering proof\"}\n",matched,!inventory && matched==1 && valid?"true":"false");
+    printf("],\"matchingDevices\":%u,\"ready\":%s,\"scope\":\"Vulkan/DRM identity and driver budget estimates; heapUsage is probe-process usage, not renderer VRAM; no rendering proof\"}\n",matched,!inventory && matched==1 && valid?"true":"false");
     vkDestroyInstance(instance,NULL);
     return inventory?0:(matched==1 && valid?0:4);
 }

@@ -130,7 +130,7 @@ jobs:
         run: docker run --rm --network none -e LD_LIBRARY_PATH=/opt/helios/renderer/lib:/opt/helios/lib --entrypoint python3 -v "$PWD:/src:ro" -w /src winboat-helios-test:drm-node tests/helios-io-poll-qemu.py
       - name: Verify runtime capability label
         run: |
-          test "$(docker image inspect --format '{{index .Config.Labels "org.winboat.helios.runtime"}}' winboat-helios-test:drm-node)" = glvnd-v8
+          test "$(docker image inspect --format '{{index .Config.Labels "org.winboat.helios.runtime"}}' winboat-helios-test:drm-node)" = glvnd-v9
   capture:
     runs-on: ubuntu-24.04
     timeout-minutes: 5

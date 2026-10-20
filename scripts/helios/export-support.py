@@ -16,6 +16,7 @@ host runtimeVersion displayVersion expectedRuntimeVersion runtimeMatches contain
 qemuBackend backend vnc gpuCount venus blob sharedMemfd vgaRescue renderNode issues
 transportErrors kind requiredBytes bufferBytes releasedBytes usedBytes hostAtUtc
 gpuPreflight gpuHeap sampledAtUtc observation devices matchingDevices ready vendorId deviceId apiVersion selected
+timelineSemaphore synchronization2 dynamicRendering bgraOptimalImportable imageQueryResult
 externalMemoryFd memoryBudgetAvailable pciMatchesDrm deviceUuid driverUuid heaps sizeBytes deviceLocal
 resourceTimeline firstObservedHostFailure resourceId importedBytes snapshotBytes stagingBytes ownedBytes peakBytes
 limitBytes requestedBytes partial x y sourceInode
@@ -32,7 +33,8 @@ presented firstMismatch firstFailure events seq values format samples flags leve
 requestTiming startUtc endUtc correlation guestEvents hostEvents umdFiles
 minimumSeconds maximumSeconds guestMinusHostClockRange truncated rejectedFeatures feature
 processId loadedApplications modules name path boundDriverVersion testSigning rescueHold
-driverRegistry acceptance transaction comparison resume release dump-policy results
+driverRegistry requestedCycles restartAdapter cycles cycle lifecycle
+acceptance transaction comparison resume release dump-policy results
 label passed exitCode test summary identity manifestSha256 machineId bootAtUtc profile
 UmdD3D12 UmdCommandLists UmdFreeThreaded UmdAsyncPresentStream UmdPresentBatchFold FeatureLevel11
 maximumFiles expiresAtUtc dumpType enabled owned bytes available warnings apiRegistration

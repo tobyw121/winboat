@@ -37,11 +37,11 @@ class TestGraphicsCollector(unittest.TestCase):
             (root/'helios/helios-build.json').write_text('{"sha256":"packaged-pin"}')
             packaged_spec=importlib.util.spec_from_file_location('packaged_graphics',tools/'diagnose-graphics.py')
             packaged=importlib.util.module_from_spec(packaged_spec);packaged_spec.loader.exec_module(packaged)
-            with patch.object(packaged.subprocess,'check_output',side_effect=['"image"\n"sha256:abc"\n"running"\n','glvnd-v8\ndbus-v9\n','{"ready":true,"devices":[]}']), \
+            with patch.object(packaged.subprocess,'check_output',side_effect=['"image"\n"sha256:abc"\n"running"\n','glvnd-v9\ndbus-v9\n','{"ready":true,"devices":[]}']), \
                  patch.object(packaged.subprocess,'run',side_effect=[SimpleNamespace(stdout='',stderr=''),SimpleNamespace(stdout='{}')]):
                 result=packaged.collect_host('WinBoat')
             self.assertEqual(result['bundledInstaller']['sha256'],'packaged-pin')
-            self.assertEqual(result['runtimeVersion'],'glvnd-v8')
+            self.assertEqual(result['runtimeVersion'],'glvnd-v9')
             self.assertNotIn('runtimeError',result)
     def test_frame_metrics_are_fixed_fields_and_do_not_invent_fps(self):
         text='dbus: frame-ack source=4 sequence=8 wait_us=123 success=1 in_flight=1 transport=copy\n'

@@ -56,7 +56,7 @@ RUN --mount=type=secret,id=proxy_ca \
     rm -rf /var/lib/apt/lists/*
 LABEL org.winboat.helios.revision="d82ce565ac792eb48da5e59f2a82a12ff221851d"
 LABEL org.winboat.helios.display="dbus-v9"
-LABEL org.winboat.helios.runtime="glvnd-v8"
+LABEL org.winboat.helios.runtime="glvnd-v9"
 RUN --mount=from=compiled,source=/opt/helios,target=/build/runtime \
     --mount=type=bind,source=helios/host,target=/build/host \
     cp -a /build/runtime /opt/helios && \
