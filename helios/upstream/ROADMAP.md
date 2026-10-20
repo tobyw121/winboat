@@ -4493,4 +4493,4 @@ complete subsystem contract.
   proves nothing below WARNING; a real host-side bisect needs a relaunch with
   `VIRGL_LOG_LEVEL=debug`.
 
-WinBoat diagnostics: preserve the first failing DDI context (16 numeric events) across journal wrap and flush once at first runtime error. Resource events include format, width, height, sample count/quality and bind flags. This changes diagnostic sources only; bundled .291 remains unchanged and new binaries require Windows build and hardware validation.
+WinBoat diagnostic source version 22.22.297.0: preserve the first failing DDI context (16 numeric events) across journal wrap and flush once at first runtime error. Resource events include format, width, height, sample count/quality and bind flags. This changes diagnostic sources only; bundled .291 remains unchanged and new binaries require Windows build and hardware validation.

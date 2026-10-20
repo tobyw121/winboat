@@ -22,7 +22,8 @@ python3 scripts/helios/rescue-graphics.py --disable-helios
 
 ## Erster DDI-Fehler
 
-Die UMD-Quellen halten beim ersten fehlerhaften `runtime-error`-HRESULT die letzten
+Die nativen Diagnosequellen werden als **22.22.297.0** gebaut; das vorhandene
+`.296`-Paket wird nicht überschrieben. Die UMD hält beim ersten fehlerhaften `runtime-error`-HRESULT die letzten
 16 numerischen Ereignisse fest. Dieser Ausschnitt bleibt auch nach Umlauf des
 normalen 96-Ereignis-Puffers erhalten und wird einmal sofort protokolliert.
 Bei Ressourcen enthalten die Ereignisse DXGI-Format, Breite, Höhe, MSAA-Anzahl,
