@@ -15,7 +15,7 @@ struct helios_vram_reference { uint64_t dev, ino; uint8_t uuid[16]; bool valid; 
 struct helios_ref_row { struct helios_vram_reference key; uint64_t bytes; int64_t owner; uint32_t refs; };
 struct helios_ref_book { uint64_t magic; struct helios_ref_row row[HELIOS_REF_SLOTS]; };
 /* mode: 0=publish new (allocation + exported fd), 1=retain imported/fd ref,
- * 2=drop ref. A NULL uuid is allowed only when dropping the export-fd ref.
+ * 2=drop ref. A NULL uuid allows unambiguous lookup/retain/drop of an existing fd ref.
  * Return 1=known/success, 0=unknown/unmanaged, -1=refused; never count unknown as known. */
 static inline int helios_vram_reference_change(const uint8_t *uuid, int source_fd,
     struct helios_vram_reference *reference, uint64_t bytes, int mode)

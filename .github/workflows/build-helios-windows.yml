@@ -218,12 +218,16 @@ jobs:
             mingw-w64-i686-python
             mingw-w64-i686-python-mako
             mingw-w64-i686-python-packaging
-            mingw-w64-i686-python-yaml
             mingw-w64-i686-pkgconf
             mingw-w64-i686-vulkan-headers
             mingw-w64-i686-vulkan-loader
             bison
             flex
+      - name: Stage pure-Python YAML generator dependency
+        shell: msys2 {0}
+        run: |
+          python "$WINBOAT_ROOT/scripts/helios/windows/prepare-pyyaml.py" "$RUNNER_TEMP/helios-pyyaml"
+          echo "PYTHONPATH=$(cygpath -m "$RUNNER_TEMP/helios-pyyaml")" >> "$GITHUB_ENV"
       - name: Build WoW64 Mesa runtime
         shell: msys2 {0}
         run: bash ./ci/windows/build-mesa.sh "$HELIOS_SOURCE_ROOT" "$RUNNER_TEMP/helios-mesa-x86"

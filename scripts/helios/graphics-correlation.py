@@ -46,13 +46,13 @@ def correlate(report):
         if row.get('kind') in ('dmabuf-export','dmabuf-import'):
             contracts.setdefault(row['inode'],[]).append(row)
     contract_rows=[]
-    for inode,events in contracts.items():
-        imports=[row for row in events if row['kind']=='dmabuf-import']
+    for inode,contract_events in contracts.items():
+        imports=[row for row in contract_events if row['kind']=='dmabuf-import']
         comparisons=[{'requiredBytes':r['requiredBytes'],'bufferBytes':r['bufferBytes'],
                       'verdict':'undersized' if r['requiredBytes']>r['bufferBytes'] else
                                 'size-equal' if r['requiredBytes']==r['bufferBytes'] else 'padded-or-different-layout'} for r in imports]
-        contract_rows.append({'inode':inode,'events':events,'sizeChecks':comparisons,
-                              'multipleExports':sum(row['kind']=='dmabuf-export' for row in events)>1})
+        contract_rows.append({'inode':inode,'events':contract_events,'sizeChecks':comparisons,
+                              'multipleExports':sum(row['kind']=='dmabuf-export' for row in contract_events)>1})
     first_failure=next(iter(report.get('host',{}).get('transportErrors',[])),None)
     return {'schema':1,'captureId':report.get('captureId'),'guestMinusHostClockRange':offset,
             'bufferContracts':contract_rows,

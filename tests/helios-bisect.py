@@ -28,6 +28,8 @@ class BisectTests(unittest.TestCase):
         self.assertEqual(bisect.plan('guest',CANDIDATES,[trial(4),trial(2,False)],'pixels')['nextIndex'],3)
         result=bisect.plan('guest',CANDIDATES,[trial(4),trial(2,False),trial(3)],'pixels')
         self.assertEqual(result['status'],'adjacent-boundary-observed')
+        self.assertFalse(result['contextVerified'])
+        self.assertIn('gpu',result['missingContext'])
         self.assertEqual(bisect.plan('host',['sha256:'+c for c in CANDIDATES],[trial(4,axis='host')],'pixels')['nextIndex'],2)
 
     def test_mixed_host_probe_and_duplicate_evidence_are_refused(self):

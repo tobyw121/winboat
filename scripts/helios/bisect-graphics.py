@@ -19,7 +19,7 @@ def plan(axis,candidates,trials,probe):
     if any(not isinstance(c,str) or not re.fullmatch(pattern,c) for c in candidates): raise ValueError('Candidates must be exact manifest hashes or host image IDs')
     spec=importlib.util.spec_from_file_location('comparison',Path(__file__).with_name('compare-graphics.py'))
     comparison=importlib.util.module_from_spec(spec);spec.loader.exec_module(comparison)
-    outcomes={};context=None;evidence=[];run_ids=set()
+    outcomes={};context=None;evidence=[];run_ids=set();missing_context=set()
     for trial in trials:
         if len(trial)!=4: raise ValueError('Each trial requires four captures')
         reports=[];selected=[]
@@ -40,6 +40,8 @@ def plan(axis,candidates,trials,probe):
             physical_ids=[d.get('deviceUuid') for d in preflight.get('devices',[]) if d.get('selected') is True]
             context_fields={'dimensions':dimensions,'backend':backend.get('backend'),'gpu':physical_ids,
                             'performance':backend.get('performance')}
+            for name,value in context_fields.items():
+                if value is None or value==[]:missing_context.add(name)
             fixed=(machine,host if axis=='guest' else manifest,json.dumps(identity['profile'],sort_keys=True),acceptance['comparisonKey'],json.dumps(context_fields,sort_keys=True))
             if context is not None and fixed!=context: raise ValueError('VM, fixed stack side, workload or settings changed')
             context=fixed
@@ -74,6 +76,7 @@ def plan(axis,candidates,trials,probe):
         next_index=(good+bad)//2;status='test-midpoint'
     return {'schema':1,'axis':axis,'probe':probe,'status':status,'goodIndex':good,'badIndex':bad,
             'nextIndex':next_index,'nextCandidate':candidates[next_index] if next_index is not None else None,
+            'contextVerified':bool(trials) and not missing_context,'missingContext':sorted(missing_context),
             'evidence':evidence,'scope':'Operator supplies ordered builds and unchanged workload. Only selected probe behavior is narrowed; monotonicity is an assumption. No installation, checkout or automatic promotion.'}
 
 

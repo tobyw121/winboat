@@ -55,6 +55,15 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual(len(result['resourceTimeline'][0]['events']),3)
         self.assertEqual(result['firstObservedHostFailure']['kind'],'budget-rejected')
 
+    def test_contracts_do_not_overwrite_guest_crash_events(self):
+        crash={'timeUtc':'2026-10-20T12:00:00Z','AppName':'dwm.exe'}
+        rows=[{'kind':'dmabuf-export','inode':1},{'kind':'dmabuf-export','inode':1},
+              {'kind':'dmabuf-import','inode':1,'requiredBytes':4587520,'bufferBytes':4096000}]
+        result=correlation.correlate({'host':{'frameMetrics':rows},'graphics/diagnostics':{'driver':{'application':{'crashes':[crash]}}}})
+        self.assertEqual(result['guestEvents'][0]['AppName'],'dwm.exe')
+        self.assertEqual(result['bufferContracts'][0]['sizeChecks'][0]['verdict'],'undersized')
+        self.assertTrue(result['bufferContracts'][0]['multipleExports'])
+
     def test_clock_skew_is_an_interval_and_missing_clock_unknown(self):
         report={'graphics/diagnostics/runtime':{'driver':{'collectedAtUtc':'2026-10-19T12:01:00Z'}},
                 'requestTiming':{'graphics/diagnostics/runtime':{'startUtc':'2026-10-19T12:00:00Z','endUtc':'2026-10-19T12:00:02Z'}}}
