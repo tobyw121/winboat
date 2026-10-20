@@ -157,7 +157,13 @@ jobs:
       - name: Install EGL test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gcc pkg-config libglib2.0-dev libepoxy-dev libpixman-1-dev libegl-mesa0 libgl1-mesa-dri
+          sudo apt-get install -y --no-install-recommends gcc pkg-config libglib2.0-dev libepoxy-dev libpixman-1-dev libegl-mesa0 libgl1-mesa-dri libvulkan-dev mesa-vulkan-drivers
+      - name: Test real Vulkan preflight inventory and rejected DRM device
+        run: |
+          cc -std=c11 -O2 -Wall -Wextra -Werror helios/host/gpu-preflight.c -lvulkan -o /tmp/preflight
+          /tmp/preflight --inventory > /tmp/preflight.json
+          python3 -c 'import json; p=json.load(open("/tmp/preflight.json")); assert p["devices"] and p["ready"] is False'
+          if /tmp/preflight /dev/null; then exit 1; fi
       - name: Test pinned QEMU patches with real Mesa and protocol fixtures
         run: python3 tests/helios-qemu-dbus.py
 

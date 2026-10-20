@@ -37,7 +37,7 @@ class TestGraphicsCollector(unittest.TestCase):
             (root/'helios/helios-build.json').write_text('{"sha256":"packaged-pin"}')
             packaged_spec=importlib.util.spec_from_file_location('packaged_graphics',tools/'diagnose-graphics.py')
             packaged=importlib.util.module_from_spec(packaged_spec);packaged_spec.loader.exec_module(packaged)
-            with patch.object(packaged.subprocess,'check_output',side_effect=['"image"\n"sha256:abc"\n"running"\n','glvnd-v8\ndbus-v9\n']), \
+            with patch.object(packaged.subprocess,'check_output',side_effect=['"image"\n"sha256:abc"\n"running"\n','glvnd-v8\ndbus-v9\n','{"ready":true,"devices":[]}']), \
                  patch.object(packaged.subprocess,'run',side_effect=[SimpleNamespace(stdout='',stderr=''),SimpleNamespace(stdout='{}')]):
                 result=packaged.collect_host('WinBoat')
             self.assertEqual(result['bundledInstaller']['sha256'],'packaged-pin')
@@ -56,7 +56,7 @@ class TestGraphicsCollector(unittest.TestCase):
         self.assertEqual(graphics.parse_frame_metrics('frame-ack source=4 sequence=1 wait_us=-1 success=1 in_flight=1 transport=copy'),[])
     def test_old_host_runtime_is_reported_separately_from_guest_driver(self):
         inspect='"winboat/helios:test"\n"sha256:abc"\n"running"\n'
-        with patch.object(graphics.subprocess, 'check_output', side_effect=[inspect, 'glvnd-v4\ndbus-v8\n']), \
+        with patch.object(graphics.subprocess, 'check_output', side_effect=[inspect, 'glvnd-v4\ndbus-v8\n',OSError('old runtime')]), \
              patch.object(graphics.subprocess, 'run', side_effect=[SimpleNamespace(stdout='',stderr=''), SimpleNamespace(stdout='{"backend":"dbus","issues":[]}')]):
             result=graphics.collect_host('WinBoat')
         self.assertEqual(result['runtimeVersion'], 'glvnd-v4')

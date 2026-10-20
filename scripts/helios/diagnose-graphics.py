@@ -100,8 +100,15 @@ def collect_host(container):
         if len(process.stdout) > 8192:
             raise ValueError('Oversized backend report')
         result['qemuBackend'] = json.loads(process.stdout)
+
     except (OSError, ValueError, subprocess.SubprocessError):
         result['qemuBackend'] = {'error': 'Running QEMU configuration unavailable'}
+    try:
+        raw=subprocess.check_output(['docker','exec',container,'cat','/run/helios-gpu-preflight.json'],text=True,timeout=5)
+        if len(raw)>32768: raise ValueError('Oversized preflight report')
+        result['gpuPreflight']=json.loads(raw)
+    except (OSError,ValueError,subprocess.SubprocessError):
+        result['gpuPreflight']={'error':'GPU preflight unavailable; update host runtime'}
     try:
         bundle=(pathlib.Path(__file__).parent.parent/'helios') if pathlib.Path(__file__).parent.name=='graphics-tools' else root/'resources/helios'
         receipt = json.loads((bundle/'helios-build.json').read_text())

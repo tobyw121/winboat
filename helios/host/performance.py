@@ -2,6 +2,8 @@
 """Explicit QEMU comparison options; defaults preserve the original command."""
 import hashlib
 import os
+import json
+import subprocess
 from pathlib import Path
 import re
 import sys
@@ -117,6 +119,15 @@ def main():
     env = dict(os.environ)
     args = options(sys.argv[2:],env)
     if env.get('HELIOS_RESCUE') != '1' and not inspection(args):
+        if any(i and args[i-1]=='-device' and value.split(',')[0] in ('virtio-gpu-gl-pci','virtio-vga-gl') for i,value in enumerate(args)):
+            probe=subprocess.run(['/opt/helios/gpu-preflight',env.get('RENDERNODE','/dev/dri/renderD128')],
+                                 capture_output=True,text=True,timeout=20,check=True)
+            if len(probe.stdout)>32768: raise ValueError('GPU preflight report exceeds limit')
+            report=json.loads(probe.stdout)
+            if report.get('ready') is not True: raise ValueError('Host GPU identity/capability preflight failed')
+            fd=os.open('/run/helios-gpu-preflight.json',os.O_WRONLY|os.O_CREAT|os.O_TRUNC|os.O_NOFOLLOW,0o600)
+            with os.fdopen(fd,'w') as output: json.dump(report,output)
+    
         if env.get('HELIOS_CPU_AFFINITY'):
             cpus = cpu_set(env['HELIOS_CPU_AFFINITY'])
             if not cpus <= os.sched_getaffinity(0):
@@ -137,5 +148,5 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except (OSError,ValueError) as error:
+    except (OSError,ValueError,subprocess.SubprocessError) as error:
         sys.exit('Helios performance configuration: '+str(error))

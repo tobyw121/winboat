@@ -21,3 +21,5 @@ ninja install
 printf '%s\n' "$revision" > /opt/helios/revision
 # A runtime-only rebuild must not relabel an older QEMU as a newer capability.
 cp /build/patches/SHA256SUMS /opt/helios/host-patches.sha256
+
+cc -std=c11 -O2 -Wall -Wextra -Werror /context/helios/host/gpu-preflight.c -lvulkan -o /opt/helios/gpu-preflight
