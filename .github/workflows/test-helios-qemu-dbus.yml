@@ -10,6 +10,7 @@ on:
       - 'tests/helios-qemu-dbus.*'
       - 'tests/helios-renderer-budget.py'
       - 'tests/helios-vram-budget.c'
+      - 'tests/helios-vram-refs.c'
       - 'tests/helios-qemu-budget-vulkan.c'
       - 'tests/helios-qemu-device.c'
       - 'tests/helios-frame-memory.c'
@@ -59,6 +60,7 @@ on:
       - 'tests/helios-qemu-dbus.*'
       - 'tests/helios-renderer-budget.py'
       - 'tests/helios-vram-budget.c'
+      - 'tests/helios-vram-refs.c'
       - 'tests/helios-qemu-budget-vulkan.c'
       - 'tests/helios-qemu-device.c'
       - 'tests/helios-frame-memory.c'
@@ -138,7 +140,7 @@ jobs:
         run: docker run --rm --network none -e LD_LIBRARY_PATH=/opt/helios/renderer/lib:/opt/helios/lib --entrypoint python3 -v "$PWD:/src:ro" -w /src winboat-helios-test:drm-node tests/helios-io-poll-qemu.py
       - name: Verify runtime capability label
         run: |
-          test "$(docker image inspect --format '{{index .Config.Labels "org.winboat.helios.runtime"}}' winboat-helios-test:drm-node)" = glvnd-v10
+          test "$(docker image inspect --format '{{index .Config.Labels "org.winboat.helios.runtime"}}' winboat-helios-test:drm-node)" = glvnd-v11
   capture:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -166,6 +168,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends gcc pkg-config libglib2.0-dev libepoxy-dev libpixman-1-dev libegl-mesa0 libgl1-mesa-dri libvulkan-dev mesa-vulkan-drivers
+      - name: Test shared backing lifetime after producer and FD close
+        run: cc -std=c11 -Wall -Wextra -Werror -pthread tests/helios-vram-refs.c -o /tmp/vram-refs && /tmp/vram-refs
       - name: Test pinned renderer memory accounting
         run: python3 tests/helios-renderer-budget.py
       - name: Test shared VRAM ledger across processes and threads

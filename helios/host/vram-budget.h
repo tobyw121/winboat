@@ -23,11 +23,12 @@ static inline uint64_t helios_vram_cap(uint64_t total, uint64_t driver_budget)
     uint64_t available = driver_budget > reserve ? driver_budget - reserve : 0;
     return available < ceiling ? available : ceiling;
 }
-static inline bool helios_vram_change(const uint8_t uuid[16], uint64_t total,
-    uint64_t driver_budget, uint64_t bytes, bool release, uint64_t *used_out, uint64_t *cap_out)
+static inline bool helios_vram_change_for_pid(const uint8_t uuid[16], uint64_t total,
+    uint64_t driver_budget, uint64_t bytes, bool release, uint64_t *used_out, uint64_t *cap_out, int64_t owner_pid)
 {
     const char *path = getenv("HELIOS_VRAM_BUDGET_FILE");
     if (!path || !*path) return true;
+    if (owner_pid<=0 || (!release && owner_pid!=(int64_t)getpid())) return false;
     int fd = open(path, O_RDWR | O_CLOEXEC | O_NOFOLLOW);
     if (fd < 0) return false;
     bool ok = false; struct stat info;
@@ -45,7 +46,7 @@ static inline bool helios_vram_change(const uint8_t uuid[16], uint64_t total,
         if (!memcmp(r->uuid, uuid, 16) && r->bytes) {
             if (UINT64_MAX - used < r->bytes) goto done;
             used += r->bytes;
-            if (r->pid == (int64_t)getpid()) slot = i;
+            if (r->pid == owner_pid) slot = i;
         }
     }
     uint64_t cap = helios_vram_cap(total, driver_budget);
@@ -64,11 +65,11 @@ static inline bool helios_vram_change(const uint8_t uuid[16], uint64_t total,
     if (slot < 0) goto done;
     struct helios_vram_row *r = &book.row[slot];
     if (release) {
-        if (r->pid != (int64_t)getpid() || memcmp(r->uuid, uuid, 16) || bytes > r->bytes) goto done;
+        if (r->pid != owner_pid || memcmp(r->uuid, uuid, 16) || bytes > r->bytes) goto done;
         r->bytes -= bytes;
     } else {
         if (!total || used > cap || bytes > cap - used) goto done;
-        if (!r->bytes) { r->pid = getpid(); memcpy(r->uuid, uuid, 16); }
+        if (!r->bytes) { r->pid = owner_pid; memcpy(r->uuid, uuid, 16); }
         r->bytes += bytes;
     }
     /* Dead workers are deliberately not reaped: exported buffers can outlive
@@ -76,5 +77,12 @@ static inline bool helios_vram_change(const uint8_t uuid[16], uint64_t total,
     ok = pwrite(fd, &book, sizeof(book), 0) == (ssize_t)sizeof(book);
 done:
     flock(fd, LOCK_UN); close(fd); return ok;
+}
+/* Normal frees stay process-owned. Only the validated shared-reference ledger
+ * may release the original owner's charge after its last imported reference. */
+static inline bool helios_vram_change(const uint8_t uuid[16], uint64_t total,
+    uint64_t driver_budget, uint64_t bytes, bool release, uint64_t *used_out, uint64_t *cap_out)
+{
+    return helios_vram_change_for_pid(uuid,total,driver_budget,bytes,release,used_out,cap_out,getpid());
 }
 #endif

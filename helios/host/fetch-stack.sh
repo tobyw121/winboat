@@ -40,3 +40,6 @@ while read -r checksum patch; do
     git -C /build/helios/virglrenderer apply --check --index "/context/helios/host/renderer-patches/$patch"
     git -C /build/helios/virglrenderer apply --index "/context/helios/host/renderer-patches/$patch"
 done < /context/helios/host/renderer-patches/SHA256SUMS
+
+cp /context/helios/host/vram-refs.h /build/helios/virglrenderer/src/venus/helios-vram-refs.h
+cp /context/helios/host/vram-refs.h /build/helios/qemu-helios/ui/helios-vram-refs.h

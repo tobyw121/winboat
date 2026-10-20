@@ -26,3 +26,5 @@ cc -std=c11 -O2 -Wall -Wextra -Werror /context/helios/host/gpu-preflight.c -lvul
 
 cp /context/helios/host/renderer-patches/SHA256SUMS /opt/helios/renderer-patches.sha256
 sha256sum /context/helios/host/vram-budget.h | cut -d' ' -f1 > /opt/helios/vram-budget.sha256
+
+sha256sum /context/helios/host/vram-refs.h | cut -d' ' -f1 > /opt/helios/vram-refs.sha256
