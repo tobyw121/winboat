@@ -106,6 +106,13 @@
                 </x-card>
 
                 <x-card v-if="heliosEnabled" class="p-4 my-0 w-full bg-neutral-800/20">
+                    <h1 class="text-lg font-semibold mb-2">Graphics diagnostics</h1>
+                    <p class="text-sm text-neutral-400">Record flickering for about a minute. Collects guest status and existing host logs without changing drivers or restarting Windows. Requires Python 3 on Linux.</p>
+                    <x-button :disabled="captureRunning || isApplyingChanges" @click="captureGraphics">{{ captureRunning ? 'Recording…' : 'Capture flickering' }}</x-button>
+                    <p v-if="captureMessage" class="text-sm text-neutral-400 mt-2">{{ captureMessage }}</p>
+                </x-card>
+
+                <x-card v-if="heliosEnabled" class="p-4 my-0 w-full bg-neutral-800/20">
                     <h1 class="text-lg font-semibold mb-2">Windows resolution</h1>
                     <p class="text-neutral-400 text-sm">Choose the startup resolution for Helios and VGA. Saving restarts the VM. With Helios 22.22.291.0 or newer, change the running resolution in Windows Settings → System → Display without restarting. Local Desktop follows the new image size; zoom only scales the picture.</p>
                     <div class="flex items-center gap-3 mt-3">
@@ -511,6 +518,7 @@ import {sharedFolderErrors, type SharedFolder} from '../../shared/shared-folders
 import {changedResourceErrors} from '../../shared/configuration-resources';
 import {configuredSharedFolders, prepareSharedFolders, checkSharedFolders, type ShareCheck} from '../lib/shared-folders';
 import { configureHelios, HELIOS_IMAGE } from '../../shared/helios';
+import {captureGraphics,captureRunning,captureMessage} from '../lib/graphics-capture';
 import { HELIOS_RESOLUTIONS, DEFAULT_HELIOS_RESOLUTION, heliosResolution, configureHeliosResolution } from '../../shared/helios-resolution';
 import { requireHelios } from '../lib/helios';
 import { resolveHeliosDisplay } from '../../shared/helios-display';

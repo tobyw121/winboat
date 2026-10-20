@@ -79,7 +79,8 @@ def collect_host(container):
         labels = subprocess.check_output(['docker', 'image', 'inspect', '--format', template, result['imageId']], text=True, timeout=10).splitlines()
         result['runtimeVersion'] = labels[0] if re.fullmatch(r'glvnd-v\d{1,3}', labels[0]) else None
         result['displayVersion'] = labels[1] if re.fullmatch(r'dbus-v\d{1,3}', labels[1]) else None
-        expected = re.search(r"HELIOS_RUNTIME_VERSION = '(glvnd-v\d+)'", (root / 'src/shared/helios.ts').read_text())
+        source=root / 'src/shared/helios.ts'
+        expected = re.search(r"HELIOS_RUNTIME_VERSION = '(glvnd-v\d+)'",source.read_text()) if source.is_file() else None
         if expected:
             result['expectedRuntimeVersion'] = expected[1]
             result['runtimeMatches'] = result['runtimeVersion'] == expected[1]
@@ -95,7 +96,8 @@ def collect_host(container):
     except (OSError, ValueError, subprocess.SubprocessError):
         result['qemuBackend'] = {'error': 'Running QEMU configuration unavailable'}
     try:
-        receipt = json.loads((root / 'resources/helios/helios-build.json').read_text())
+        bundle=(pathlib.Path(__file__).parent.parent/'helios') if pathlib.Path(__file__).parent.name=='graphics-tools' else root/'resources/helios'
+        receipt = json.loads((bundle/'helios-build.json').read_text())
         result['bundledInstaller'] = {key: receipt.get(key) for key in ('sha256', 'winboatCommit', 'sourceLockSha256')}
     except (OSError, ValueError):
         result['bundleError'] = 'Local installer receipt unavailable'
@@ -161,11 +163,16 @@ def main():
     parser.add_argument('--container', default='WinBoat')
     parser.add_argument('--output', type=pathlib.Path)
     parser.add_argument('--samples', type=int, choices=range(1, 13), default=1)
+    parser.add_argument('--expected-runtime')
     parser.add_argument('--interval', type=int, choices=range(2, 31), default=5)
     args = parser.parse_args()
+    if args.expected_runtime and not re.fullmatch(r'glvnd-v\d{1,3}',args.expected_runtime): parser.error('Invalid expected runtime capability')
     try:
         result = collect(args.container, samples=args.samples, interval=args.interval)
         result['host'] = collect_host(args.container)
+        if args.expected_runtime:
+            result['host'].update(expectedRuntimeVersion=args.expected_runtime,
+                                  runtimeMatches=result['host'].get('runtimeVersion')==args.expected_runtime)
         spec=importlib.util.spec_from_file_location('correlation',pathlib.Path(__file__).with_name('graphics-correlation.py'))
         correlation=importlib.util.module_from_spec(spec);spec.loader.exec_module(correlation)
         result['correlation']=correlation.correlate(result)

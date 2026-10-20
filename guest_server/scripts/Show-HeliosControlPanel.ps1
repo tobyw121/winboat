@@ -9,6 +9,15 @@ $form.Text='Helios Control';$form.Width=900;$form.Height=760
 $layout=New-Object Windows.Forms.FlowLayoutPanel
 $layout.Dock='Fill';$layout.FlowDirection='TopDown';$layout.WrapContents=$false;$layout.AutoScroll=$true
 $form.Controls.Add($layout)
+$dashboard=New-Object Windows.Forms.TextBox
+$dashboard.Multiline=$true;$dashboard.ReadOnly=$true;$dashboard.ScrollBars='Both';$dashboard.Width=840;$dashboard.Height=150
+$dashboard.Text='Live status: native adapter state every 5 seconds; slow reports at most once a minute.'
+$layout.Controls.Add($dashboard)
+. (Join-Path $PSScriptRoot 'Helios-LiveDashboard.ps1')
+$liveTimer=New-Object Windows.Forms.Timer;$liveTimer.Interval=5000
+$liveTimer.Add_Tick({Update-HeliosDashboard})
+$form.Add_Shown({$liveTimer.Start();Update-HeliosDashboard})
+$form.Add_FormClosed({$liveTimer.Stop();$liveTimer.Dispose();if($null -ne $script:liveWorker){$script:liveWorker.Stop();$script:liveWorker.Dispose()}})
 function Add-HeliosLabel([string]$Text) {
     $label=New-Object Windows.Forms.Label;$label.Text=$Text;$label.Width=840;$label.Height=38;$layout.Controls.Add($label)
 }

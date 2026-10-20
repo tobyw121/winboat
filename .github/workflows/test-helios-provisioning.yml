@@ -36,6 +36,8 @@ on:
       - 'guest_server/scripts/*Helios*Transaction*'
       - 'guest_server/scripts/*Helios*Control*'
       - 'guest_server/scripts/Clear-HeliosDriverStore.ps1'
+      - 'guest_server/scripts/*Helios*Live*'
+      - 'tests/helios-live.test.ps1'
       - 'tests/helios-validation.test.ps1'
       - 'tests/helios-validation-storage.test.ps1'
       - 'tests/helios-transaction.test.ps1'
@@ -96,6 +98,8 @@ on:
       - 'guest_server/scripts/*Helios*Transaction*'
       - 'guest_server/scripts/*Helios*Control*'
       - 'guest_server/scripts/Clear-HeliosDriverStore.ps1'
+      - 'guest_server/scripts/*Helios*Live*'
+      - 'tests/helios-live.test.ps1'
       - 'tests/helios-validation.test.ps1'
       - 'tests/helios-validation-storage.test.ps1'
       - 'tests/helios-transaction.test.ps1'
@@ -171,6 +175,7 @@ jobs:
           ./tests/graphics-runtime-diagnostics.test.ps1
           ./tests/helios-journal-report.test.ps1
           ./tests/helios-provisioning.test.ps1
+          ./tests/helios-live.test.ps1
           ./tests/helios-validation.test.ps1
           ./tests/helios-validation-storage.test.ps1
           ./tests/helios-transaction.test.ps1

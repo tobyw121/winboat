@@ -50,6 +50,11 @@
   ],
   "extraResources": [
     {
+      "from": "./scripts/helios",
+      "to": "graphics-tools",
+      "filter": ["diagnose-graphics.py", "graphics-correlation.py", "inspect-qemu-backend.py"]
+    },
+    {
       "from": "./resources/shared-folders",
       "to": "shared-folders",
       "filter": ["manage.py", "samba.sh"]
