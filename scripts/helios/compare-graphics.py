@@ -56,6 +56,13 @@ def compare(reports):
                 'pairs':pairs,'reproducedFirstDivergence':pairs[0]['firstDivergence'] is not None and pairs[0]['firstDivergence']==pairs[1]['firstDivergence'],
                 'runs':[{'label':r['label'],'automatedPassed':r['automatedPassed'],'tests':r['tests']} for r in reports],
                 'scope':'Different probe hashes limit attribution to the driver. Manual visual and recovery checks remain separate.'}
+    contexts=[r.get('context') for r in reports]
+    context_verified=all(isinstance(c,dict) and c.get('imageId') and len(c.get('gpu',[]))==1 for c in contexts)
+    if any(r.get('contextStable') is False for r in reports):raise ValueError('Host configuration changed during a measurement')
+    if all(c is not None for c in contexts):
+        if contexts[0]!=contexts[2] or contexts[1]!=contexts[3]:raise ValueError('Host settings changed within a comparison arm')
+        if context_verified and any(c['gpu']!=contexts[0]['gpu'] for c in contexts):raise ValueError('Selected physical GPU changed')
+    context_verified=context_verified and all(r.get('contextStable') is True for r in reports)
     summaries=[r.get('summary',{}) for r in reports]
     pairs=[]
     for a,b in ((0,1),(2,3)):
@@ -64,7 +71,7 @@ def compare(reports):
         pairs.append({'baseline':reports[a]['label'],'candidate':reports[b]['label'],
                       'cpuPercentagePointDelta':bv-av if valid else None})
     return {'schema':1,'comparisonKey':reports[0]['comparisonKey'],'pairs':pairs,
-            'frameTimes':[r.get('frameTimes') for r in reports],
+            'frameTimes':[r.get('frameTimes') for r in reports],'contextVerified':context_verified,'contexts':contexts,
             'scope':'Paired observations only. Workload equality is operator-supplied; no automatic promotion or causality claim.'}
 
 

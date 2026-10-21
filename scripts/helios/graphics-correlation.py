@@ -11,6 +11,27 @@ def instant(value):
     except ValueError: return None
 
 
+def contract_violations(row):
+    issues=[]
+    def number(name):
+        value=row.get(name)
+        return value if type(value) is int and value>=0 else None
+    size=number('bufferBytes');required=number('requiredBytes');offset=number('offset');alignment=number('alignment')
+    if size is not None and required is not None and required>size:issues.append('required-size-exceeds-fd')
+    if alignment is not None and (not alignment or alignment&(alignment-1)):issues.append('invalid-alignment')
+    if offset is not None and alignment and offset%alignment:issues.append('misaligned-offset')
+    if number('planes') not in (None,1):issues.append('unsupported-plane-count')
+    image=number('imageMemoryBits');fd=number('fdMemoryBits')
+    if image is not None and fd is not None and not image&fd:issues.append('no-compatible-memory-type')
+    width=number('width');height=number('height');stride=number('stride')
+    if width==0 or height==0:issues.append('empty-extent')
+    # Row-major bounds only for explicit LINEAR RGBA8/BGRA8. Never infer a
+    # tiled/OPTIMAL allocation's byte extent from pitch times height.
+    if row.get('tiling')==1 and row.get('format') in (37,44) and None not in (width,height,stride,offset,size) and width and height:
+        if stride<width*4:issues.append('short-linear-stride')
+        if offset+(height-1)*stride+width*4>size:issues.append('linear-extent-exceeds-fd')
+    return issues
+
 def correlate(report):
     runtime=report.get('graphics/diagnostics/runtime',{}).get('driver',{})
     timing=report.get('requestTiming',{}).get('graphics/diagnostics/runtime',{})
@@ -48,7 +69,7 @@ def correlate(report):
     contract_rows=[]
     for inode,contract_events in contracts.items():
         imports=[row for row in contract_events if row['kind']=='dmabuf-import']
-        comparisons=[{'requiredBytes':r['requiredBytes'],'bufferBytes':r['bufferBytes'],
+        comparisons=[{'requiredBytes':r['requiredBytes'],'bufferBytes':r['bufferBytes'],'violations':contract_violations(r),
                       'verdict':'undersized' if r['requiredBytes']>r['bufferBytes'] else
                                 'size-equal' if r['requiredBytes']==r['bufferBytes'] else 'padded-or-different-layout'} for r in imports]
         contract_rows.append({'inode':inode,'events':contract_events,'sizeChecks':comparisons,

@@ -123,6 +123,17 @@ def viewer_phase_summary(records):
     return result
 
 
+def comparison_context(container):
+    try:
+        fields=subprocess.check_output(['docker','inspect','--format','{{json .Image}}\n{{json .Config.Env}}',container],text=True,timeout=5).splitlines()
+        image=json.loads(fields[0]);values=dict(item.split('=',1) for item in json.loads(fields[1]) if '=' in item)
+        names=('RAM_SIZE','CPU_CORES','HELIOS_DISPLAY','HELIOS_DISPLAY_WIDTH','HELIOS_DISPLAY_HEIGHT','VKR_DEVICE_MEMORY_LIMIT_BYTES','HELIOS_SHADER_CACHE','HELIOS_IO_THREAD','HELIOS_IO_POLL_NS','HELIOS_IDLE_REFRESH','HELIOS_READBACK_DAMAGE','HELIOS_READBACK_BUDGET_MIB','HELIOS_READBACK_CACHE_ENTRIES')
+        preflight=json.loads(subprocess.check_output(['docker','exec',container,'cat','/run/helios-gpu-preflight.json'],text=True,timeout=5))
+        uuids=[d['deviceUuid'] for d in preflight.get('devices',[]) if d.get('selected') is True and d.get('deviceUuid')]
+        return {'imageId':image,'gpu':uuids,'settings':{key:values.get(key) for key in names},
+                'scope':'Configured host settings only. Match actual guest resolution and scene manually.'}
+    except (OSError,ValueError,KeyError,IndexError,subprocess.SubprocessError):return {'error':'comparison-context-unavailable'}
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--container',default='WinBoat')
@@ -142,6 +153,7 @@ def main():
         try: frames=read_frame_times(args.frame_csv,args.frame_application)
         except (OSError,ValueError) as error: parser.error(str(error))
     if not re.fullmatch(r'[a-zA-Z0-9_.-]{1,48}',args.label): parser.error('Use a short comparison label')
+    context_before=comparison_context(args.container)
     samples=[];started=time.monotonic()
     with ThreadPoolExecutor(max_workers=2) as pool:
         for index in range(args.samples):
@@ -153,7 +165,8 @@ def main():
     report={'label':args.label,'collectedAtUtc':datetime.datetime.now(datetime.timezone.utc).isoformat(),
             'elapsedSeconds':time.monotonic()-started,'samples':samples,'summary':summarize(samples),
             'scope':'Container CPU includes QEMU and renderer; 100% is one host CPU. No guest FPS or latency claim.'}
-    report.update(comparisonKey=args.comparison_key,frameTimes=frames)
+    context_after=comparison_context(args.container)
+    report.update(comparisonKey=args.comparison_key,frameTimes=frames,context=context_before,contextStable=context_before==context_after)
     if args.viewer_log:
         with args.viewer_log.open('rb') as stream:
             stream.seek(max(0,args.viewer_log.stat().st_size-262144))

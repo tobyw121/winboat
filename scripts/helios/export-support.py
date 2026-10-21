@@ -19,7 +19,7 @@ gpuPreflight gpuHeap sampledAtUtc observation devices matchingDevices ready vend
 vramBudgetPercent vramHardCapBytes
 timelineSemaphore synchronization2 dynamicRendering bgraOptimalImportable imageQueryResult
 externalMemoryFd memoryBudgetAvailable pciMatchesDrm deviceUuid driverUuid heaps sizeBytes deviceLocal
-sizeChecks verdict multipleExports bufferContracts allocationBytes blobBytes memoryType fdType alignment stride offset planes tiling modifier usage imageMemoryBits fdMemoryBits
+sizeChecks verdict violations multipleExports bufferContracts allocationBytes blobBytes memoryType fdType alignment stride offset planes tiling modifier usage imageMemoryBits fdMemoryBits
 resourceTimeline firstObservedHostFailure resourceId importedBytes snapshotBytes stagingBytes ownedBytes peakBytes
 limitBytes requestedBytes partial x y sourceInode
 frameMetrics inode sequence published width height submitNanoseconds waitNanoseconds
@@ -58,6 +58,7 @@ egl-import-error memory-accounting-error device-selection-mismatch import-backof
 undersized size-equal padded-or-different-layout dmabuf-export dmabuf-import vram-budget-refused budget-rejected resource-create resource-release resource-frame frame-region ack capture
 kvm tcg host max qemu64 qemu32 other unspecified virtio-net-pci e1000 e1000e rtl8139
 writeback writethrough directsync unsafe native io_uring unmap on off raw qcow2
+required-size-exceeds-fd invalid-alignment misaligned-offset unsupported-plane-count no-compatible-memory-type empty-extent short-linear-stride linear-extent-exceeds-fd
 software-cpu-emulation cpu-model-not-host unsafe-disk-cache emulated-network-adapter vcpu-affinity-oversubscribed
 minidump dwm.exe vulkan_virtio.dll helios_umd.dll helios_umd32.dll helios_umd12.dll
 helios_umd12_32.dll d3d11.dll dxgi.dll d3d12.dll vulkan-1.dll libgallium_wgl.dll

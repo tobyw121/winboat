@@ -64,6 +64,19 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual(result['bufferContracts'][0]['sizeChecks'][0]['verdict'],'undersized')
         self.assertTrue(result['bufferContracts'][0]['multipleExports'])
 
+    def test_layout_checks_do_not_treat_optimal_as_linear(self):
+        row={'bufferBytes':4096,'requiredBytes':2048,'offset':0,'alignment':256,'planes':1,'imageMemoryBits':3,'fdMemoryBits':2,'width':4,'height':4,'stride':16,'format':44,'tiling':1}
+        self.assertEqual(correlation.contract_violations(row),[])
+        row['stride']=1;self.assertIn('short-linear-stride',correlation.contract_violations(row))
+        row['tiling']=0;self.assertNotIn('short-linear-stride',correlation.contract_violations(row))
+        row['fdMemoryBits']=4;self.assertIn('no-compatible-memory-type',correlation.contract_violations(row))
+
+    def test_performance_rejects_config_changes_and_missing_context_is_unknown(self):
+        rows=[{'label':label,'comparisonKey':'same','contextStable':True,'context':{'imageId':'pin','gpu':['same'],'settings':{'profile':label[0]}}} for label in ('A1','B1','A2','B2')]
+        self.assertTrue(comparison.compare(rows)['contextVerified'])
+        rows[3]['contextStable']=False
+        with self.assertRaises(ValueError):comparison.compare(rows)
+
     def test_clock_skew_is_an_interval_and_missing_clock_unknown(self):
         report={'graphics/diagnostics/runtime':{'driver':{'collectedAtUtc':'2026-10-19T12:01:00Z'}},
                 'requestTiming':{'graphics/diagnostics/runtime':{'startUtc':'2026-10-19T12:00:00Z','endUtc':'2026-10-19T12:00:02Z'}}}

@@ -31,6 +31,14 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(result['devices'][0]['powerWatts'],75.5)
         self.assertNotIn('utilizationPercent',result['devices'][1])
 
+    def test_comparison_context_only_includes_fixed_safe_settings(self):
+        inspect='"sha256:pin"\n["PASSWORD=PRIVATE", "CPU_CORES=6", "HELIOS_DISPLAY_WIDTH=1920"]'
+        preflight='{"devices":[{"selected":true,"deviceUuid":"gpu"}]}'
+        with patch.object(metrics.subprocess,'check_output',side_effect=[inspect,preflight]):
+            result=metrics.comparison_context('WinBoat')
+        self.assertNotIn('PRIVATE',str(result));self.assertEqual(result['settings']['CPU_CORES'],'6')
+        self.assertEqual(result['settings']['HELIOS_DISPLAY_WIDTH'],'1920')
+
     def test_phase_samples_do_not_sum_overlapping_transports(self):
         result=metrics.phase_summary([{'kind':'capture','published':1,'submitNanoseconds':1000000,'waitNanoseconds':2000000,'cpuNanoseconds':3000000},
                                       {'kind':'capture','published':0,'cpuNanoseconds':999999999},
