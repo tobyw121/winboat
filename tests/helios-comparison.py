@@ -72,7 +72,7 @@ class ComparisonTests(unittest.TestCase):
         row['fdMemoryBits']=4;self.assertIn('no-compatible-memory-type',correlation.contract_violations(row))
 
     def test_performance_rejects_config_changes_and_missing_context_is_unknown(self):
-        rows=[{'label':label,'comparisonKey':'same','contextStable':True,'context':{'imageId':'pin','gpu':['same'],'settings':{'profile':label[0]}}} for label in ('A1','B1','A2','B2')]
+        rows=[{'label':label,'comparisonKey':'same','contextStable':True,'context':{'imageId':'sha256:'+'a'*64,'gpu':['b'*32],'settings':{'profile':label[0]}}} for label in ('A1','B1','A2','B2')]
         self.assertTrue(comparison.compare(rows)['contextVerified'])
         rows[3]['contextStable']=False
         with self.assertRaises(ValueError):comparison.compare(rows)

@@ -11,6 +11,7 @@ def resolve(runtime,symbols,module,offset,tool='addr2line'):
     manifest=symbols/'symbols.json'
     if manifest.is_symlink() or manifest.stat().st_size>32768:raise ValueError('Invalid symbols manifest')
     doc=json.loads(manifest.read_text(encoding='utf-8-sig'))
+    if doc.get('schema')!=1:raise ValueError('Unsupported symbol manifest')
     rows=[r for r in doc['modules'] if r.get('module')==module]
     if len(rows)!=1:raise ValueError('Unique module identity required')
     row=rows[0]

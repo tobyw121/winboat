@@ -3,6 +3,7 @@
 import argparse
 import json
 import math
+import re
 from pathlib import Path
 import statistics
 
@@ -57,7 +58,7 @@ def compare(reports):
                 'runs':[{'label':r['label'],'automatedPassed':r['automatedPassed'],'tests':r['tests']} for r in reports],
                 'scope':'Different probe hashes limit attribution to the driver. Manual visual and recovery checks remain separate.'}
     contexts=[r.get('context') for r in reports]
-    context_verified=all(isinstance(c,dict) and c.get('imageId') and len(c.get('gpu',[]))==1 for c in contexts)
+    context_verified=all(isinstance(c,dict) and re.fullmatch(r'sha256:[a-f0-9]{64}',str(c.get('imageId'))) and isinstance(c.get('gpu'),list) and len(c['gpu'])==1 and re.fullmatch(r'[a-f0-9]{32}',str(c['gpu'][0])) for c in contexts)
     if any(r.get('contextStable') is False for r in reports):raise ValueError('Host configuration changed during a measurement')
     if all(c is not None for c in contexts):
         if contexts[0]!=contexts[2] or contexts[1]!=contexts[3]:raise ValueError('Host settings changed within a comparison arm')

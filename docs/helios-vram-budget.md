@@ -1,6 +1,6 @@
 # Dynamic VM GPU-memory budget: at most 85 percent
 
-The managed accelerated host runtime (`glvnd-v11`) creates a private per-launch
+The managed accelerated host runtime (`glvnd-v12`; accounting introduced in `glvnd-v11`) creates a private per-launch
 ledger in `/dev/shm`. All Venus worker processes and QEMU's owned DEVICE_LOCAL
 snapshot/staging allocations use this same ledger and the Vulkan device UUID.
 VGA rescue and inspection-only commands do not require it. The existing .300

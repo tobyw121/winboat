@@ -588,7 +588,7 @@ const resolution = ref(DEFAULT_HELIOS_RESOLUTION);
 const origResolution = ref(DEFAULT_HELIOS_RESOLUTION);
 const resolutionMessage = ref('');
 async function saveResolution() {
-    if (isApplyingChanges.value || graphicsBusy.value) return;
+    if (isApplyingChanges.value || graphicsBusy.value || trialRunning.value || captureRunning.value) return;
     isApplyingChanges.value = true; resolutionMessage.value = '';
     try {
         await requireHelios();
@@ -605,9 +605,12 @@ const graphicsBusy=ref(false);
 const performanceChoice=ref<PerformanceProfile>('baseline');
 const performanceMessage=ref('');
 async function savePerformance(restore:boolean){
-    if(isApplyingChanges.value || graphicsBusy.value)return;isApplyingChanges.value=true;
+    if(isApplyingChanges.value || graphicsBusy.value || trialRunning.value || captureRunning.value)return;isApplyingChanges.value=true;
     try{
         const next=winboat.parseCompose();
+        const {execFile}=require('child_process');const {promisify}=require('util');
+        const {stdout}=await promisify(execFile)('docker',['inspect','--format','{{range .Config.Env}}{{if eq . "HELIOS_RESCUE=1"}}held{{end}}{{end}}','WinBoat'],{timeout:5000,maxBuffer:1024});
+        if(stdout.trim()==='held')throw new Error('Restore host graphics explicitly before applying performance settings; the VGA rescue boot is preserved.');
         const candidate=performanceProfile(next.services.windows,restore?'restore':performanceChoice.value);
         const {dialog}=require('@electron/remote');
         const answer=await dialog.showMessageBox({type:'warning',message:'Apply this performance change and restart Windows?',
@@ -626,7 +629,7 @@ const shareSaveMessage = ref('');
 const sharesNeedSaving = computed(() => JSON.stringify(sharedFolders.value) !== origSharedFolders.value ||
     (!compose.value?.services.windows['x-winboat-shared-folders'] && sharedFolders.value.some(folder => folder.enabled)));
 async function saveShares() {
-    if (isApplyingChanges.value || graphicsBusy.value) return;
+    if (isApplyingChanges.value || graphicsBusy.value || trialRunning.value || captureRunning.value) return;
     isApplyingChanges.value = true;
     shareSaveMessage.value = '';shareResults.value = [];shareTestError.value = '';
     try {
@@ -763,7 +766,7 @@ async function assignValues() {
  * and then re-assigns the initial values to the reactive refs
  */
 async function saveDockerCompose() {
-    if (isApplyingChanges.value || graphicsBusy.value) return;
+    if (isApplyingChanges.value || graphicsBusy.value || trialRunning.value || captureRunning.value) return;
     isApplyingChanges.value = true;
     try {
         const previousCompose = JSON.stringify(winboat.parseCompose());
@@ -885,7 +888,7 @@ const saveButtonDisabled = computed(() => {
     const shouldBeDisabled = 
         errors.value.length || sharedFolderErrors(sharedFolders.value).length ||
         !hasResourceChanges || 
-        isApplyingChanges.value;
+        isApplyingChanges.value || graphicsBusy.value || trialRunning.value || captureRunning.value;
         
     return shouldBeDisabled;
 })

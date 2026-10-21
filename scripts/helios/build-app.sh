@@ -38,6 +38,7 @@ cp docs/helios-298-validation.md /out/helios-298-validation.md
 cp docs/helios-299-cross-layer.md /out/helios-299-cross-layer.md
 cp docs/helios-vram-budget.md /out/helios-vram-budget.md
 cp docs/helios-301-stability.md /out/helios-301-stability.md
+cp docs/helios-302-management.md /out/helios-302-management.md
 cp docs/shared-folders.md /out/SHARED-FOLDERS.md
 cp docs/vm-hardware-profile.md /out/vm-hardware-profile.md
 cp docs/atlas-installation.md /out/atlas-installation.md

@@ -3,7 +3,7 @@
 The .301 source candidate improves failure isolation. It is not an RTX 2070
 flicker fix certified on hardware. The bundled **22.22.291.0 remains the default**;
 separate .294/.296 installers are unchanged. Windows CI builds .301 separately.
-The accelerated host runtime is now `glvnd-v11`; rebuild the host image and app
+The accounting runtime was introduced as `glvnd-v11` (now `glvnd-v12`); rebuild the host image and app
 for its shared-reference accounting and packaged recovery controls.
 
 ## Find the first failure
