@@ -94,7 +94,13 @@ function Invoke-HeliosValidationProcess([string]$Exe,[string[]]$Arguments=@(),[i
         $budget=@([regex]::Matches($text,'(?m)^budget local=([01]) budget=(\d{1,20}) usage=(\d{1,20}) reservation=(\d{1,20}) available=(\d{1,20})\r?$') | Select-Object -First 2 | ForEach-Object {
             [ordered]@{local=$_.Groups[1].Value -eq '1';budgetBytes=$_.Groups[2].Value;usageBytes=$_.Groups[3].Value;reservationBytes=$_.Groups[4].Value;availableReservationBytes=$_.Groups[5].Value}
         })
-        return [ordered]@{status=$(if($process.ExitCode -eq 0){'passed'}else{'failed'});exitCode=$process.ExitCode;signals=$signals;codes=$codes;memoryBudget=$budget}
+        $capabilities=[ordered]@{}
+        foreach($match in [regex]::Matches($text,'(?m)^cap (d3d11|vulkan|identity) ([A-Za-z0-9_.]{1,280}) (\d{1,20})\r?$')) {
+            $name=$match.Groups[1].Value+'.'+$match.Groups[2].Value
+            if($capabilities.Contains($name)){throw 'Duplicate capability output; mixed probe runs are invalid'}
+            $capabilities[$name]=[uint64]$match.Groups[3].Value
+        }
+        return [ordered]@{capabilities=$capabilities;status=$(if($process.ExitCode -eq 0){'passed'}else{'failed'});exitCode=$process.ExitCode;signals=$signals;codes=$codes;memoryBudget=$budget}
     } finally {
         if ($null -ne $process) {$process.Dispose()}
         Remove-Item -LiteralPath $out,$err -Force -ErrorAction SilentlyContinue

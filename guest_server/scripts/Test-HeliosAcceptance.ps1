@@ -30,6 +30,9 @@ function Invoke-HeliosAcceptance([string]$RunLabel) {
             @{name='D3D11 1x resize';exe='helios-msaa-present.exe';arguments=@('1','unorm','12','resize');coverage='Rendered pixel oracle, presentation and window resize';external=$true},
             @{name='D3D11 4x MSAA resize';exe='helios-msaa-present.exe';arguments=@('4','srgb','12','resize');coverage='4x MSAA resolve, pixel oracle, presentation and window resize';external=$true}
         )
+        if(@((Read-HeliosValidationJson (Join-Path $toolRoot 'tools.json')).files | Where-Object {$_.name -eq 'helios-capabilities.exe'}).Count -eq 1) {
+            $plan+=@{name='Capabilities';exe='helios-capabilities.exe';arguments=@();coverage='Queries only; identity and exact probe hash retained in this acceptance run';external=$true}
+        }
         if(@((Read-HeliosValidationJson (Join-Path $toolRoot 'tools.json')).files | Where-Object {$_.name -eq 'helios-format-contract.exe'}).Count -eq 1) {
             $plan+=@{name='D3D11 format contracts';exe='helios-format-contract.exe';arguments=@();coverage='Advertised formats/MSAA versus texture/view creation and shared readback';external=$true}
         }
@@ -51,7 +54,8 @@ function Invoke-HeliosAcceptance([string]$RunLabel) {
             $execution=Invoke-HeliosValidationProcess $path $test.arguments
             $result.status=$execution.status;$result.exitCode=$execution.exitCode
             if ($execution.Contains('signals')) {$result.signals=$execution.signals;$result.codes=$execution.codes
-                if($execution.Contains('memoryBudget')){$result.memoryBudget=$execution.memoryBudget}}
+                if($execution.Contains('memoryBudget')){$result.memoryBudget=$execution.memoryBudget}
+                if($execution.Contains('capabilities')){$result.capabilities=$execution.capabilities}}
         }
         $rows+=$result
     }
@@ -80,9 +84,11 @@ function Initialize-HeliosAcceptanceTools([string]$Folder,[string]$Pin) {
     if ($Pin -notmatch '^[a-fA-F0-9]{64}$' -or (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ine $Pin) {throw 'Independently verified tools-manifest SHA-256 required.'}
     $manifest=Read-HeliosValidationJson $path
     $expected=@('helios-msaa-present.exe','helios-opengl-pixels.exe')
-    if ($manifest.schema -ne 1 -or @($manifest.files).Count -notin @(2,3,4)) {throw 'Unsupported tools manifest.'}
-    if (@($manifest.files).Count -ge 3) {$expected+='helios-format-contract.exe'}
-    if (@($manifest.files).Count -eq 4) {$expected+='helios-shared-process.exe'}
+    if ($manifest.schema -ne 1 -or @($manifest.files).Count -lt 2 -or @($manifest.files).Count -gt 5) {throw 'Unsupported tools manifest.'}
+    foreach($optional in @('helios-format-contract.exe','helios-shared-process.exe','helios-capabilities.exe')) {
+        if(@($manifest.files | Where-Object {$_.name -eq $optional}).Count){$expected+=$optional}
+    }
+    if(@($manifest.files).Count -ne $expected.Count){throw 'Unknown or duplicate acceptance tool'}
     $target=Join-Path (Initialize-HeliosValidationRoot) ('tools-'+$Pin.ToLowerInvariant())
     if ((Test-Path -LiteralPath $target) -and ((Get-Item $target -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {throw 'Tools directory is a reparse point.'}
     New-Item -ItemType Directory -Path $target -Force | Out-Null

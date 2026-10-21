@@ -12,7 +12,7 @@ import re
 # accidentally returns passwords, application arguments, paths or dump data.
 KEYS=set('''schema diagnosticsVersion collectedAtUtc finishedAtUtc captureId version
 build_time graphics_protocol runtime_protocol commit_hash errors status state scope
-host runtimeVersion displayVersion expectedRuntimeVersion runtimeMatches containerState
+consoleLogonId consoleLogonState powerEvents host runtimeVersion displayVersion expectedRuntimeVersion runtimeMatches containerState
 qemuBackend backend vnc gpuCount venus blob sharedMemfd vgaRescue renderNode issues
 transportErrors kind requiredBytes bufferBytes releasedBytes usedBytes hostAtUtc
 gpuPreflight gpuHeap sampledAtUtc observation devices matchingDevices ready vendorId deviceId apiVersion selected
@@ -55,7 +55,7 @@ created format msaa msaa-refused msaa-policy runtime-error resource view shader 
 returned device-ready device-create-failed device-destroyed no-present-observed adapter-open
 producer-init-failed producer-submit-failed buffer-size-mismatch egl-image-error
 egl-import-error memory-accounting-error device-selection-mismatch import-backoff
-frame-wire send receive render drop Scanout Update ScanoutDMABUF ScanoutDMABUF2 UpdateDMABUF Disable Cached live released create-before-release frame-after-release repeated-release candidate ambiguous-or-incomplete undersized size-equal padded-or-different-layout dmabuf-export dmabuf-import vram-budget-refused budget-rejected resource-create resource-release resource-frame frame-region ack capture
+observed sleep resume frame-wire send receive render drop Scanout Update ScanoutDMABUF ScanoutDMABUF2 UpdateDMABUF Disable Cached live released create-before-release frame-after-release repeated-release candidate ambiguous-or-incomplete undersized size-equal padded-or-different-layout dmabuf-export dmabuf-import vram-budget-refused budget-rejected resource-create resource-release resource-frame frame-region ack capture
 kvm tcg host max qemu64 qemu32 other unspecified virtio-net-pci e1000 e1000e rtl8139
 writeback writethrough directsync unsafe native io_uring unmap on off raw qcow2
 required-size-exceeds-fd invalid-alignment misaligned-offset unsupported-plane-count no-compatible-memory-type empty-extent short-linear-stride linear-extent-exceeds-fd

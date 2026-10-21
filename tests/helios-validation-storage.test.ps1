@@ -28,6 +28,14 @@ try {
     $pin=(Get-FileHash (Join-Path $source 'tools.json') -Algorithm SHA256).Hash
     $target=Initialize-HeliosAcceptanceTools $source $pin
     if (-not (Test-Path (Join-Path $target 'helios-msaa-present.exe'))) {throw 'Verified tools were not staged.'}
+    foreach($name in @('helios-format-contract.exe','helios-shared-process.exe','helios-capabilities.exe')) {
+        $file=Join-Path $source $name;'not executed fixture' | Set-Content $file
+        $files+=@{name=$name;sha256=(Get-FileHash $file -Algorithm SHA256).Hash}
+    }
+    @{schema=1;files=@($files)} | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $source 'tools.json')
+    $pin=(Get-FileHash (Join-Path $source 'tools.json') -Algorithm SHA256).Hash
+    $target=Initialize-HeliosAcceptanceTools $source $pin
+    if(-not (Test-Path (Join-Path $target 'helios-capabilities.exe'))){throw 'Current five-tool validation bundle rejected'}
     'changed' | Set-Content (Join-Path $source 'helios-msaa-present.exe')
     $blocked=$false
     try {Initialize-HeliosAcceptanceTools $source $pin | Out-Null} catch {$blocked=$true}

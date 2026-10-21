@@ -2,7 +2,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Get-HeliosApplicationDiagnostics.ps1') -LibraryOnly
-$errors=@();$processes=@();$crashes=@();$tdr=@();$bootUtc=$null
+$errors=@();$processes=@();$crashes=@();$tdr=@();$bootUtc=$null;$power=@()
 $since=(Get-Date).AddHours(-1)
 try {
     $boot=(Get-CimInstance Win32_OperatingSystem -Property LastBootUpTime).LastBootUpTime
@@ -26,7 +26,13 @@ try {
         [ordered]@{timeUtc=$_.TimeCreated.ToUniversalTime().ToString('o');recordId=$_.RecordId;eventId=4101;provider='Display'}
     })
 } catch {if($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*'){$errors+='Display reset events unavailable'}}
-[ordered]@{collectedAtUtc=[DateTime]::UtcNow.ToString('o');bootAtUtc=$bootUtc;windowStartUtc=$since.ToUniversalTime().ToString('o');
+foreach($filter in @(@{LogName='System';ProviderName='Microsoft-Windows-Kernel-Power';Id=42;StartTime=$since},
+                       @{LogName='System';ProviderName='Microsoft-Windows-Power-Troubleshooter';Id=1;StartTime=$since})) {
+    try {$power+=@(Get-WinEvent -FilterHashtable $filter -MaxEvents 8 | ForEach-Object {
+        [ordered]@{timeUtc=$_.TimeCreated.ToUniversalTime().ToString('o');recordId=$_.RecordId;kind=$(if($_.Id -eq 42){'sleep'}else{'resume'})}
+    })} catch {if($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*'){$errors+='Power events unavailable'}}
+}
+[ordered]@{powerEvents=$power;collectedAtUtc=[DateTime]::UtcNow.ToString('o');bootAtUtc=$bootUtc;windowStartUtc=$since.ToUniversalTime().ToString('o');
     dwmProcesses=$processes;dwmCrashes=$crashes;displayResets=$tdr;errors=$errors;
     scope='Read-only process totals and existing events; absence of events is not proof of a stable compositor'} |
     ConvertTo-Json -Depth 6 -Compress

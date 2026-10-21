@@ -1,4 +1,4 @@
-param([ValidateRange(1,10)][int]$Cycles=3,[switch]$RestartAdapter,
+param([ValidateRange(1,1000)][int]$Cycles=3,[ValidateRange(0,300)][int]$IntervalSeconds=0,[switch]$RestartAdapter,
     [string]$ToolsPath,[string]$ToolsManifestSha256,[switch]$LibraryOnly)
 $lifecycleLibrary=$LibraryOnly;$lifecycleTools=$ToolsPath;$lifecyclePin=$ToolsManifestSha256
 . (Join-Path $PSScriptRoot 'Test-HeliosAcceptance.ps1') -LibraryOnly
@@ -31,18 +31,20 @@ function Invoke-HeliosLifecycleRestart {
     throw 'Helios did not recover within the observation window.'
 }
 function Invoke-HeliosLifecycle([int]$Count,[bool]$Restart) {
-    if($Count -lt 1 -or $Count -gt 10){throw 'Use one to ten lifecycle cycles.'}
+    if($Count -lt 1 -or $Count -gt 1000){throw 'Use one to 1000 lifecycle cycles.'}
+    $timer=[Diagnostics.Stopwatch]::StartNew()
     $report=[ordered]@{schema=1;startedAtUtc=[DateTime]::UtcNow.ToString('o');finishedAtUtc=$null;
-        requestedCycles=$Count;restartAdapter=$Restart;cycles=@();status='running';
+        requestedCycles=$Count;intervalSeconds=$IntervalSeconds;restartAdapter=$Restart;cycles=@();status='running';
         scope='Repeated pixel/resize/shared-resource probes and optional explicit Helios restart; no host suspend or visual certification.'}
     Write-HeliosValidationJson 'lifecycle.json' $report
     try {
         for($i=1;$i -le $Count;$i++) {
             if($Restart){Invoke-HeliosLifecycleRestart}
             $run=Invoke-HeliosAcceptance ('lifecycle-'+$i)
-            $report.cycles+=@{cycle=$i;runId=$run.runId;passed=[bool]$run.automatedPassed}
+            $report.cycles+=@{cycle=$i;runId=$run.runId;passed=[bool]$run.automatedPassed;elapsedSeconds=$timer.Elapsed.TotalSeconds;bootAtUtc=$(if($run.Contains('identity')){$run.identity.bootAtUtc}else{$null})}
             Write-HeliosValidationJson 'lifecycle.json' $report
             if(-not $run.automatedPassed){throw 'A lifecycle acceptance cycle failed.'}
+            if($i -lt $Count -and $IntervalSeconds){Start-Sleep -Seconds $IntervalSeconds}
         }
         $report.status='passed'
     } catch {$report.status='failed';$report.errorCode=$_.Exception.HResult}

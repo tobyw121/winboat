@@ -12,9 +12,9 @@ $result=Invoke-HeliosValidationProcess $exe @('-NoProfile','-Command','Start-Sle
 if ($result.status -ne 'timeout' -or $null -ne $result.exitCode) {throw 'Probe timeout accepted'}
 $result=Invoke-HeliosValidationProcess $exe @('-NoProfile','-Command','exit 0') 10
 if ($result.status -ne 'passed' -or $result.exitCode -ne 0) {throw 'Successful child result lost'}
-$encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("Write-Output 'budget local=1 budget=8192 usage=4096 reservation=0 available=2048'; Write-Output 'PRIVATE-APPLICATION-TEXT'"))
+$encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("Write-Output 'budget local=1 budget=8192 usage=4096 reservation=0 available=2048'; Write-Output 'PRIVATE-APPLICATION-TEXT'; Write-Output 'cap identity complete 1'; Write-Output 'cap vulkan feature.geometryShader 0'"))
 $result=Invoke-HeliosValidationProcess $exe @('-NoProfile','-EncodedCommand',$encoded) 10
-if($result.memoryBudget.Count -ne 1 -or $result.memoryBudget[0].usageBytes -ne '4096' -or ($result | ConvertTo-Json -Depth 6) -match 'PRIVATE-APPLICATION-TEXT'){throw 'Budget decoding/privacy failed'}
+if($result.capabilities['identity.complete'] -ne 1 -or $result.capabilities['vulkan.feature.geometryShader'] -ne 0 -or $result.memoryBudget.Count -ne 1 -or $result.memoryBudget[0].usageBytes -ne '4096' -or ($result | ConvertTo-Json -Depth 6) -match 'PRIVATE-APPLICATION-TEXT'){throw 'Budget decoding/privacy failed'}
 Write-Host 'Fixed graphics plan, real child exit codes and bounded timeout passed.'
 . (Join-Path $root 'guest_server/scripts/Helios-ControlSettings.ps1')
 $script:values=@{Unrelated=42;UmdCommandLists=1}

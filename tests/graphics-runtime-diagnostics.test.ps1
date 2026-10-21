@@ -7,6 +7,7 @@ function Get-Process {param($Name,$ErrorAction)
 }
 function Get-WinEvent {param($FilterHashtable,$MaxEvents)
     if($FilterHashtable.LogName -eq 'System') {
+        if($FilterHashtable.Id -in @(42,1)){return [pscustomobject]@{TimeCreated=[DateTime]::UtcNow;RecordId=90+$FilterHashtable.Id;Id=$FilterHashtable.Id}}
         if($FilterHashtable.Id -ne 4101 -or $FilterHashtable.ProviderName -ne 'Display'){throw 'Unexpected event query'}
         return [pscustomobject]@{TimeCreated=[DateTime]::UtcNow;RecordId=80}
     }
@@ -16,7 +17,7 @@ function Get-WinEvent {param($FilterHashtable,$MaxEvents)
 }
 $output=& $script
 $report=$output | ConvertFrom-Json
-if($report.dwmProcesses.Count -ne 1 -or $report.dwmProcesses[0].cpuMilliseconds -ne 5000 -or
+if($report.powerEvents.Count -ne 2 -or $report.dwmProcesses.Count -ne 1 -or $report.dwmProcesses[0].cpuMilliseconds -ne 5000 -or
     $report.dwmCrashes.Count -ne 1 -or $report.displayResets.Count -ne 1 -or $report.errors.Count -ne 0){throw $output}
 if($output -like '*PRIVATE-PATH*'){throw 'Raw event application data leaked'}
 if($report.dwmCrashes[0].ModuleName -ne 'vulkan_virtio.dll' -or $report.displayResets[0].eventId -ne 4101){throw 'Failure evidence lost'}

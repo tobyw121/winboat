@@ -4,8 +4,10 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"golang.org/x/sys/windows"
 	"log"
 	"os"
 	"os/exec"
@@ -112,7 +114,31 @@ func collectGraphicsLoad(ctx context.Context) ([]byte, error) {
 	return collectGraphicsScript(ctx, "Get-GraphicsLoad.ps1")
 }
 func collectGraphicsRuntime(ctx context.Context) ([]byte, error) {
-	return collectGraphicsScript(ctx, "Get-GraphicsRuntimeDiagnostics.ps1")
+	data, err := collectGraphicsScript(ctx, "Get-GraphicsRuntimeDiagnostics.ps1")
+	if err != nil {
+		return nil, err
+	}
+	var report map[string]interface{}
+	if err = json.Unmarshal(data, &report); err != nil {
+		return nil, err
+	}
+	report["consoleLogonState"] = "unknown"
+	session := windows.WTSGetActiveConsoleSessionId()
+	var token windows.Token
+	// Never use the SYSTEM pre-logon fallback as evidence of a user login.
+	if session != 0 && session != 0xffffffff && windows.WTSQueryUserToken(session, &token) == nil {
+		defer token.Close()
+		var stats [56]byte
+		var length uint32
+		if windows.GetTokenInformation(token, windows.TokenStatistics, &stats[0], uint32(len(stats)), &length) == nil && length == 56 && session == windows.WTSGetActiveConsoleSessionId() {
+			id := binary.LittleEndian.Uint64(stats[8:16])
+			if id != 0 {
+				report["consoleLogonId"] = fmt.Sprintf("%016x", id)
+				report["consoleLogonState"] = "observed"
+			}
+		}
+	}
+	return json.Marshal(report)
 }
 func collectGraphicsScript(ctx context.Context, name string) ([]byte, error) {
 	executable, err := os.Executable()
