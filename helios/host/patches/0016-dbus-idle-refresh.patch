@@ -1,0 +1,68 @@
+diff --git a/ui/dbus-listener.c b/ui/dbus-listener.c
+index 4f3138b..500958a 100644
+--- a/ui/dbus-listener.c
++++ b/ui/dbus-listener.c
+@@ -74,6 +74,8 @@ struct _DBusDisplayListener {
+ #endif
+ 
+     DisplayChangeListener dcl;
++    unsigned helios_quiet_refreshes;
++    uint64_t helios_active_interval;
+     DisplaySurface *ds;
+     enum share_kind ds_share;
+ 
+@@ -1037,6 +1039,29 @@ static void dbus_scanout_update(DisplayChangeListener *dcl,
+     dbus_call_update_gl(dcl, x, y, w, h);
+ }
+ 
++/* Event-driven damage wakes the normal rate; quiet scans back off without
++ * copying unchanged pixels. A blocked source never grows a frame queue. */
++static void dbus_helios_refresh_activity(DBusDisplayListener *ddl, bool dirty)
++{
++    if (!g_strcmp0(g_getenv("HELIOS_IDLE_REFRESH"), "0")) {
++        dirty = true;
++    }
++    if (dirty) {
++        ddl->helios_quiet_refreshes = 0;
++        if (ddl->helios_active_interval) {
++            qemu_console_listener_set_refresh(&ddl->dcl, ddl->helios_active_interval);
++            ddl->helios_active_interval = 0;
++        }
++    } else if (ddl->helios_quiet_refreshes < 16) {
++        ddl->helios_quiet_refreshes++;
++        if (ddl->helios_quiet_refreshes == 16 && ddl->dcl.update_interval < 100) {
++            ddl->helios_active_interval = ddl->dcl.update_interval ?
++                ddl->dcl.update_interval : GUI_REFRESH_INTERVAL_DEFAULT;
++            qemu_console_listener_set_refresh(&ddl->dcl, 100);
++        }
++    }
++}
++
+ static void dbus_gl_refresh(DisplayChangeListener *dcl)
+ {
+     DBusDisplayListener *ddl = container_of(dcl, DBusDisplayListener, dcl);
+@@ -1066,6 +1091,7 @@ static void dbus_gl_refresh(DisplayChangeListener *dcl)
+ 
+ #ifdef CONFIG_PIXMAN
+     int n_rects = pixman_region32_n_rects(&ddl->gl_damage);
++    dbus_helios_refresh_activity(ddl, n_rects != 0);
+ 
+     if (n_rects) {
+         const pixman_box32_t *box = pixman_region32_extents(&ddl->gl_damage);
+@@ -1076,6 +1102,7 @@ static void dbus_gl_refresh(DisplayChangeListener *dcl)
+     }
+     pixman_region32_clear(&ddl->gl_damage);
+ #else
++    dbus_helios_refresh_activity(ddl, ddl->gl_damage != 0);
+     if (ddl->gl_damage) {
+         dbus_call_update_gl(dcl, 0, 0,
+                             width, height);
+@@ -1096,6 +1123,8 @@ static void dbus_gl_gfx_update(DisplayChangeListener *dcl,
+ {
+     DBusDisplayListener *ddl = container_of(dcl, DBusDisplayListener, dcl);
+ 
++    dbus_helios_refresh_activity(ddl, true);
++
+     /* A software/placeholder surface can exist before GL texture creation.
+      * Keep its updates in the software protocol until the next gfx switch. */
+     if (ddl->software_surface) {

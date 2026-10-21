@@ -32,7 +32,7 @@
 typedef struct DisplaySurface { GLuint texture; uint8_t pixels[64]; int width,height; } DisplaySurface;
 typedef int QemuGLShader;
 typedef struct DisplayGLCtx { QemuGLShader *gls; } DisplayGLCtx;
-typedef struct DisplayChangeListener { void *con; } DisplayChangeListener;
+typedef struct DisplayChangeListener { uint64_t update_interval; void *con; } DisplayChangeListener;
 typedef struct QemuDmaBuf { uint64_t modifier,allocation; bool optimal,top; unsigned width,height; GLuint texture; int fd; } QemuDmaBuf;
 typedef struct egl_fb { int width,height,x,y;GLuint texture,framebuffer;bool delete_texture;QemuDmaBuf *dmabuf; } egl_fb;
 #define EGL_FB_INIT {0}
@@ -50,6 +50,8 @@ typedef struct DBusDisplayListener {
     HeliosVulkanReadback *vk_readback;
     DisplaySurface *vk_surface;
     bool vk_announced,vk_failed,copy_requested,copy_active;
+    unsigned helios_quiet_refreshes;
+    uint64_t helios_active_interval;
     uint64_t frame_sequence;
     uint64_t frame_inode;
     uint32_t frame_source;
@@ -83,6 +85,8 @@ static int qemu_egl_make_context_current(void *unused, EGLContext context) {
 }
 static void qemu_console_hw_gl_block(void *con, bool block) {last_block=block;}
 static bool qemu_console_is_gl_blocked(void *con) {return last_block;}
+#define GUI_REFRESH_INTERVAL_DEFAULT 30
+static void qemu_console_listener_set_refresh(DisplayChangeListener *dcl,uint64_t interval) { dcl->update_interval=interval; }
 static void qemu_console_hw_update(void *con) { }
 static void ddl_discard_display_messages(DBusDisplayListener *ddl) { }
 static void qemu_dbus_display1_listener_call_disable(void *proxy,...) { disables++; }
@@ -216,6 +220,15 @@ int main(void) {
 #endif
     dbus_gl_gfx_switch(&listener.dcl,&surface);
     assert(exports==1 && dma_scanouts==1 && !listener.software_surface);
+    listener.dcl.update_interval=30;
+    for(int quiet=0;quiet<16;quiet++) dbus_helios_refresh_activity(&listener,false);
+    assert(listener.dcl.update_interval==100);
+    dbus_helios_refresh_activity(&listener,true);
+    assert(listener.dcl.update_interval==30 && listener.helios_quiet_refreshes==0);
+    g_setenv("HELIOS_IDLE_REFRESH","0",true);
+    for(int quiet=0;quiet<32;quiet++) dbus_helios_refresh_activity(&listener,false);
+    assert(listener.dcl.update_interval==30);
+    g_unsetenv("HELIOS_IDLE_REFRESH");
     assert(eglGetCurrentContext()==renderer && eglGetCurrentSurface(EGL_DRAW)==draw && eglGetCurrentSurface(EGL_READ)==read);
     dbus_gl_gfx_update(&listener.dcl,0,0,2,2);assert(damage(&listener)>0);
     /* Failed export returns through cleanup and preserves the producer. */
@@ -257,10 +270,15 @@ int main(void) {
     assert(dma_updates==before_damage+1 && listener.frame_sequence==before_sequence+1);
     assert(!listener.frame_software && listener.frame_source==4 && last_block);
     assert(update_rect[0]==0 && update_rect[1]==0 && update_rect[2]==4 && update_rect[3]==4);
+    dbus_gl_gfx_update(&listener.dcl,0,0,1,1);
+    dbus_gl_refresh(&listener.dcl);
+    assert(dma_updates==before_damage+1 && damage(&listener)>0);
     g_setenv("HELIOS_FRAME_TRACE","1",true);
     pending_callback(NULL,NULL,pending_opaque);assert(!last_block);
     assert(strstr(diagnostic_line,"frame-ack source=4") && strstr(diagnostic_line,"transport=dmabuf"));
     g_unsetenv("HELIOS_FRAME_TRACE");
+    dbus_gl_refresh(&listener.dcl);assert(dma_updates==before_damage+2 && last_block);
+    pending_callback(NULL,NULL,pending_opaque);assert(!last_block);
 #endif
     dbus_scanout_dmabuf(&listener.dcl,&third);
     dbus_release_dmabuf(&listener.dcl,&second);
