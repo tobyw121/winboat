@@ -26,6 +26,29 @@ class Tests(unittest.TestCase):
     result=m.restore('WinBoat',row['id']);self.assertEqual(result['status'],'restored-stopped')
     self.assertEqual((disk/'disk.img').read_bytes(),b'first');self.assertEqual((Path(result['previousStorage'])/'disk.img').read_bytes(),b'newer')
     self.assertEqual(engine.calls[-1][2]['Image'],'sha256:image')
+ def test_recover_when_crash_left_storage_path_missing(self):
+  with tempfile.TemporaryDirectory() as folder:
+   root=Path(folder);disk=root/'storage';previous=root/'storage.before-test';previous.mkdir();(previous/'disk.img').write_bytes(b'original')
+   info={'Id':'old','Name':'/WinBoat','Image':'sha256:image','Config':{'Image':'tag'},'HostConfig':{},'Mounts':[{'Destination':'/storage','Type':'bind','Source':str(disk)}]}
+   engine=Engine();m=v.Snapshots(root/'snapshots',engine=lambda:engine)
+   with m.locked():
+    v.write(m.root/'restore-transaction.json',{'container':info,'root':str(disk),'stage':str(root/'.winboat-restore-test'),'previous':str(previous),'snapshot':'a'*32,'status':'container-fenced'})
+    self.assertEqual(m.recover()['status'],'rolled-back');self.assertEqual((disk/'disk.img').read_bytes(),b'original')
+ def test_uncertain_container_creation_never_rolls_storage_under_a_container(self):
+  with tempfile.TemporaryDirectory() as folder:
+   root=Path(folder);disk=root/'storage';disk.mkdir();(disk/'disk.img').write_bytes(b'first')
+   info={'Id':'old','Name':'/WinBoat','Image':'sha256:image','Config':{'Image':'tag'},'HostConfig':{},'State':{'Status':'exited','ExitCode':0},'Mounts':[{'Destination':'/storage','Type':'bind','Source':str(disk)}]}
+   class Ambiguous(Engine):
+    def call(self,method,path,data=None):
+     if method=='GET':return {'Id':'new'}
+     if method=='POST':raise TimeoutError('Response lost after creation')
+     return super().call(method,path,data)
+   engine=Ambiguous();m=v.Snapshots(root/'snapshots',lambda _:info,lambda:engine)
+   with m.locked():
+    row=m.create('WinBoat','baseline');(disk/'disk.img').write_bytes(b'newer')
+    with self.assertRaises(TimeoutError):m.restore('WinBoat',row['id'])
+    self.assertEqual((disk/'disk.img').read_bytes(),b'first')
+    self.assertEqual(__import__('json').loads((m.root/'restore-transaction.json').read_text())['status'],'manual-recovery-required')
  def test_identity_and_path_checks(self):
   with tempfile.TemporaryDirectory() as folder:
    m=v.Snapshots(Path(folder))

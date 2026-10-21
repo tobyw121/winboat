@@ -1,5 +1,7 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import {EventEmitter} from 'node:events';import type {Socket} from 'node:net';
-import {QMPTransport} from '../src/shared/qmp-protocol';
+import {createRequire} from 'node:module';
+(globalThis as any).require=createRequire(import.meta.url);
+const {QMPTransport}=await import('../src/shared/qmp-protocol');
 class Peer extends EventEmitter{sent:any[]=[];write(value:string,callback:(e?:Error)=>void){this.sent.push(JSON.parse(value));callback();return true;}destroy(){this.emit('close');}}
 test('QMP frames split greetings, interleaved events and reversed concurrent replies',async()=>{
  const peer=new Peer(),client=new QMPTransport(peer as unknown as Socket);peer.emit('data',Buffer.from('{"QMP":'));peer.emit('data',Buffer.from('{}}\r\n'));await client.greeting;

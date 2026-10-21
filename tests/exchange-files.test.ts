@@ -1,5 +1,7 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
-import {copyExchangeFile,exchangeDirectory} from '../src/shared/exchange-files';
+import {createRequire} from 'node:module';
+(globalThis as any).require=createRequire(import.meta.url);
+const {copyExchangeFile,exchangeDirectory}=await import('../src/shared/exchange-files');
 test('exchange publishes complete files, records progress and refuses overwrite or symlink sources',async()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'exchange-'));try{
  const folder=exchangeDirectory(path.join(root,'share'));const input=path.join(root,'source');fs.writeFileSync(input,Buffer.alloc(200000,7));

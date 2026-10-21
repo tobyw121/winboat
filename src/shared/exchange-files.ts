@@ -1,6 +1,6 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import crypto from 'node:crypto';
+const fs:typeof import('fs')=require('fs');
+const path:typeof import('path')=require('path');
+const crypto:typeof import('crypto')=require('crypto');
 export async function copyExchangeFile(source:string,destination:string,progress:(bytes:number,total:number)=>void,signal?:AbortSignal):Promise<{bytes:number;sha256:string}>{
     const input=await fs.promises.open(source,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);
     const temporary=path.join(path.dirname(destination),'.winboat-transfer-'+crypto.randomBytes(16).toString('hex'));

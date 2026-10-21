@@ -1,4 +1,4 @@
-import {StringDecoder} from 'node:string_decoder';
+const {StringDecoder}:typeof import('string_decoder')=require('string_decoder');
 import type {Socket} from 'node:net';
 /** Framed QMP with request IDs: events and concurrent callers cannot steal replies. */
 export class QMPTransport {
