@@ -8,6 +8,14 @@ metrics=importlib.util.module_from_spec(spec);spec.loader.exec_module(metrics)
 
 
 class MetricsTests(unittest.TestCase):
+    def test_verified_transport_needs_fresh_matching_path_and_geometry(self):
+        a={'pid':1,'console':1,'accelerated':1,'monotonicUs':100,'width':1920,'height':1080,'requestedTransportMode':1,'softwareFrames':10,'dmabufFrames':0}
+        b={**a,'monotonicUs':200,'softwareFrames':11}
+        self.assertEqual(metrics.transport_evidence([a,b],'copy')['state'],'observed')
+        for bad in ({**b,'dmabufFrames':1},{**b,'width':1280},{**b,'requestedTransportMode':0},{**b,'accelerated':0}):
+            self.assertEqual(metrics.transport_evidence([a,bad],'copy')['state'],'unknown')
+        self.assertEqual(metrics.transport_evidence([a],'copy')['state'],'unknown')
+
     def test_cpu_above_one_hundred_is_preserved(self):
         with patch.object(metrics.subprocess,'check_output',return_value='{"CPUPerc":"325.5%","MemPerc":"12%"}'):
             self.assertEqual(metrics.container_sample('WinBoat')['cpuPercentOfOneCore'],325.5)

@@ -2,6 +2,7 @@
 """Fixed on-demand graphics status and maintenance for the WinBoat UI."""
 import argparse
 import datetime
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -63,6 +64,10 @@ def main():
                 packaged=Path(__file__).parent.name=='graphics-tools'
                 resources=Path(__file__).parent.parent if packaged else root/'resources'
                 receipt=json.loads((resources/'helios/helios-build.json').read_text())
+                pin=hashlib.sha256()
+                with (resources/'helios/HeliosSetup.exe').open('rb') as stream:
+                    for chunk in iter(lambda:stream.read(1048576),b''):pin.update(chunk)
+                receipt['installerVerified']=pin.hexdigest()==receipt.get('sha256')
                 # The packaged requirements are generated from the shared constants.
                 if packaged:expected=json.loads((Path(__file__).parent/'requirements.json').read_text())
                 else:

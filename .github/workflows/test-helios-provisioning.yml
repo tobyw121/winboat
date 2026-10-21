@@ -30,6 +30,8 @@ on:
       - 'guest_server/graphics_extend*'
       - 'guest_server/graphics_history*'
       - 'guest_server/scripts/Get-GraphicsRuntimeDiagnostics.ps1'
+      - 'guest_server/scripts/Get-GraphicsLoad.ps1'
+      - 'tests/graphics-load.test.ps1'
       - 'guest_server/scripts/Get-HeliosJournalReport.ps1'
       - 'tests/graphics-runtime-diagnostics.test.ps1'
       - 'tests/helios-journal-report.test.ps1'
@@ -107,6 +109,8 @@ on:
       - 'guest_server/graphics_extend*'
       - 'guest_server/graphics_history*'
       - 'guest_server/scripts/Get-GraphicsRuntimeDiagnostics.ps1'
+      - 'guest_server/scripts/Get-GraphicsLoad.ps1'
+      - 'tests/graphics-load.test.ps1'
       - 'guest_server/scripts/Get-HeliosJournalReport.ps1'
       - 'tests/graphics-runtime-diagnostics.test.ps1'
       - 'tests/helios-journal-report.test.ps1'
@@ -204,6 +208,7 @@ jobs:
           ./tests/helios-diagnostics.test.ps1
           ./tests/helios-application-diagnostics.test.ps1
           ./tests/graphics-runtime-diagnostics.test.ps1
+          ./tests/graphics-load.test.ps1
           ./tests/helios-journal-report.test.ps1
           ./tests/helios-provisioning.test.ps1
           ./tests/helios-live.test.ps1
@@ -231,6 +236,7 @@ jobs:
           ./tests/helios-diagnostics.test.ps1
           ./tests/helios-application-diagnostics.test.ps1
           ./tests/graphics-runtime-diagnostics.test.ps1
+          ./tests/graphics-load.test.ps1
           ./tests/helios-journal-report.test.ps1
           ./tests/helios-crash-capture.test.ps1
           ./tests/helios-provisioning.test.ps1

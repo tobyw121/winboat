@@ -48,7 +48,7 @@ def parse_transport_errors(text):
 def parse_frame_metrics(text):
     records=[]
     patterns=(
-        ('frame-wire',r'frame-wire peer=([a-f0-9]{32}) serial=(\d{1,10}) stage=(send|receive|ack|render|drop) method=(Scanout|Update|ScanoutDMABUF|ScanoutDMABUF2|UpdateDMABUF|Disable|Cached)(?: monotonic_us=(\d{1,20}))?',
+        ('frame-wire',r'frame-wire peer=([a-f0-9]{32}) serial=(\d{1,10}) stage=(send|receive|ack|render|drop) method=(ScanoutDMABUF2|ScanoutDMABUF|UpdateDMABUF|Scanout|Update|Disable|Cached)(?: monotonic_us=(\d{1,20}))?',
          ('peer','serial','stage','method','monotonicUs')),
         ('dmabuf-export',r'dmabuf-contract export ino=(\d{1,20}) allocated=(\d{1,20}) blob=(\d{1,20}) fd_bytes=(\d{1,20}) memory_type=(\d{1,10}) fd_type=(\d{1,10})',
          ('inode','allocationBytes','blobBytes','bufferBytes','memoryType','fdType')),

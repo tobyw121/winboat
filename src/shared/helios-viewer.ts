@@ -1,5 +1,18 @@
 import type { ChildProcess } from 'node:child_process';
 
+export function viewerWire(line:string):string|undefined {
+    return /^frame-wire peer=[a-f0-9]{32} serial=[0-9]{1,10} stage=(receive|ack|render|drop) method=(Scanout|Update|ScanoutDMABUF|ScanoutDMABUF2|UpdateDMABUF|Disable|Cached) monotonic_us=[0-9]{1,20}$/.test(line)?line:undefined;
+}
+export function viewerStatistics(line:string):Record<string,number>|undefined {
+    let value:Record<string,unknown>;
+    try {value=JSON.parse(line);} catch {return;}
+    if(!value || value.event!=='statistics')return;
+    const clean:Record<string,number>={};
+    for(const key of ['pid','console','monotonicUs','requestedTransportMode','accelerated','width','height','dmabufFrames','softwareFrames','renderedFrames','sourceCopyWallUs','completionWaitUs','copySamples','skippedRedraws','coalescedUpdates','sourceInode']){
+        const n=value[key];if(typeof n==='number' && Number.isSafeInteger(n) && n>=0)clean[key]=n;
+    }
+    if(['pid','console','monotonicUs'].every(key=>key in clean))return clean;
+}
 export type ViewerState = 'closed' | 'opening' | 'ready' | 'failed';
 export class HeliosViewer {
     private session?: { child: ChildProcess; opening: Promise<void>; cancel: () => void };
@@ -30,7 +43,7 @@ export class HeliosViewer {
     private retryAttempt = 0;
     private automaticFailure: (message: string) => void = () => {};
     constructor(private spawn: () => ChildProcess,
-        private status: (state: ViewerState, message: string) => void, private timeout = 10000, private retryDelay = 1000, private recovery?: (unavailable:boolean)=>void) {}
+        private status: (state: ViewerState, message: string) => void, private timeout = 10000, private retryDelay = 1000, private recovery?: (unavailable:boolean)=>void,private telemetry?: (row:Record<string,number>)=>void,private wire?: (line:string)=>void) {}
 
     /** Follow VM lifecycle without opening duplicate windows or requiring RDP. */
     setAutomatic(enabled: boolean, onFailure: (message: string) => void): void {
@@ -58,7 +71,7 @@ export class HeliosViewer {
         let child: ChildProcess;
         try { child = this.spawn(); }
         catch (error) { this.status('failed', String(error)); onFailure(String(error)); this.scheduleRetry(); return Promise.reject(error); }
-        let ready = false, closed = false, output = '', errors = '';
+        let ready = false, closed = false, output = '', errors = '', metrics='';let lastMetricAt=-Infinity,wireWindow=0,wireCount=0;
         this.status('opening', 'Connecting to the Windows console…');
         const finish = (message?: string, cancelled = false) => {
             if (closed) return;
@@ -82,6 +95,9 @@ export class HeliosViewer {
             output = (output + data.toString()).slice(-16384);
             const lines=output.split('\n');output=lines.pop() || '';
             for (const line of lines) {
+                const wire=viewerWire(line),now=Date.now();
+                if(now-wireWindow>=1000){wireWindow=now;wireCount=0;}
+                if(wire && wireCount++<32){try{this.wire?.(wire);}catch{/* Optional tracing cannot stop the viewer. */}}
                 let event: {event?:string;transport?:string;console?:number;reason?:string;accelerated?:boolean};
                 try {event=JSON.parse(line);} catch {continue;}
                 if (!event || typeof event !== 'object') continue;
@@ -98,7 +114,14 @@ export class HeliosViewer {
                 }
             }
         });
-        child.stderr?.on('data', (data: Buffer) => { errors = (errors + data.toString()).slice(-8192); });
+        child.stderr?.on('data', (data: Buffer) => {
+            if(closed)return;
+            errors = (errors + data.toString()).slice(-8192);
+            metrics=(metrics+data.toString()).slice(-16384);const lines=metrics.split('\n');metrics=lines.pop()||'';
+            for(const line of lines){const row=viewerStatistics(line);
+                if(row && Date.now()-lastMetricAt>=1000){lastMetricAt=Date.now();try{this.telemetry?.(row);}catch{/* Diagnostics cannot stop the display. */}}
+            }
+        });
         child.once('error', error => finish(error.message));
         child.once('close', code => finish(code === 0 && ready ? undefined : errors || 'The local display disconnected.'));
         return opening;

@@ -6,7 +6,7 @@ class Tests(unittest.TestCase):
  def test_unknown_is_blocked_and_version_drift_detected(self):
   e={'runtime':'r','display':'d','guest':'g','guestRuntime':'v','viewer':13,'revision':'x'}
   h={'runtimeVersion':'r','displayVersion':'d','qemuBackend':{'issues':[]}}
-  g={'graphics_protocol':'g','runtime_protocol':'v'};r={'revision':'x','sha256':'a'*64,'manifestSha256':'b'*64,'driverVersion':'22.22.291.0'}
+  g={'graphics_protocol':'g','runtime_protocol':'v'};r={'installerVerified':True,'revision':'x','sha256':'a'*64,'manifestSha256':'b'*64,'driverVersion':'22.22.291.0'}
   self.assertEqual(p.assess(h,g,13,r,e)['state'],'compatible-observed')
   for bad in (None,12):self.assertEqual(p.assess(h,g,bad,r,e)['state'],'blocked')
   h['runtimeVersion']='old';self.assertEqual(p.assess(h,g,13,r,e)['checks'][0]['state'],'mismatch')

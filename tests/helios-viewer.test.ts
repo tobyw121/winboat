@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import type { ChildProcess } from 'node:child_process';
-import { HeliosViewer } from '../src/shared/helios-viewer';
+import { HeliosViewer,viewerStatistics,viewerWire } from '../src/shared/helios-viewer';
 
 class FakeViewer extends EventEmitter {
     stdin = new PassThrough(); stdout = new PassThrough(); stderr = new PassThrough(); kills = 0;
@@ -152,4 +152,15 @@ test('adapter recovery reports its cause while preserving the same viewer window
     child.stdout.write(JSON.stringify({event:'display-recovery',console:0,accelerated:false,reason:'VGA frame failed'})+'\n');
     assert.deepEqual(hints,[true,false]);
     viewer.close();
+});
+
+test('viewer statistics retain numeric counters and discard arbitrary text',()=>{
+    const row=viewerStatistics('{"event":"statistics","pid":1,"console":2,"monotonicUs":3,"width":1920,"path":"PRIVATE","softwareFrames":-1}');
+    assert.deepEqual(row,{pid:1,console:2,monotonicUs:3,width:1920});
+    assert.equal(viewerStatistics('{"event":"statistics","pid":true,"console":2,"monotonicUs":3}'),undefined);
+});
+
+test('wire evidence accepts only fixed D-Bus tokens',()=>{
+    const line='frame-wire peer='+('a'.repeat(32))+' serial=1 stage=ack method=Update monotonic_us=5';
+    assert.equal(viewerWire(line),line);assert.equal(viewerWire(line+' PRIVATE'),undefined);
 });

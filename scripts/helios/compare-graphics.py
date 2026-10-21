@@ -57,6 +57,15 @@ def compare(reports):
                 'pairs':pairs,'reproducedFirstDivergence':pairs[0]['firstDivergence'] is not None and pairs[0]['firstDivergence']==pairs[1]['firstDivergence'],
                 'runs':[{'label':r['label'],'automatedPassed':r['automatedPassed'],'tests':r['tests']} for r in reports],
                 'scope':'Different probe hashes limit attribution to the driver. Manual visual and recovery checks remain separate.'}
+    transport_verified=False
+    if any('transportMode' in r for r in reports):
+        modes=[r.get('transportMode') for r in reports]
+        if modes not in (['copy','dmabuf','copy','dmabuf'],['dmabuf','copy','dmabuf','copy']):raise ValueError('Transport trials require alternating copy/DMA-BUF arms')
+        if any(r.get('transportEvidence',{}).get('state')!='observed' or r['transportEvidence'].get('transport')!=r.get('transportMode') for r in reports):raise ValueError('Transport fallback or incomplete viewer evidence')
+        extents={(r['transportEvidence'].get('width'),r['transportEvidence'].get('height')) for r in reports}
+        if len(extents)!=1 or any(None in e for e in extents):raise ValueError('Actual Helios resolution changed across transport trials')
+        if any(r.get('context')!=reports[0].get('context') for r in reports):raise ValueError('Host configuration changed across transport trials')
+        transport_verified=True
     contexts=[r.get('context') for r in reports]
     context_verified=all(isinstance(c,dict) and re.fullmatch(r'sha256:[a-f0-9]{64}',str(c.get('imageId'))) and isinstance(c.get('gpu'),list) and len(c['gpu'])==1 and re.fullmatch(r'[a-f0-9]{32}',str(c['gpu'][0])) for c in contexts)
     if any(r.get('contextStable') is False for r in reports):raise ValueError('Host configuration changed during a measurement')
@@ -64,6 +73,7 @@ def compare(reports):
         if contexts[0]!=contexts[2] or contexts[1]!=contexts[3]:raise ValueError('Host settings changed within a comparison arm')
         if context_verified and any(c['gpu']!=contexts[0]['gpu'] for c in contexts):raise ValueError('Selected physical GPU changed')
     context_verified=context_verified and all(r.get('contextStable') is True for r in reports)
+    if transport_verified and not context_verified:raise ValueError('Transport comparison requires verified host image, GPU and unchanged measurement context')
     summaries=[r.get('summary',{}) for r in reports]
     pairs=[]
     for a,b in ((0,1),(2,3)):
@@ -72,6 +82,7 @@ def compare(reports):
         pairs.append({'baseline':reports[a]['label'],'candidate':reports[b]['label'],
                       'cpuPercentagePointDelta':bv-av if valid else None})
     return {'schema':1,'comparisonKey':reports[0]['comparisonKey'],'pairs':pairs,
+            'transportComparisonVerified':transport_verified,
             'frameTimes':[r.get('frameTimes') for r in reports],'contextVerified':context_verified,'contexts':contexts,
             'scope':'Paired observations only. Workload equality is operator-supplied; no automatic promotion or causality claim.'}
 

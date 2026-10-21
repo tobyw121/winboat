@@ -1,4 +1,4 @@
-import { GUEST_API_PORT } from './constants';
+import { GUEST_API_PORT,WINBOAT_DIR } from './constants';
 import { skipWhileRunning } from '../utils/interval';
 import { hostEnvironment } from './host-environment';
 import { nativeDesktopEnvironment } from '../../shared/native-desktop-environment';
@@ -30,8 +30,24 @@ const viewer = new HeliosViewer(() => child.spawn(binary(), ['--address', helios
     { env: desktopEnvironment(), stdio: ['pipe', 'pipe', 'pipe'] }), (state, message) => {
     localDisplayState.value = state; localDisplayMessage.value = message;
     if (state==='closed' || state==='failed') reportViewerAvailability(false);
-},10000,1000,reportViewerAvailability);
+},10000,1000,reportViewerAvailability,saveViewerStatistics,appendViewerTelemetry);
 
+export function viewerTelemetryPath():string {return path.join(WINBOAT_DIR,'diagnostics','viewer-telemetry.log');}
+function saveViewerStatistics(row:Record<string,number>):void {appendViewerTelemetry(JSON.stringify({event:'statistics',...row}));}
+function appendViewerTelemetry(line:string):void {
+    for(const folder of [WINBOAT_DIR,path.dirname(viewerTelemetryPath())]){
+        if(!fs.existsSync(folder))fs.mkdirSync(folder,{mode:0o700});
+        const info=fs.lstatSync(folder);
+        if(!info.isDirectory() || info.isSymbolicLink() || info.uid!==process.getuid!() || (info.mode&0o022))return;
+    }
+    const fd=fs.openSync(viewerTelemetryPath(),fs.constants.O_WRONLY|fs.constants.O_CREAT|fs.constants.O_APPEND|fs.constants.O_NOFOLLOW,0o600);
+    try {
+        const info=fs.fstatSync(fd);
+        if(!info.isFile() || info.uid!==process.getuid!() || (info.mode&0o777)!==0o600)return;
+        if(info.size>1048576)fs.ftruncateSync(fd,0);
+        fs.writeSync(fd,line+'\n');
+    }finally{fs.closeSync(fd);}
+}
 function reportViewerAvailability(unavailable:boolean):void {
     viewerUnavailable=unavailable;
     if (adapterAPIPort===undefined) return;

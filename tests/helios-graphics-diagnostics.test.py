@@ -46,6 +46,7 @@ class TestGraphicsCollector(unittest.TestCase):
     def test_wire_trace_retains_only_fixed_tokens(self):
         row=graphics.parse_frame_metrics('frame-wire peer='+('a'*32)+' serial=9 stage=receive method=UpdateDMABUF monotonic_us=100')[0]
         self.assertEqual(row['serial'],9);self.assertEqual(row['peer'],'a'*32)
+        self.assertEqual(row['method'],'UpdateDMABUF');self.assertEqual(row['monotonicUs'],100)
         self.assertEqual(graphics.parse_frame_metrics('frame-wire peer=PRIVATE serial=9 stage=receive method=UpdateDMABUF'),[])
 
     def test_frame_metrics_are_fixed_fields_and_do_not_invent_fps(self):

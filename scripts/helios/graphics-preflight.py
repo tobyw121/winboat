@@ -11,6 +11,7 @@ def assess(host,guest,viewer,receipt,expected):
     check('guest-runtime',guest.get('runtime_protocol'),expected.get('guestRuntime'))
     check('viewer',viewer,expected.get('viewer'))
     check('driver-source',receipt.get('revision'),expected.get('revision'))
+    check('installer-bytes',receipt.get('installerVerified'),True)
     checks.append({'name':'bundle-receipt','state':'match' if all(re.fullmatch(r'[a-fA-F0-9]{64}',str(receipt.get(k,''))) for k in ('sha256','manifestSha256')) and re.fullmatch(r'22\.22\.\d+\.0',str(receipt.get('driverVersion',''))) else 'unknown'})
     issues=host.get('qemuBackend',{}).get('issues')
     checks.append({'name':'running-backend','state':'match' if issues==[] else 'unknown' if issues is None else 'mismatch'})

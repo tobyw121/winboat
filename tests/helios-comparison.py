@@ -48,6 +48,15 @@ class ComparisonTests(unittest.TestCase):
             with path.open('a') as output: output.write('game.exe,4,30\n')
             with self.assertRaises(ValueError): metrics.read_frame_times(path,'game.exe')
 
+    def test_transport_comparison_refuses_silent_fallback_and_resolution_drift(self):
+        rows=[{'label':label,'comparisonKey':'same','contextStable':True,'context':{'imageId':'sha256:'+'a'*64,'gpu':['b'*32]},'transportMode':mode,
+               'transportEvidence':{'state':'observed','transport':mode,'width':1920,'height':1080}} for label,mode in zip(('A1','B1','A2','B2'),('copy','dmabuf','copy','dmabuf'))]
+        self.assertTrue(comparison.compare(rows)['transportComparisonVerified'])
+        rows[1]['transportEvidence']['state']='unknown'
+        with self.assertRaises(ValueError):comparison.compare(rows)
+        rows[1]['transportEvidence']['state']='observed';rows[2]['transportEvidence']['width']=1280
+        with self.assertRaises(ValueError):comparison.compare(rows)
+
     def test_wire_guid_serial_joins_without_mixing_clocks_or_reconnects(self):
         rows=[{'kind':'frame-wire','peer':'a'*32,'serial':1,'stage':stage,'monotonicUs':stamp} for stage,stamp in [('send',900000),('receive',10),('ack',20),('render',30)]]
         rows.append({'kind':'frame-wire','peer':'b'*32,'serial':1,'stage':'send'})

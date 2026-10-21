@@ -72,7 +72,7 @@ struct Viewer {
  guint64 copy_wall_us, completion_wait_us, copy_samples, skipped_redraws;
  guint64 coalesced_updates;
  guint8 *software_scratch;gsize software_scratch_capacity;
- guint background_fps;
+ guint background_fps,transport_mode;
  gboolean background_paused;
  FramePacer frame_pacer;
  int exit_code;
@@ -554,6 +554,13 @@ static void upload_software(Viewer *v,gint x,gint y,gint w,gint h,guint stride,g
  glTexSubImage2D(GL_TEXTURE_2D,0,x,y,w,h,bgra?GL_BGRA:GL_RGBA,GL_UNSIGNED_BYTE,bytes);
  glPixelStorei(GL_UNPACK_ROW_LENGTH,0);if(converted!=v->software_scratch) g_free(converted);
 }
+static gboolean transport_allowed(Viewer *v,const char *method) {
+ if (!v->accelerated) return TRUE;
+ gboolean dma=strstr(method,"DMABUF")!=NULL;
+ if (v->transport_mode==1 && dma) return FALSE;
+ if (v->transport_mode==2 && (!strcmp(method,"Scanout") || !strcmp(method,"Update"))) return FALSE;
+ return TRUE;
+}
 static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,const gchar *iface,
  const gchar *name,GVariant *params,GDBusMethodInvocation *inv,gpointer data) {
  (void)conn;(void)sender;(void)path;(void)iface;
@@ -561,6 +568,7 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
  gboolean scanout=!strcmp(name,"Scanout") || !strcmp(name,"ScanoutDMABUF") || !strcmp(name,"ScanoutDMABUF2");
  gboolean update=!strcmp(name,"Update") || !strcmp(name,"UpdateDMABUF");
  gboolean frame=scanout || update || !strcmp(name,"Disable");
+ gboolean policy_refusal=!transport_allowed(v,name);
  if (frame) {
   GDBusMessage *message=g_dbus_method_invocation_get_message(inv);
   v->trace_serial=g_dbus_message_get_serial(message);
@@ -591,7 +599,7 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
   }
   else g_variant_get(params,"(iiiiuu@ay)",&x,&y,&w,&h,&stride,&format,&pixels);
   gsize len;const void *bytes=g_variant_get_fixed_array(pixels,&len,1);
-  ok=dimensions(w,h) && stride%4==0 && (guint64)stride>=(guint64)w*4 && (guint64)stride*h<=len && len<=MAX_BYTES
+  ok=!policy_refusal && dimensions(w,h) && stride%4==0 && (guint64)stride>=(guint64)w*4 && (guint64)stride*h<=len && len<=MAX_BYTES
      && (format==0x20020888 || format==0x20028888 || format==0x20030888 || format==0x20038888);
   if (ok && initial) {discard_source(v);texture_size(v,w,h);}
   ok=ok && !v->source && !v->source_renderbuffer && region(v,x,y,w,h);
@@ -614,17 +622,17 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
   guint offset=0;
   GVariant *offsets=g_variant_ref_sink(g_variant_new_fixed_array(G_VARIANT_TYPE_UINT32,&offset,1,sizeof(offset)));
   GVariant *strides=g_variant_ref_sink(g_variant_new_fixed_array(G_VARIANT_TYPE_UINT32,&stride,1,sizeof(stride)));
-  ok=import_dma(v,inv,handles,0,0,w,h,offsets,strides,1,fourcc,w,h,mod,top);
+  ok=!policy_refusal && import_dma(v,inv,handles,0,0,w,h,offsets,strides,1,fourcc,w,h,mod,top);
   g_variant_unref(handles);g_variant_unref(offsets);g_variant_unref(strides);
  } else if (!strcmp(name,"ScanoutDMABUF2")) {
   GVariant *handles,*offsets,*strides;guint x,y,w,h,planes,fourcc,bw,bh;guint64 mod;gboolean top;
   g_variant_get(params,"(@ahuuuu@au@auuuuutb)",&handles,&x,&y,&w,&h,&offsets,&strides,&planes,&fourcc,&bw,&bh,&mod,&top);
-  ok=import_dma(v,inv,handles,x,y,w,h,offsets,strides,planes,fourcc,bw,bh,mod,top);
+  ok=!policy_refusal && import_dma(v,inv,handles,x,y,w,h,offsets,strides,planes,fourcc,bw,bh,mod,top);
   g_variant_unref(handles);g_variant_unref(offsets);g_variant_unref(strides);
  } else if (!strcmp(name,"UpdateDMABUF")) {
   gint x,y,w,h;g_variant_get(params,"(iiii)",&x,&y,&w,&h);
   g_snprintf(v->frame_problem,sizeof(v->frame_problem),"UpdateDMABUF region=%d,%d %dx%d, scanout=%ux%u, imported=%s",x,y,w,h,v->width,v->height,(v->source || v->source_renderbuffer)?"yes":"no");
-  ok=x>=0 && y>=0 && w>0 && h>0 && (guint64)x+w<=v->source_width && (guint64)y+h<=v->source_height;
+  ok=!policy_refusal && x>=0 && y>=0 && w>0 && h>0 && (guint64)x+w<=v->source_width && (guint64)y+h<=v->source_height;
   if (ok && consume_update(v)) {
    ok=copy_dma(v);
    if (ok) {v->dma_frames++;v->last_dma=TRUE;v->dma_failures=0;}
@@ -671,14 +679,15 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
   g_dbus_method_invocation_return_value(inv,NULL);
  }
  else {
-  if (strstr(name,"DMABUF") && !v->prefer_copy && ++v->dma_failures>=2) {
+  if (v->transport_mode==0 && strstr(name,"DMABUF") && !v->prefer_copy && ++v->dma_failures>=2) {
    v->prefer_copy=TRUE;
    g_print("{\"event\":\"display-transport\",\"console\":%u,\"transport\":\"validated-copy-requested\"}\n",v->console_id);fflush(stdout);
   }
+  if (policy_refusal)g_strlcpy(v->frame_problem,"Selected transport test is unavailable; choose Auto transfer to restore fallback",sizeof(v->frame_problem));
   char *detail=g_strdup_printf("Console %u %s: %s; GL=0x%04x; requesting fresh scanout.",v->console_id,name,v->frame_problem,frame_error);
   g_dbus_method_invocation_return_dbus_error(inv,"org.winboat.Helios.DisplayError",detail);
   g_printerr("%s\n",detail);g_free(detail);
-  if (frame && v->parent) report_display_recovery(v,v->frame_problem);
+  if (frame && v->parent && !policy_refusal) report_display_recovery(v,v->frame_problem);
   if (!frame && frame_error==GL_NO_ERROR && !gtk_gl_area_get_error(GTK_GL_AREA(v->area))) return;
   if (v->parent && frame_error!=GL_CONTEXT_LOST && !gtk_gl_area_get_error(GTK_GL_AREA(v->area))) {
    /* A broken adapter frame must not tear down another working console. */
@@ -686,7 +695,7 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
    for (int i=0;i<8 && glGetError()!=GL_NO_ERROR;i++) {} /* Isolate adapter GL errors. */
    v->cache_valid=FALSE;v->seen_update=FALSE;v->width=v->height=0;
    select_console(v->parent);gtk_gl_area_queue_render(GTK_GL_AREA(v->area));
-   refresh_scanout(v);
+   if (!policy_refusal) refresh_scanout(v);
   } else {
    char *message=g_strdup_printf("%s failed: host OpenGL display error.",name);
    fatal(v,message);g_free(message);
@@ -854,7 +863,7 @@ static void console_ready(GObject *object,GAsyncResult *result,gpointer data) {
   char *normalized=g_ascii_strdown(name,-1);
   /* QEMU labels this VM's device by its explicit id, "heliosgpu". */
   d->accelerated=!strstr(normalized,"bootstrap") && (strstr(normalized,"virtio") || strstr(normalized,"helios"));
-  if (!d->accelerated) v->has_basic_console=TRUE;
+  if (!d->accelerated) {v->has_basic_console=TRUE;d->transport_mode=0;d->prefer_copy=FALSE;}
   g_free(normalized);
   g_ptr_array_add(v->consoles,d);
   g_dbus_proxy_new(v->bus,G_DBUS_PROXY_FLAGS_NONE,NULL,"org.qemu",d->console_path,IFACE "Mouse",NULL,mouse_ready,d);
@@ -881,7 +890,7 @@ static void console_ids_ready(GObject *object,GAsyncResult *result,gpointer data
   d->parent=v;d->area=v->area;d->bus=v->bus;d->info=v->info;d->qemu_uid=v->qemu_uid;
   d->program=v->program;d->external_program=v->external_program;d->vao=v->vao;d->fbo=v->fbo;
   d->image=EGL_NO_IMAGE_KHR;d->display=EGL_NO_DISPLAY;d->cursor_visible=TRUE;
-  d->prefer_copy=!g_strcmp0(g_getenv("HELIOS_VIEWER_COPY"),"1");
+  d->transport_mode=v->transport_mode;d->prefer_copy=v->transport_mode==1;
   d->console_path=g_strdup_printf(CONSOLE_PREFIX "%u",id);d->console_id=id;
   g_dbus_proxy_new(v->bus,G_DBUS_PROXY_FLAGS_DO_NOT_CONNECT_SIGNALS,NULL,"org.qemu",d->console_path,IFACE "Console",NULL,console_ready,d);
  }
@@ -942,6 +951,17 @@ static GtkWidget *display_selector(Viewer *v) {
  gtk_accessible_update_property(GTK_ACCESSIBLE(selector),GTK_ACCESSIBLE_PROPERTY_LABEL,"Display adapter",-1);
  g_signal_connect(selector,"notify::selected",G_CALLBACK(display_mode_changed),v);
  return selector;
+}
+static void transport_changed(GObject *object,GParamSpec *property,Viewer *v) {
+ (void)property;guint mode=gtk_drop_down_get_selected(GTK_DROP_DOWN(object));
+ if (mode>2 || mode==v->transport_mode) return;
+ v->transport_mode=mode;
+ for (guint i=0;i<v->consoles->len;i++) {
+  Viewer *d=g_ptr_array_index(v->consoles,i);if (!d->accelerated) continue;
+  d->transport_mode=mode;d->prefer_copy=mode==1;d->dma_failures=0;d->recovery_attempt=0;
+  refresh_scanout(d);
+ }
+ g_print("{\"event\":\"transport-request\",\"mode\":%u}\n",mode);fflush(stdout);
 }
 static void adapter_health(Viewer *v,gint helios,gint basic) {
  for (guint i=0;i<v->consoles->len;i++) {
@@ -1083,12 +1103,12 @@ static gboolean stats(Viewer *v) {
  char *text=g_strdup_printf("%u × %u · zoom: %s · %s · guest resize: %s (%" G_GUINT64_FORMAT " requests sent)",
   d->width,d->height,zoom,d->last_dma?"DMA-BUF / OpenGL":"Software / OpenGL",resize_state,v->resize_requests);
  gtk_label_set_text(GTK_LABEL(v->status),text);g_free(text);
- g_printerr("{\"event\":\"statistics\",\"pid\":%d,\"console\":%u,\"monotonicUs\":%" G_GINT64_FORMAT
+ g_printerr("{\"event\":\"statistics\",\"requestedTransportMode\":%u,\"accelerated\":%u,\"width\":%u,\"height\":%u,\"pid\":%d,\"console\":%u,\"monotonicUs\":%" G_GINT64_FORMAT
   ",\"dmabufFrames\":%" G_GUINT64_FORMAT ",\"softwareFrames\":%" G_GUINT64_FORMAT
   ",\"renderedFrames\":%" G_GUINT64_FORMAT ",\"sourceCopyWallUs\":%" G_GUINT64_FORMAT
   ",\"completionWaitUs\":%" G_GUINT64_FORMAT ",\"copySamples\":%" G_GUINT64_FORMAT
   ",\"skippedRedraws\":%" G_GUINT64_FORMAT ",\"coalescedUpdates\":%" G_GUINT64_FORMAT ",\"sourceInode\":%" G_GUINT64_FORMAT "}\n",
-  getpid(),d->console_id,g_get_monotonic_time(),d->dma_frames,d->software_frames,
+  d->transport_mode,d->accelerated?1u:0u,d->width,d->height,getpid(),d->console_id,g_get_monotonic_time(),d->dma_frames,d->software_frames,
   v->rendered_frames,d->copy_wall_us,d->completion_wait_us,d->copy_samples,
   v->skipped_redraws,d->coalesced_updates,d->source_inode);
  return G_SOURCE_CONTINUE;
@@ -1192,6 +1212,9 @@ int main(int argc,char **argv) {
  GVariant *owner=g_dbus_connection_call_sync(v.bus,"org.freedesktop.DBus","/org/freedesktop/DBus","org.freedesktop.DBus","GetConnectionUnixUser",g_variant_new("(s)","org.qemu"),G_VARIANT_TYPE("(u)"),G_DBUS_CALL_FLAGS_NONE,3000,NULL,&err);
  if (!owner) {g_printerr("No authenticated QEMU display: %s\n",err->message);g_error_free(err);return 1;}
  g_variant_get(owner,"(u)",&v.qemu_uid);g_variant_unref(owner);
+ const char *transport=g_getenv("HELIOS_VIEWER_TRANSPORT");
+ if (transport && strcmp(transport,"auto") && strcmp(transport,"copy") && strcmp(transport,"dmabuf")) {g_printerr("HELIOS_VIEWER_TRANSPORT must be auto, copy or dmabuf\n");return 2;}
+ v.transport_mode=!g_strcmp0(transport,"copy") || (!transport && !g_strcmp0(g_getenv("HELIOS_VIEWER_COPY"),"1"))?1:!g_strcmp0(transport,"dmabuf")?2:0;
  v.consoles=g_ptr_array_new();
  v.info=g_dbus_node_info_new_for_xml(xml,&err);
  if (!gtk_init_check()) {g_printerr("No GTK display available.\n");return 1;}
@@ -1216,6 +1239,10 @@ int main(int argc,char **argv) {
  gtk_widget_set_tooltip_text(resize,"Send a window-size hint. The bundled Helios driver uses its startup resolution; choose it in WinBoat Configuration and restart the VM.");
  gtk_header_bar_pack_start(GTK_HEADER_BAR(bar),resize);gtk_header_bar_pack_start(GTK_HEADER_BAR(bar),aspect);
  gtk_header_bar_pack_start(GTK_HEADER_BAR(bar),display_selector(&v));
+ const char *transports[]={"Auto transfer","Copy test","DMA-BUF test",NULL};
+ GtkWidget *transfer=gtk_drop_down_new_from_strings(transports);gtk_drop_down_set_selected(GTK_DROP_DOWN(transfer),v.transport_mode);
+ gtk_widget_set_tooltip_text(transfer,"Diagnostic transfer comparison. Copy and DMA-BUF require that path on Helios; unsupported paths stay unavailable. Auto restores fallback. Does not change Windows drivers or VGA.");
+ gtk_header_bar_pack_start(GTK_HEADER_BAR(bar),transfer);g_signal_connect(transfer,"notify::selected",G_CALLBACK(transport_changed),&v);
  const char *zoom_levels[]={"Fit","50%","75%","100%","125%","150%","200%",NULL};
  GtkWidget *zoom=gtk_drop_down_new_from_strings(zoom_levels);
  gtk_widget_set_tooltip_text(zoom,"Display zoom only. Fixed percentages use physical pixels and centre/crop pictures larger than the window. Fit shows the complete Windows desktop.");

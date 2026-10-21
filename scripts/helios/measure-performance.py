@@ -15,7 +15,7 @@ import statistics
 import subprocess
 import time
 
-VIEWER_FIELDS = ('pid','console','monotonicUs','dmabufFrames','softwareFrames','renderedFrames',
+VIEWER_FIELDS = ('requestedTransportMode','accelerated','width','height','pid','console','monotonicUs','dmabufFrames','softwareFrames','renderedFrames',
                  'sourceCopyWallUs','completionWaitUs','copySamples','skippedRedraws','coalescedUpdates','sourceInode')
 
 
@@ -123,6 +123,18 @@ def viewer_phase_summary(records):
     return result
 
 
+def transport_evidence(rows,requested):
+    rows=[r for r in rows if r.get('accelerated')==1]
+    identities={(r['pid'],r['console'],r.get('width'),r.get('height'),r.get('requestedTransportMode')) for r in rows}
+    if len(rows)<2 or len(identities)!=1:return {'state':'unknown','reason':'Need one stable Helios console and multiple fresh samples'}
+    first,last=rows[0],rows[-1];mode=1 if requested=='copy' else 2
+    if first.get('requestedTransportMode')!=mode or not first.get('width') or not first.get('height') or last['monotonicUs']<=first['monotonicUs']:return {'state':'unknown','reason':'Requested path or geometry not observed'}
+    deltas={key:last.get(key,0)-first.get(key,0) for key in ('softwareFrames','dmabufFrames')}
+    expected='softwareFrames' if requested=='copy' else 'dmabufFrames';other='dmabufFrames' if requested=='copy' else 'softwareFrames'
+    valid=deltas[expected]>0 and deltas[other]==0
+    return {'state':'observed' if valid else 'unknown','transport':requested,'width':first['width'],'height':first['height'],'deltas':deltas,
+            'scope':'Completed source reads during this measurement; not displayed FPS or GPU render time'}
+
 def comparison_context(container):
     try:
         fields=subprocess.check_output(['docker','inspect','--format','{{json .Image}}\n{{json .Config.Env}}',container],text=True,timeout=5).splitlines()
@@ -144,10 +156,13 @@ def main():
     parser.add_argument('--comparison-key',help='Same workload, resolution and settings identifier for A/B/A/B')
     parser.add_argument('--frame-csv',type=Path,help='Existing PresentMon CSV; collection is never started automatically')
     parser.add_argument('--frame-application',help='Exact Application column value; one PID required')
+    parser.add_argument('--transport-mode',choices=('copy','dmabuf'),help='Verify the explicitly selected viewer test mode; requires --viewer-log')
     parser.add_argument('--output',type=Path,required=True)
     args=parser.parse_args()
     if bool(args.frame_csv)!=bool(args.frame_application): parser.error('Provide both frame CSV and application')
     if args.comparison_key and not re.fullmatch(r'[a-zA-Z0-9_.-]{1,96}',args.comparison_key): parser.error('Invalid comparison key')
+    if args.transport_mode and not args.viewer_log:parser.error('--transport-mode requires --viewer-log')
+    log_start=args.viewer_log.stat() if args.viewer_log else None
     frames=None
     if args.frame_csv:
         try: frames=read_frame_times(args.frame_csv,args.frame_application)
@@ -168,15 +183,25 @@ def main():
     context_after=comparison_context(args.container)
     report.update(comparisonKey=args.comparison_key,frameTimes=frames,context=context_before,contextStable=context_before==context_after)
     if args.viewer_log:
-        with args.viewer_log.open('rb') as stream:
-            stream.seek(max(0,args.viewer_log.stat().st_size-262144))
-            report['viewer']=viewer_metrics(stream.read(262144).decode('utf-8',errors='replace'))
+        try:
+            with args.viewer_log.open('rb') as stream:
+                end=os.fstat(stream.fileno());same=(end.st_dev,end.st_ino)==(log_start.st_dev,log_start.st_ino) and end.st_size>=log_start.st_size
+                count=end.st_size-log_start.st_size if same else 0
+                stream.seek(max(log_start.st_size,end.st_size-262144) if same else end.st_size)
+                report['viewer']=viewer_metrics(stream.read(262144).decode('utf-8',errors='replace'))
+                report['viewerWindowComplete']=same and count<=262144
+        except OSError:
+            report.update(viewer=[],viewerWindowComplete=False,viewerError='Viewer log unavailable during measurement')
+        if args.transport_mode:
+            report['transportEvidence']=transport_evidence(report['viewer'],args.transport_mode) if report['viewerWindowComplete'] else {'state':'unknown','reason':'Viewer log rotated or exceeded capture bound'}
+            report['transportMode']=args.transport_mode
         report['viewerPhases']=viewer_phase_summary(report['viewer'])
         report['viewerScope']='Fixed counters from a bounded log tail; verify PID, console and monotonic interval before comparing.'
     descriptor=os.open(args.output,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
     with os.fdopen(descriptor,'w') as output: json.dump(report,output,indent=2);output.write('\n')
     print('Recording:',args.output)
     print(json.dumps(report['summary']))
+    if args.transport_mode and report.get('transportEvidence',{}).get('state')!='observed':parser.exit(2,'Requested transport not verified; report retained. Use a moving scene and the matching viewer test mode.\n')
     if not report['summary']['validCpuSamples']: parser.exit(1,'No valid container CPU samples; report contains the failures.\n')
 
 

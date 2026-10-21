@@ -55,6 +55,9 @@ int main(void) {
  g_assert_cmpint(gdk_gl_context_get_api(gtk_gl_area_get_context(GTK_GL_AREA(area))),==,expected_api);
  g_assert_true(eglGetCurrentDisplay()!=EGL_NO_DISPLAY);
  Viewer v={0};g_assert_true(initialize_gl(&v));
+ v.accelerated=TRUE;v.transport_mode=1;g_assert_false(transport_allowed(&v,"UpdateDMABUF"));g_assert_true(transport_allowed(&v,"Scanout"));
+ v.transport_mode=2;g_assert_false(transport_allowed(&v,"Scanout"));g_assert_true(transport_allowed(&v,"UpdateDMABUF"));
+ v.accelerated=FALSE;g_assert_true(transport_allowed(&v,"Scanout"));v.transport_mode=1;g_assert_true(transport_allowed(&v,"UpdateDMABUF"));v.transport_mode=0;
  FramePacer pacer={0};unsigned consumed=0;
  for (int64_t now=0;now<10000000;now+=16667) if(frame_pacer_consume(&pacer,now,5,true))consumed++;
  g_assert_cmpuint(consumed,==,50);

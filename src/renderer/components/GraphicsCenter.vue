@@ -24,6 +24,7 @@
         <p class="text-sm text-neutral-400">Same workload and resolution for A1/B1/A2/B2. Records container CPU and available host GPU sensors for about 20 seconds; no guest FPS is inferred.</p>
         <input v-model="workload" aria-label="Workload comparison key" placeholder="same-scene-1920x1080" class="bg-neutral-900 p-2" />
         <select v-model="label" aria-label="Comparison arm" class="bg-neutral-900 p-2"><option v-for="arm in ['A1','B1','A2','B2']" :key="arm">{{ arm }}</option></select>
+        <select v-model="expectedTransport" aria-label="Expected viewer transport" class="bg-neutral-900 p-2"><option value="">Any transport</option><option value="copy">Verify Copy test</option><option value="dmabuf">Verify DMA-BUF test</option></select>
         <x-button :disabled="busy || blocked" @click="measure">Record measurement</x-button>
         <x-button :disabled="busy || blocked" @click="compareMeasurements">Compare four measurements</x-button>
         <p class="text-sm mt-2">{{ message }}</p>
@@ -31,6 +32,7 @@
 </template>
 <script setup lang="ts">
 import {ref,watch} from 'vue';
+import {viewerTelemetryPath} from '../lib/helios-display';
 import {nativeDesktopEnvironment} from '../../shared/native-desktop-environment';
 import {hostEnvironment} from '../lib/host-environment';
 defineProps<{blocked:boolean}>();
@@ -39,7 +41,7 @@ const remote:typeof import('@electron/remote')=require('@electron/remote');
 const child:typeof import('child_process')=require('child_process');
 const path:typeof import('path')=require('path');
 const {promisify}:typeof import('util')=require('util');
-const workload=ref(''),label=ref('A1');
+const workload=ref(''),label=ref('A1'),expectedTransport=ref('');
 const busy=ref(false),message=ref('');const status=ref<Record<string,any>>();
 watch(busy,value=>emit('busy',value));
 const actions=[['preflight','Check graphics stack compatibility'],['load','Inspect guest CPU and I/O load'],['helios-disable','Disable Helios; keep VGA'],['rescue-boot','VGA-only rescue boot'],['restore-host','Restore host graphics'],['check-update','Check update transaction'],['prepare-rollback','Prepare stable rollback'],['capture-enable','Capture DWM dumps (30 minutes)'],['capture-disable','Stop DWM dump capture']];
@@ -69,7 +71,14 @@ async function measure(){
         if(!/^[a-zA-Z0-9_.-]{1,96}$/.test(workload.value))throw new Error('Enter the same short scene/resolution key for all four runs.');
         const choice=await remote.dialog.showSaveDialog({title:'Save performance measurement',defaultPath:`helios-${label.value}.json`,filters:[{name:'JSON',extensions:['json']}]});
         if(choice.canceled||!choice.filePath)return;message.value='Recording. Keep the workload unchanged…';
-        await execute('measure-performance.py',['--label',label.value,'--comparison-key',workload.value,'--output',choice.filePath]);
+        const args=['--label',label.value,'--comparison-key',workload.value,'--output',choice.filePath];
+        const fs:typeof import('fs')=require('fs');
+        if(fs.existsSync(viewerTelemetryPath()))args.push('--viewer-log',viewerTelemetryPath());
+        if(expectedTransport.value){
+            if(!fs.existsSync(viewerTelemetryPath()))throw new Error('Open Local Desktop and wait for its statistics before a transport comparison.');
+            args.push('--transport-mode',expectedTransport.value);
+        }
+        await execute('measure-performance.py',args);
         message.value=`Saved ${label.value}. Repeat the same scene for the remaining arms.`;remote.shell.showItemInFolder(choice.filePath);
     }catch(error){message.value=error instanceof Error?error.message:String(error);}finally{busy.value=false;}
 }
