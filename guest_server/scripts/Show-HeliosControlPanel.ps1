@@ -139,6 +139,17 @@ Add-HeliosButton 'Nur auf dieser VM als getestet markieren' {
 Add-HeliosButton 'Lokale Freigabe zuruecknehmen' {
     Invoke-HeliosPanel {& (Join-Path $PSScriptRoot 'Manage-HeliosRelease.ps1') -Action Reset | ConvertFrom-Json}
 }
+Add-HeliosLabel 'Stabil / Experimentell: den gebündelten stabilen Treiber behalten. Kandidaten werden erst nach Neustart, Tests und sichtbarer Prüfung angenommen.'
+$pin=New-Object Windows.Forms.TextBox;$pin.Width=800;$layout.Controls.Add($pin)
+Add-HeliosLabel 'Unabhängig geprüften SHA-256 des ausgewählten Installers oben eintragen (CI-Prüfsumme). Der Ordner muss HeliosSetup.exe und helios-build.json enthalten.'
+function Invoke-HeliosBundleSelection([string]$Operation) {
+    $dialog=New-Object Windows.Forms.FolderBrowserDialog
+    if($dialog.ShowDialog() -ne 'OK'){return @{status='cancelled'}}
+    return & (Join-Path $PSScriptRoot 'Manage-HeliosTransaction.ps1') -Action $Operation -BundlePath $dialog.SelectedPath -ExpectedSha256 $pin.Text.Trim() -ObservedStable:$observed.Checked | ConvertFrom-Json
+}
+Add-HeliosButton 'Geprüftes Paket als stabil merken' {Invoke-HeliosPanel {Invoke-HeliosBundleSelection 'RememberStable'}}
+Add-HeliosButton 'Experimentelles Paket installieren' {Invoke-HeliosPanel {Invoke-HeliosBundleSelection 'Install'}}
+Add-HeliosButton 'Rollback vorbereiten (VGA-Rettungsstart)' {Invoke-HeliosPanel {& (Join-Path $PSScriptRoot 'Manage-HeliosTransaction.ps1') -Action Rollback | ConvertFrom-Json}}
 Add-HeliosButton 'Update nach Neustart bestätigen' {
     Invoke-HeliosPanel {& (Join-Path $PSScriptRoot 'Manage-HeliosTransaction.ps1') -Action Accept -ObservedStable:$observed.Checked | ConvertFrom-Json}
 }

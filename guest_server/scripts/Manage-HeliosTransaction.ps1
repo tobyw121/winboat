@@ -97,6 +97,12 @@ function Invoke-HeliosTransaction([string]$Operation) {
         if (-not $stable.PSObject.Properties['machineId'] -or $stable.machineId -ne $identity.machineId) {throw 'Record a stable baseline for this VM identity before updating.'}
         if (-not $stable.PSObject.Properties['profile'] -or
             ($stable.profile | ConvertTo-Json -Compress) -ne ($identity.profile | ConvertTo-Json -Compress)) {throw 'Record a stable baseline with the current driver options before updating.'}
+        # Verify the retained rollback executable before touching the running stack.
+        $stableExe=Join-Path $root ($stable.sha256+'\HeliosSetup.exe')
+        if($stable.sha256 -notmatch '^[a-fA-F0-9]{64}$' -or
+            (Get-FileHash -LiteralPath $stableExe -Algorithm SHA256).Hash -ine $stable.sha256){throw 'Recorded rollback installer is missing or changed.'}
+        $existing=Invoke-HeliosTransaction 'Status'
+        if($existing.status -notin @('none','accepted')){throw 'Resolve the previous driver transaction before installing another candidate.'}
         $bundle=Save-HeliosTransactionBundle $BundlePath $ExpectedSha256
         Enter-HeliosTransactionMaintenance
         $state=[ordered]@{schema=1;id=[guid]::NewGuid().ToString('N');status='prepared';candidate=$bundle;previous=$stable;
@@ -116,6 +122,14 @@ function Invoke-HeliosTransaction([string]$Operation) {
         return $state
     }
     $state=Read-HeliosValidationJson $path
+    if($Operation -eq 'Check' -and $state.status -in @('prepared','restoring')) {
+        # A process/host interruption must not leave an apparently successful update.
+        $state.status='rollback-required';$state.reason='interrupted-installation'
+        $rescue=Protect-HeliosTransaction
+        $state | Add-Member NoteProperty recovery $rescue.status -Force
+        Write-HeliosValidationJson 'transaction.json' $state
+        return $state
+    }
     if ($Operation -eq 'Rollback') {
         # Only verified Helios packages, only with Helios physically absent.
         . (Join-Path $PSScriptRoot 'Clear-HeliosDriverStore.ps1') -LibraryOnly

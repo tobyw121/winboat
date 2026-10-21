@@ -10,6 +10,9 @@ on:
       - 'guest_server/graphics_monitor*'
       - 'guest_server/graphics_breaker*'
       - 'guest_server/graphics_rescue*'
+      - 'guest_server/graphics_maintenance*'
+      - 'tests/helios-transaction-interruption.test.ps1'
+      - 'guest_server/scripts/Analyze-HeliosDump.ps1'
       - 'guest_server/graphics_pnp*'
       - 'guest_server/scripts/Set-HeliosRescue.ps1'
       - 'guest_server/scripts/Initialize-DisplayRecoveryKey.ps1'
@@ -84,6 +87,9 @@ on:
       - 'guest_server/graphics_monitor*'
       - 'guest_server/graphics_breaker*'
       - 'guest_server/graphics_rescue*'
+      - 'guest_server/graphics_maintenance*'
+      - 'tests/helios-transaction-interruption.test.ps1'
+      - 'guest_server/scripts/Analyze-HeliosDump.ps1'
       - 'guest_server/graphics_pnp*'
       - 'guest_server/scripts/Set-HeliosRescue.ps1'
       - 'guest_server/scripts/Initialize-DisplayRecoveryKey.ps1'
@@ -210,6 +216,7 @@ jobs:
           ./tests/helios-validation.test.ps1
           ./tests/helios-validation-storage.test.ps1
           ./tests/helios-transaction.test.ps1
+          ./tests/helios-transaction-interruption.test.ps1
           ./guest_server/scripts/Show-HeliosControlPanel.ps1 -CheckUI
           ./tests/atlas-helios-handoff.test.ps1
       - name: Test provisioning and handoff (Windows PowerShell 5.1)
