@@ -312,7 +312,7 @@
     "nix/default.nix": "5efca4be649d19cbdd6015173617531131ebc13829ed440c4403d7b7b2bd3d40",
     "nix/standalone.nix": "5454bede3534f03ed573ad598ffbee9cf093b063f10c957b7618dda2d6d73645",
     "nix/windows-dependencies.nix": "5db34f398a22bc9f424fa061a58f4f40dfc3fadd6fa28a81823b7b14ce2fcd69",
-    "packaging/windows/Clear-HeliosDriverStore.ps1": "d4f1f801bcdd0d19a2c544025fe5cf77fef3d045313c0964c68368f1a250d663",
+    "packaging/windows/Clear-HeliosDriverStore.ps1": "be7953f2c78b08796aec47d645d5b16fd9c5a60f0887683e6a2a89ab03c34564",
     "packaging/windows/Helios-PackageCommon.ps1": "b76da6667fc1117cbe562a8004c641509b303d2eb3da153208700124c248201f",
     "packaging/windows/Install-Helios.ps1": "f8eadd2da8b405261073c1c02541d3fa4823c73c3cc6d56272528131f6b9410a",
     "packaging/windows/README.md": "6fb7805c2689bb577be675d9262c0b90fc0b71829d5ef656dc0513931cf6785f",

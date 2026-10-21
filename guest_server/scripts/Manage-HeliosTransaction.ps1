@@ -1,5 +1,5 @@
 param([ValidateSet('Status','RememberStable','Install','Check','Accept','Rollback')][string]$Action='Status',
-    [string]$BundlePath,[string]$ExpectedSha256,[switch]$ObservedStable,[switch]$LibraryOnly)
+    [string]$BundlePath,[string]$ExpectedSha256,[switch]$ObservedStable,[switch]$LibraryOnly,[switch]$Quiet)
 . (Join-Path $PSScriptRoot 'Helios-ValidationCommon.ps1')
 function Assert-HeliosAcceptance($Report,$Identity) {
     $finish=[DateTimeOffset]::Parse($Report.finishedAtUtc)
@@ -133,7 +133,7 @@ function Invoke-HeliosTransaction([string]$Operation) {
     if ($Operation -eq 'Rollback') {
         # Only verified Helios packages, only with Helios physically absent.
         . (Join-Path $PSScriptRoot 'Clear-HeliosDriverStore.ps1') -LibraryOnly
-        $result=Invoke-HeliosDriverStoreCleanup
+        $result=Invoke-HeliosDriverStoreCleanup ([bool]$Quiet)
         $state.status=if($result.status -eq 'restart-required'){'rollback-cleanup-restart'}else{'rollback-staged'}
         Write-HeliosValidationJson 'transaction.json' $state
         return $state

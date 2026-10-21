@@ -21,5 +21,9 @@ func runGraphicsMaintenance(ctx context.Context, action string) ([]byte, error) 
 		return nil, err
 	}
 	script := filepath.Join(filepath.Dir(executable), "scripts", choice[0])
-	return exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, "-Action", choice[1]).Output()
+	args := []string{"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, "-Action", choice[1]}
+	if choice[0] == "Manage-HeliosTransaction.ps1" {
+		args = append(args, "-Quiet")
+	}
+	return exec.CommandContext(ctx, "powershell.exe", args...).Output()
 }

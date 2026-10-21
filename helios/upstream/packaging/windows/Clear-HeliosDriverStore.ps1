@@ -48,7 +48,7 @@ function Get-VerifiedHeliosPackages {
             sha256=(Get-FileHash -LiteralPath $published -Algorithm SHA256).Hash}
     })
 }
-function Invoke-HeliosDriverStoreCleanup {
+function Invoke-HeliosDriverStoreCleanup([bool]$Quiet=$false) {
     Assert-HeliosAbsentWithVGA
     Set-HeliosCleanupHold
     # Enumerate and verify ALL candidates before removing the first package.
@@ -57,15 +57,17 @@ function Invoke-HeliosDriverStoreCleanup {
     $backup=Join-Path $env:ProgramData ('WinBoat\DriverStoreBackup\'+[DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss')+'-'+[guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $backup -Force | Out-Null
     foreach($package in $packages) {
-        & pnputil.exe /export-driver $package.driver $backup | Out-Host
+        $nativeOutput=& pnputil.exe /export-driver $package.driver $backup
+        if(-not $Quiet){$nativeOutput | Out-Host}
         if ($LASTEXITCODE -ne 0) {throw "Backup failed for $($package.driver). No packages were removed."}
     }
     $removed=@();$pending=$false
     foreach($package in $packages) {
         Assert-HeliosAbsentWithVGA
         if ((Get-FileHash -LiteralPath $package.published -Algorithm SHA256).Hash -ne $package.sha256) {throw 'Published INF changed; cleanup stopped.'}
-        Write-Host "Removing $($package.driver), Helios $($package.version)"
-        & pnputil.exe /delete-driver $package.driver /uninstall /force | Out-Host
+        if(-not $Quiet){Write-Host "Removing $($package.driver), Helios $($package.version)"}
+        $nativeOutput=& pnputil.exe /delete-driver $package.driver /uninstall /force
+        if(-not $Quiet){$nativeOutput | Out-Host}
         if ($LASTEXITCODE -notin @(0,3010)) {throw "Package removal failed for $($package.driver). Backup: $backup. Automatic setup remains paused."}
         if ($LASTEXITCODE -eq 3010) {$pending=$true}
         $removed+=$package.driver

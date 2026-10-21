@@ -47,6 +47,9 @@ try {
     if($script:calls.Count -ne 4 -or $script:calls[0][0] -ne '/export-driver' -or $script:calls[1][0] -ne '/export-driver' -or
         ($script:calls[2] -join ' ') -ne '/delete-driver oem17.inf /uninstall /force') {throw 'Export-first/native removal contract failed'}
     if((Invoke-HeliosDriverStoreCleanup).status -ne 'already-clean'){throw 'Repeat cleanup failed'}
+    $script:packages=@((New-Fixture))
+    $quiet=@(& {Invoke-HeliosDriverStoreCleanup $true} 6>&1)
+    if($quiet.Count -ne 1 -or $quiet[0].status -ne 'removed'){throw 'API cleanup emitted non-JSON host output'}
     $script:packages=@((New-Fixture),(New-Fixture 'oem99.inf' 'WinBoat' 'unknown.inf'));$script:calls=@()
     Assert-Failure {Invoke-HeliosDriverStoreCleanup} 'Unrecognized'
     if($script:calls.Count){throw 'Removed before validating all packages'}
