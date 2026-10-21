@@ -306,6 +306,20 @@ func main() {
 		}
 	}
 	r := mux.NewRouter()
+	r.HandleFunc("/integration/power", vmPowerHandler(requestWindowsPower)).Methods("POST")
+	r.HandleFunc("/integration/exchange/open", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Origin") != "" || r.Header.Get("X-WinBoat-Exchange") != "open" {
+			http.Error(w, "Explicit local request required", 400)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		if openGuestExchange(ctx) != nil {
+			http.Error(w, "Sign in to the Windows console first", 503)
+			return
+		}
+		w.WriteHeader(204)
+	}).Methods("POST")
 	clip := &clipboardBroker{launch: launchClipboardWorker}
 	go clip.run(context.Background().Done())
 	r.HandleFunc("/integration/clipboard", clip.handler).Methods("GET", "POST", "DELETE")
