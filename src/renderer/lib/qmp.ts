@@ -2,7 +2,7 @@ import { WINBOAT_DIR } from "./constants";
 import { createLogger } from "../utils/log";
 const path: typeof import('path') = require('path');
 import { type Socket } from 'net';
-import { assert } from "@vueuse/core";
+import {QMPTransport} from "../../shared/qmp-protocol";
 const { createConnection }: typeof import('net') = require('net');
 
 const logger = createLogger(path.join(WINBOAT_DIR, 'qmp.log'));
@@ -100,12 +100,13 @@ export type QMPResponse<T extends QMPCommand> = QMPReturn<
 export class QMPManager {
     private static IS_ALIVE_TIMEOUT = 2000;
     qmpSocket: Socket;
+    private protocol:QMPTransport;
 
     /**
      * Please use {@link QMPManager.createConnection} instead.
      */
     constructor(socket: Socket) {
-        this.qmpSocket = socket;
+        this.qmpSocket = socket;this.protocol=new QMPTransport(socket);
     }
 
     /**
@@ -118,26 +119,8 @@ export class QMPManager {
      * 
      */
     static async createConnection(host: string, port: number): Promise<QMPManager> {
-        return new Promise((resolve, reject) => {
-            const socket = createConnection({ host, port }, () => {
-                socket.once("error", reject);
-                socket.once("data", (data) => {
-                    try {
-                        const response = JSON.parse(data.toString());
-                        
-                        if("QMP" in response) {
-                            return resolve(new QMPManager(socket));
-                        } 
-    
-                        reject(new Error(`Invalid QMP response: ${data.toString()}`));
-                    } catch (e) {
-                        logger.error(e);
-                        logger.error(`QMP request 'data.toString()': ${data.toString()}`)
-                        reject(e);
-                    }
-                });
-            });
-        });
+        const socket=createConnection({host,port});const manager=new QMPManager(socket);
+        try{await manager.protocol.greeting;return manager;}catch(error){socket.destroy();throw error;}
     }
     
     /**
@@ -151,28 +134,7 @@ export class QMPManager {
     async executeCommand<C extends QMPCommandNoArgs>(command: C): Promise<QMPResponse<C>>
     async executeCommand<C extends QMPCommandWithArgs>(command: C, qmpArgument: QMPCommandExpectedArgument<C>): Promise<QMPResponse<C>>
     async executeCommand<C extends QMPCommand>(command: C,  qmpArgument?: QMPCommandExpectedArgument<C>): Promise<QMPResponse<C>> {
-        const message = { 
-            execute: command,
-            ...qmpArgument && { arguments: qmpArgument }
-        };
-
-        return new Promise<QMPResponse<C>>((resolve, reject) => {
-            this.qmpSocket.write(JSON.stringify(message), (err) => {
-                if(err) {
-                    logger.error(err);
-                    reject(err);
-                }
-                this.qmpSocket.once("data", (data: Buffer) => {
-                    try {
-                        resolve(JSON.parse(data.toString()));
-                    } catch(e) {
-                        logger.error(e);
-                        logger.error(`QMP request 'data.toString()': ${data.toString()}`)
-                        reject(e);
-                    }
-                });
-            });
-        });
+        return this.protocol.request(command,qmpArgument) as Promise<QMPResponse<C>>;
     }
 
     /**
@@ -182,28 +144,8 @@ export class QMPManager {
      * 
      */
     async isAlive(): Promise<boolean> {
-        return new Promise(async (resolve, _) => {
-            if (this.qmpSocket.closed || this.qmpSocket.destroyed) { 
-                return resolve(false);
-            }
-
-            const tm = setTimeout(_ => {
-                logger.warn("Querying status of QMP connection timed out.");
-                resolve(false);
-            }, QMPManager.IS_ALIVE_TIMEOUT);
-
-            this.executeCommand("query-status").then((response) => {
-                assert("return" in response);
-                clearTimeout(tm);
-                resolve(true);
-            }).catch(e => {
-                logger.error(`There was an error querying status of QMP connection`);
-                logger.error(e);
-            }).finally(() => {
-                clearTimeout(tm);
-                resolve(false);
-            });
-        })
+        if(this.qmpSocket.destroyed)return false;
+        try{const result=await this.protocol.request('query-status',undefined,QMPManager.IS_ALIVE_TIMEOUT);return 'return' in result;}catch{return false;}
     }
 
     private static handleError(e: unknown, msg?: string) {
