@@ -48,6 +48,16 @@ class ComparisonTests(unittest.TestCase):
             with path.open('a') as output: output.write('game.exe,4,30\n')
             with self.assertRaises(ValueError): metrics.read_frame_times(path,'game.exe')
 
+    def test_lifetime_does_not_mistake_tail_for_leak(self):
+        rows=[{'kind':k} for k in ('resource-frame','resource-release','resource-frame','resource-release')]
+        r=correlation.lifetime(rows)
+        self.assertFalse(r['prefixComplete'])
+        self.assertEqual([x['kind'] for x in r['possibleViolations']],['frame-after-release','repeated-release'])
+        self.assertEqual(correlation.lifetime([{'kind':'resource-create'}])['tailState'],'live')
+        evidence=correlation.frame_evidence([{'kind':'capture','inode':1,'sequence':2},{'kind':'ack','inode':1,'sequence':2}])
+        self.assertFalse(evidence['endToEndVerified'])
+        self.assertEqual(evidence['captureCandidates'][0]['association'],'ambiguous-or-incomplete')
+
     def test_resource_lifecycle_keeps_host_scope(self):
         rows=[{'kind':kind,'resourceId':1,'source':2,'inode':3} for kind in ('resource-create','resource-frame','resource-release')]
         result=correlation.correlate({'host':{'frameMetrics':rows,'transportErrors':[{'kind':'budget-rejected'}]}})

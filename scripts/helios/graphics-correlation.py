@@ -32,6 +32,39 @@ def contract_violations(row):
         if offset+(height-1)*stride+width*4>size:issues.append('linear-extent-exceeds-fd')
     return issues
 
+def lifetime(events):
+    state='unknown';issues=[];cycles=0
+    for index,row in enumerate(events):
+        kind=row['kind']
+        if kind=='resource-create':
+            if state=='live':issues.append({'eventIndex':index,'kind':'create-before-release'})
+            state='live';cycles+=1
+        elif kind=='resource-frame':
+            if state=='released':issues.append({'eventIndex':index,'kind':'frame-after-release'})
+        elif kind=='resource-release':
+            if state=='released':issues.append({'eventIndex':index,'kind':'repeated-release'})
+            state='released'
+    return {'observedCreates':cycles,'tailState':state,'possibleViolations':issues,
+            'prefixComplete':bool(events and events[0]['kind']=='resource-create'),
+            'scope':'Bounded tail; open resources are not leaks. IDs may be reused after a process restart; violations require a matching process epoch.'}
+
+def frame_evidence(rows):
+    # Vulkan capture counters and listener ACK counters are independent. Their
+    # coincident numeric value must never be used as a cross-stage frame ID.
+    frames={}
+    for row in rows:
+        if row.get('kind') not in ('capture','resource-frame'):continue
+        key=(row.get('inode'),row.get('sequence'))
+        if None in key:continue
+        frames.setdefault(key,[]).append(row)
+    result=[]
+    for (inode,sequence),events in frames.items():
+        captures=[r for r in events if r['kind']=='capture'];resources=[r for r in events if r['kind']=='resource-frame']
+        result.append({'inode':inode,'sequence':sequence,'events':events,
+                      'association':'candidate' if len(captures)==len(resources)==1 else 'ambiguous-or-incomplete'})
+    return {'captureCandidates':result,'acks':[r for r in rows if r.get('kind')=='ack'],
+            'endToEndVerified':False,'scope':'No common guest/host/viewer frame token yet. Candidate inode/sequence joins require the same process epoch. ACK is source-read completion, not visible presentation.'}
+
 def correlate(report):
     runtime=report.get('graphics/diagnostics/runtime',{}).get('driver',{})
     timing=report.get('requestTiming',{}).get('graphics/diagnostics/runtime',{})
@@ -66,6 +99,7 @@ def correlate(report):
     for row in report.get('host',{}).get('frameMetrics',[]):
         if row.get('kind') in ('dmabuf-export','dmabuf-import'):
             contracts.setdefault(row['inode'],[]).append(row)
+    for group in resources.values():group['lifetime']=lifetime(group['events'])
     contract_rows=[]
     for inode,contract_events in contracts.items():
         imports=[row for row in contract_events if row['kind']=='dmabuf-import']
@@ -76,7 +110,7 @@ def correlate(report):
                               'multipleExports':sum(row['kind']=='dmabuf-export' for row in contract_events)>1})
     first_failure=next(iter(report.get('host',{}).get('transportErrors',[])),None)
     return {'schema':1,'captureId':report.get('captureId'),'guestMinusHostClockRange':offset,
-            'bufferContracts':contract_rows,
+            'bufferContracts':contract_rows,'frameEvidence':frame_evidence(report.get('host',{}).get('frameMetrics',[])),
             'resourceTimeline':list(resources.values()),'firstObservedHostFailure':first_failure,
             'resourceScope':'Process-local IDs and bounded historical tail; no inferred equality with guest KMD IDs or Vulkan object handles.',
             'guestEvents':events,'umdFiles':logs,'hostEvents':report.get('host',{}).get('transportErrors',[])[-32:],

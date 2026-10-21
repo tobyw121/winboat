@@ -108,6 +108,9 @@ func collectHeliosDiagnostics(ctx context.Context) ([]byte, error) {
 func collectHeliosJournals(ctx context.Context) ([]byte, error) {
 	return collectGraphicsScript(ctx, "Get-HeliosJournalReport.ps1")
 }
+func collectGraphicsLoad(ctx context.Context) ([]byte, error) {
+	return collectGraphicsScript(ctx, "Get-GraphicsLoad.ps1")
+}
 func collectGraphicsRuntime(ctx context.Context) ([]byte, error) {
 	return collectGraphicsScript(ctx, "Get-GraphicsRuntimeDiagnostics.ps1")
 }

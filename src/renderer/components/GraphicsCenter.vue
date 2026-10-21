@@ -10,6 +10,7 @@
             <dt>Last acknowledged transport</dt><dd>{{ status.transport?.transport || 'unknown' }} ({{ status.transport?.state }})</dd>
             <dt>Update transaction</dt><dd>{{ status.transaction?.status || 'not-recorded' }}</dd>
         </dl>
+        <p v-if="status?.repair" class="text-sm mt-2">Repair: {{ status.repair.reason }}. Next step: {{ status.repair.action }}.</p>
         <details v-if="status"><summary>Adapter, loaded module and error details</summary><pre class="text-xs whitespace-pre-wrap max-h-64 overflow-auto">{{ JSON.stringify(status,null,2) }}</pre></details>
         <div class="flex flex-wrap gap-2 mt-3">
             <x-button v-for="item in actions" :key="item[0]" :disabled="busy || blocked" @click="run(item[0])">{{ item[1] }}</x-button>
@@ -41,7 +42,7 @@ const {promisify}:typeof import('util')=require('util');
 const workload=ref(''),label=ref('A1');
 const busy=ref(false),message=ref('');const status=ref<Record<string,any>>();
 watch(busy,value=>emit('busy',value));
-const actions=[['helios-disable','Disable Helios; keep VGA'],['rescue-boot','VGA-only rescue boot'],['restore-host','Restore host graphics'],['check-update','Check update transaction'],['prepare-rollback','Prepare stable rollback'],['capture-enable','Capture DWM dumps (30 minutes)'],['capture-disable','Stop DWM dump capture']];
+const actions=[['preflight','Check graphics stack compatibility'],['load','Inspect guest CPU and I/O load'],['helios-disable','Disable Helios; keep VGA'],['rescue-boot','VGA-only rescue boot'],['restore-host','Restore host graphics'],['check-update','Check update transaction'],['prepare-rollback','Prepare stable rollback'],['capture-enable','Capture DWM dumps (30 minutes)'],['capture-disable','Stop DWM dump capture']];
 function scriptPath(name:string){return remote.app.isPackaged?path.join(process.resourcesPath,'graphics-tools',name):path.resolve(remote.app.getAppPath(),'../..','scripts/helios',name);}
 async function execute(name:string,args:string[]){return promisify(child.execFile)('python3',[scriptPath(name),...args],{timeout:240000,maxBuffer:262144,
     env:nativeDesktopEnvironment(hostEnvironment(),remote.app.isPackaged?path.dirname(process.resourcesPath):undefined)});}
@@ -86,7 +87,7 @@ async function compareMeasurements(){
 async function run(action:string){
     if(busy.value)return;busy.value=true;
     try{
-        if(action!=='status'){
+        if(!['status','load','preflight'].includes(action)){
             const answer=await remote.dialog.showMessageBox({type:'warning',message:`${actions.find(item=>item[0]===action)?.[1]}?`,
                 detail:action.startsWith('capture-')?'Dumps may contain private memory and stay in Windows. Capture expires after 30 minutes. No dump is uploaded.':'Save work first. Host rescue/recovery can restart this VM. Rollback only cleans verified Helios packages with Helios physically absent; Windows data is preserved.',
                 buttons:['Continue','Cancel'],defaultId:1,cancelId:1});
@@ -98,6 +99,7 @@ async function run(action:string){
             env:nativeDesktopEnvironment(hostEnvironment(),remote.app.isPackaged?path.dirname(process.resourcesPath):undefined)});
         const data=JSON.parse(stdout.trim().split('\n').pop()??'');
         if(action==='status'){status.value=data;message.value='Updated. No driver or VM setting changed.';}
+        else if(['load','preflight'].includes(action))message.value=JSON.stringify(data.driver??data,null,2);
         else message.value=`Result: ${data.status || 'completed'}. Refresh status after Windows is available.`;
     }catch(error){message.value=error instanceof Error?error.message:String(error);}
     finally{busy.value=false;}

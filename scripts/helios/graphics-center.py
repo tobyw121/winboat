@@ -12,7 +12,7 @@ def module(name):
     spec=importlib.util.spec_from_file_location(name,Path(__file__).with_name(name+'.py'))
     result=importlib.util.module_from_spec(spec);spec.loader.exec_module(result);return result
 
-diag=module('diagnose-graphics');rescue=module('rescue-graphics')
+diag=module('diagnose-graphics');rescue=module('rescue-graphics');preflight=module('graphics-preflight')
 
 def transport(rows,now=None):
     now=now or datetime.datetime.now(datetime.timezone.utc)
@@ -31,6 +31,7 @@ def summary(host,adapters,driver,validation):
     return {'schema':1,'adapters':adapters,
             'boundVersions':sorted({c['DriverVersion'] for c in controllers if isinstance(c.get('DriverVersion'),str)}),
             'loadedModules':[{k:m[k] for k in ('name','version') if k in m} for p in app.get('loadedApplications',[])[:8] for m in p.get('modules',[])[:16]],
+            'repair':preflight.repair(adapters,transaction),
             'transaction':{k:transaction[k] for k in ('status','reason') if k in transaction},
             'stable':validation.get('last-good',{}).get('version','not-recorded'),
             'candidate':transaction.get('candidate',{}).get('version','not-recorded'),
@@ -47,7 +48,7 @@ def endpoint(container):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action',choices=('status','helios-disable','rescue-boot','restore-host','check-update','prepare-rollback','capture-enable','capture-disable'))
+    parser.add_argument('action',choices=('status','preflight','load','helios-disable','rescue-boot','restore-host','check-update','prepare-rollback','capture-enable','capture-disable'))
     parser.add_argument('--container',default='WinBoat');args=parser.parse_args()
     try:
         if args.action in ('rescue-boot','restore-host'):
@@ -55,7 +56,34 @@ def main():
         elif args.action=='helios-disable':result=rescue.guest_action(args.container,args.action)
         else:
             base=endpoint(args.container);opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),rescue.NoRedirect())
-            if args.action=='status':
+            if args.action=='load':
+                result=diag.read_endpoint(opener,base,'graphics/diagnostics/load',20)
+            elif args.action=='preflight':
+                root=Path(__file__).resolve().parents[2]
+                packaged=Path(__file__).parent.name=='graphics-tools'
+                resources=Path(__file__).parent.parent if packaged else root/'resources'
+                receipt=json.loads((resources/'helios/helios-build.json').read_text())
+                # The packaged requirements are generated from the shared constants.
+                if packaged:expected=json.loads((Path(__file__).parent/'requirements.json').read_text())
+                else:
+                    def constant(file,name):
+                        import re
+                        match=re.search(name+r" = '([^']+)'",(root/file).read_text())
+                        return match[1] if match else None
+                    expected={key:constant(file,name) for key,file,name in (
+                        ('runtime','src/shared/helios.ts','HELIOS_RUNTIME_VERSION'),('revision','src/shared/helios.ts','HELIOS_GUEST_REVISION'),
+                        ('guest','src/shared/guest-protocol.ts','GUEST_GRAPHICS_PROTOCOL'),('guestRuntime','src/shared/guest-protocol.ts','GUEST_RUNTIME_PROTOCOL'),
+                        ('display','src/shared/helios-display.ts','HELIOS_DISPLAY_VERSION'))}
+                    expected['viewer']=13
+                viewer=resources/'native/winboat-helios-viewer' if packaged else root/'build/native/winboat-helios-viewer'
+                observed=None
+                if viewer.is_file():
+                    value=subprocess.check_output([str(viewer),'--version'],text=True,timeout=5).strip()
+                    import re
+                    match=re.fullmatch(r'winboat-helios-viewer (\d+)',value)
+                    if match:observed=int(match[1])
+                result=preflight.assess(diag.collect_host(args.container),diag.read_endpoint(opener,base,'version',3),observed,receipt,expected)
+            elif args.action=='status':
                 adapters=diag.read_endpoint(opener,base,'graphics/adapters',3)
                 driver=diag.read_endpoint(opener,base,'graphics/diagnostics',20).get('driver',{})
                 validation=diag.read_endpoint(opener,base,'graphics/validation',3)
