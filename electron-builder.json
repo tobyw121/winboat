@@ -57,7 +57,7 @@
     {
       "from": "./scripts/helios",
       "to": "graphics-tools",
-      "filter": ["diagnose-graphics.py", "graphics-correlation.py", "inspect-qemu-backend.py", "measure-performance.py", "export-support.py", "support-bundle.py", "graphics-trial.py", "rescue-graphics.py", "graphics-center.py", "compare-graphics.py", "compare-capabilities.py"]
+      "filter": ["diagnose-graphics.py", "graphics-correlation.py", "inspect-qemu-backend.py", "measure-performance.py", "export-support.py", "support-bundle.py", "graphics-trial.py", "rescue-graphics.py", "graphics-center.py", "compare-graphics.py", "compare-capabilities.py", "backup-vm.py"]
     },
     {
       "from": "./resources/shared-folders",

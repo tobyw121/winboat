@@ -15,6 +15,10 @@
             <x-button v-for="item in actions" :key="item[0]" :disabled="busy || blocked" @click="run(item[0])">{{ item[1] }}</x-button>
         </div>
         <p class="text-sm text-neutral-400 mt-2">Rollback requires a recorded stable package and a VGA-only rescue boot. Restoring host graphics does not automatically accept a candidate or re-enable a guest-disabled driver. Driver installation and visual acceptance remain in Windows Helios Control.</p>
+        <h3 class="font-semibold mt-3">Offline recovery backup</h3>
+        <p class="text-sm text-neutral-400">Shut down Windows cleanly first. Saves the complete bind-mounted storage and private container configuration. External disks and shared folders are excluded. The archive can contain passwords; keep it private.</p>
+        <x-button :disabled="busy || blocked" @click="backup(false)">Create verified storage backup</x-button>
+        <x-button :disabled="busy || blocked" @click="backup(true)">Verify existing backup</x-button>
         <h3 class="font-semibold mt-3">Performance comparison</h3>
         <p class="text-sm text-neutral-400">Same workload and resolution for A1/B1/A2/B2. Records container CPU and available host GPU sensors for about 20 seconds; no guest FPS is inferred.</p>
         <input v-model="workload" aria-label="Workload comparison key" placeholder="same-scene-1920x1080" class="bg-neutral-900 p-2" />
@@ -41,6 +45,23 @@ const actions=[['helios-disable','Disable Helios; keep VGA'],['rescue-boot','VGA
 function scriptPath(name:string){return remote.app.isPackaged?path.join(process.resourcesPath,'graphics-tools',name):path.resolve(remote.app.getAppPath(),'../..','scripts/helios',name);}
 async function execute(name:string,args:string[]){return promisify(child.execFile)('python3',[scriptPath(name),...args],{timeout:240000,maxBuffer:262144,
     env:nativeDesktopEnvironment(hostEnvironment(),remote.app.isPackaged?path.dirname(process.resourcesPath):undefined)});}
+async function backup(verify:boolean){
+    if(busy.value)return;busy.value=true;
+    try{
+        let file:string|undefined;
+        if(verify){
+            const choice=await remote.dialog.showOpenDialog({title:'Verify private offline backup',properties:['openFile'],filters:[{name:'TAR backup',extensions:['tar']}]});
+            if(choice.canceled)return;file=choice.filePaths[0];
+        }else{
+            const choice=await remote.dialog.showSaveDialog({title:'Save private offline storage backup',defaultPath:'winboat-private-backup.tar'});
+            if(choice.canceled)return;file=choice.filePath;
+        }
+        if(!file)return;message.value='Verifying storage. Large disks can take several minutes…';
+        const {stdout}=await promisify(child.execFile)('python3',[scriptPath('backup-vm.py'),verify?'--verify':'--create',file],
+            {timeout:24*60*60*1000,maxBuffer:65536,env:nativeDesktopEnvironment(hostEnvironment(),remote.app.isPackaged?path.dirname(process.resourcesPath):undefined)});
+        message.value=JSON.stringify(JSON.parse(stdout));remote.shell.showItemInFolder(file);
+    }catch(error){message.value=error instanceof Error?error.message:String(error);}finally{busy.value=false;}
+}
 async function measure(){
     if(busy.value)return;busy.value=true;
     try{
