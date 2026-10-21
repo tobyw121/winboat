@@ -294,6 +294,10 @@ func getIcon(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "--clipboard-agent" {
+		runClipboardAgent()
+		return
+	}
 	if len(os.Args) == 2 {
 		actions := map[string]string{"--display-session-probe": "probe", "--display-session-extend": "extend", "--display-session-clone": "clone", "--display-session-basic": "basic"}
 		if action, ok := actions[os.Args[1]]; ok {
@@ -302,6 +306,9 @@ func main() {
 		}
 	}
 	r := mux.NewRouter()
+	clip := &clipboardBroker{launch: launchClipboardWorker}
+	go clip.run(context.Background().Done())
+	r.HandleFunc("/integration/clipboard", clip.handler).Methods("GET", "POST", "DELETE")
 	graphics := newGraphicsMonitor()
 	go graphics.run(context.Background(), collectDisplayAdapters)
 	go ensureSelectedHelios()
