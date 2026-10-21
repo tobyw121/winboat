@@ -61,4 +61,7 @@ test('packaged graphics tools retain their local imports and VGA rescue scripts'
     const preview=JSON.parse(execFileSync('python3',[path.join(tools,'support-bundle.py'),report],{cwd:root,encoding:'utf8'}));
     assert.match(preview.sha256,/^[a-f0-9]{64}$/);
     assert.match(execFileSync('python3',[path.join(tools,'graphics-trial.py'),'--help'],{cwd:root,encoding:'utf8'}),/--start/);
+    assert.match(execFileSync('python3',[path.join(tools,'graphics-center.py'),'--help'],{cwd:root,encoding:'utf8'}),/prepare-rollback/);
+    await fs.access(path.join(tools,'compare-graphics.py'));
+    await fs.access(path.join(tools,'compare-capabilities.py'));
 });

@@ -26,6 +26,13 @@ on:
       - 'tests/helios-support-export.py'
       - 'tests/helios-support-bundle.py'
       - 'scripts/helios/support-bundle.py'
+      - 'scripts/helios/graphics-center.py'
+      - 'scripts/helios/compare-capabilities.py'
+      - 'tests/helios-capabilities.test.py'
+      - 'tests/helios-graphics-center.py'
+      - 'src/shared/helios-performance.ts'
+      - 'tests/helios-performance-profile.test.ts'
+      - 'src/renderer/components/GraphicsCenter.vue'
       - 'scripts/helios/graphics-trial.py'
       - 'scripts/helios/rescue-graphics.py'
       - 'tests/helios-graphics-trial.py'
@@ -81,6 +88,13 @@ on:
       - 'tests/helios-support-export.py'
       - 'tests/helios-support-bundle.py'
       - 'scripts/helios/support-bundle.py'
+      - 'scripts/helios/graphics-center.py'
+      - 'scripts/helios/compare-capabilities.py'
+      - 'tests/helios-capabilities.test.py'
+      - 'tests/helios-graphics-center.py'
+      - 'src/shared/helios-performance.ts'
+      - 'tests/helios-performance-profile.test.ts'
+      - 'src/renderer/components/GraphicsCenter.vue'
       - 'scripts/helios/graphics-trial.py'
       - 'scripts/helios/rescue-graphics.py'
       - 'tests/helios-graphics-trial.py'
@@ -129,6 +143,8 @@ jobs:
       - run: python3 tests/helios-bisect.py
       - run: python3 tests/helios-support-export.py
       - run: python3 tests/helios-support-bundle.py
+      - run: python3 tests/helios-capabilities.test.py
+      - run: python3 tests/helios-graphics-center.py
       - run: python3 tests/helios-graphics-trial.py
       - run: python3 tests/helios-rescue.test.py
       - run: python3 tests/helios-comparison.py

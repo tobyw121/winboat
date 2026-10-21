@@ -98,9 +98,9 @@
                         </p>
                     </div>
                     <div class="flex flex-col gap-2 items-end">
-                        <x-switch :toggled="localDisplayEnabled" :disabled="isApplyingChanges" @toggle="toggleLocalDisplay" size="large"></x-switch>
-                        <x-button v-if="origLocalDisplayEnabled && compose?.services.windows.environment.HELIOS_DISPLAY === 'dbus'" :disabled="isApplyingChanges || localDisplayState === 'opening'" @click="openLocalDesktop()">Open Local Desktop</x-button>
-                        <x-button v-else-if="origLocalDisplayEnabled" :disabled="isApplyingChanges" @click="saveDockerCompose()">Retry Local Desktop</x-button>
+                        <x-switch :toggled="localDisplayEnabled" :disabled="graphicsBusy || isApplyingChanges" @toggle="toggleLocalDisplay" size="large"></x-switch>
+                        <x-button v-if="origLocalDisplayEnabled && compose?.services.windows.environment.HELIOS_DISPLAY === 'dbus'" :disabled="graphicsBusy || isApplyingChanges || localDisplayState === 'opening'" @click="openLocalDesktop()">Open Local Desktop</x-button>
+                        <x-button v-else-if="origLocalDisplayEnabled" :disabled="graphicsBusy || isApplyingChanges" @click="saveDockerCompose()">Retry Local Desktop</x-button>
                         <span v-if="localDisplayMessage" class="text-sm text-neutral-400 max-w-sm">{{ localDisplayMessage }}</span>
                     </div>
                 </x-card>
@@ -108,34 +108,45 @@
                 <x-card v-if="heliosEnabled" class="p-4 my-0 w-full bg-neutral-800/20">
                     <h1 class="text-lg font-semibold mb-2">Graphics diagnostics</h1>
                     <p class="text-sm text-neutral-400">Record flickering for about a minute. Collects guest status and existing host logs without changing drivers or restarting Windows. Requires Python 3 on Linux.</p>
-                    <x-button :disabled="captureRunning || isApplyingChanges" @click="captureGraphics()">{{ captureRunning ? 'Recording…' : 'Capture flickering' }}</x-button>
-                    <x-button :disabled="captureRunning || isApplyingChanges" @click="captureGraphics(true)">Create support ZIP</x-button>
-                    <x-button :disabled="trialRunning || captureRunning || isApplyingChanges" @click="testHelios()">Test installed Helios (60 seconds)</x-button>
+                    <x-button :disabled="graphicsBusy || captureRunning || isApplyingChanges" @click="captureGraphics()">{{ captureRunning ? 'Recording…' : 'Capture flickering' }}</x-button>
+                    <x-button :disabled="graphicsBusy || captureRunning || isApplyingChanges" @click="captureGraphics(true)">Create support ZIP</x-button>
+                    <x-button :disabled="graphicsBusy || trialRunning || captureRunning || isApplyingChanges" @click="testHelios()">Test installed Helios (60 seconds)</x-button>
                     <p v-if="trialMessage" class="text-sm text-neutral-400 mt-2">{{ trialMessage }}</p>
+                    <GraphicsCenter @busy="graphicsBusy=$event" :blocked="isApplyingChanges || trialRunning || captureRunning" />
                     <p v-if="captureMessage" class="text-sm text-neutral-400 mt-2">{{ captureMessage }}</p>
                 </x-card>
 
                 <x-card v-if="heliosEnabled" class="p-4 my-0 w-full bg-neutral-800/20">
+                    <h1 class="text-lg font-semibold">Measured performance profiles</h1>
+                    <p class="text-sm text-neutral-400">Save work first: applying restarts this VM. Measure the same scene in A1/B1/A2/B2 order; profiles are experiments, not promised speedups. The original managed values are retained for restoration.</p>
+                    <select v-model="performanceChoice" :disabled="graphicsBusy || isApplyingChanges || trialRunning || captureRunning" aria-label="Performance profile" class="bg-neutral-900 p-2">
+                        <option v-for="name in Object.keys(PERFORMANCE_PROFILES)" :key="name" :value="name">{{ name }}</option>
+                    </select>
+                    <x-button :disabled="graphicsBusy || isApplyingChanges || trialRunning || captureRunning" @click="savePerformance(false)">Apply and restart</x-button>
+                    <x-button :disabled="graphicsBusy || isApplyingChanges || trialRunning || captureRunning" @click="savePerformance(true)">Restore original values</x-button>
+                    <p>{{ performanceMessage }}</p>
+                </x-card>
+                <x-card v-if="heliosEnabled" class="p-4 my-0 w-full bg-neutral-800/20">
                     <h1 class="text-lg font-semibold mb-2">Windows resolution</h1>
                     <p class="text-neutral-400 text-sm">Choose the startup resolution for Helios and VGA. Saving restarts the VM. With Helios 22.22.291.0 or newer, change the running resolution in Windows Settings → System → Display without restarting. Local Desktop follows the new image size; zoom only scales the picture.</p>
                     <div class="flex items-center gap-3 mt-3">
-                        <select v-model="resolution" aria-label="Windows startup resolution" :disabled="isApplyingChanges" class="rounded bg-neutral-900 p-2">
+                        <select v-model="resolution" aria-label="Windows startup resolution" :disabled="graphicsBusy || isApplyingChanges" class="rounded bg-neutral-900 p-2">
                             <option v-for="mode in HELIOS_RESOLUTIONS" :key="mode.key" :value="mode.key">{{ mode.label }}</option>
                         </select>
-                        <x-button :disabled="isApplyingChanges || !origHeliosEnabled || resolution === origResolution" @click="saveResolution">Save resolution and restart</x-button>
+                        <x-button :disabled="graphicsBusy || isApplyingChanges || !origHeliosEnabled || resolution === origResolution" @click="saveResolution">Save resolution and restart</x-button>
                     </div>
                     <p v-if="resolutionMessage" class="text-sm text-neutral-400 mt-2">{{ resolutionMessage }}</p>
                 </x-card>
 
                 <x-card class="p-4 my-0 w-full bg-neutral-800/20">
                     <h1 class="text-lg font-semibold mb-3">Shared Folders</h1>
-                    <SharedFolders v-model="sharedFolders" :disabled="isApplyingChanges" />
+                    <SharedFolders v-model="sharedFolders" :disabled="graphicsBusy || isApplyingChanges" />
                     <div class="mt-4 flex gap-3 items-center">
-                        <x-button :disabled="isApplyingChanges || !sharesNeedSaving || !!sharedFolderErrors(sharedFolders).length" @click="saveShares">Save shared folders</x-button>
+                        <x-button :disabled="graphicsBusy || isApplyingChanges || !sharesNeedSaving || !!sharedFolderErrors(sharedFolders).length" @click="saveShares">Save shared folders</x-button>
                         <span class="text-sm text-neutral-400">Applies these folders and restarts the VM.</span>
                     </div>
                     <p v-if="shareSaveMessage" class="text-sm mt-2" role="status">{{ shareSaveMessage }}</p>
-                    <div class="mt-4 flex gap-3 items-center"><x-button :disabled="isApplyingChanges || checkingShares || !sharedFolders.some(folder => folder.enabled) || winboat.containerStatus.value !== ContainerStatus.Running || JSON.stringify(sharedFolders) !== origSharedFolders || !compose?.services.windows['x-winboat-shared-folders']" @click="testShares">Test saved shares</x-button><span class="text-sm text-neutral-400">Save changes and start the VM before testing.</span></div>
+                    <div class="mt-4 flex gap-3 items-center"><x-button :disabled="graphicsBusy || isApplyingChanges || checkingShares || !sharedFolders.some(folder => folder.enabled) || winboat.containerStatus.value !== ContainerStatus.Running || JSON.stringify(sharedFolders) !== origSharedFolders || !compose?.services.windows['x-winboat-shared-folders']" @click="testShares">Test saved shares</x-button><span class="text-sm text-neutral-400">Save changes and start the VM before testing.</span></div>
                     <div v-for="result in shareResults" :key="result.name" class="text-sm mt-2" :class="result.ok ? 'text-green-300' : 'text-red-300'">
                         <p>{{ result.name }}: {{ result.message }}</p><div v-if="result.windowsPath" class="flex gap-2 items-center"><code>{{ result.windowsPath }}</code><x-button @click="copyWindowsPath(result.windowsPath)">Copy direct path</x-button></div>
                     </div>
@@ -522,6 +533,8 @@ import {changedResourceErrors} from '../../shared/configuration-resources';
 import {configuredSharedFolders, prepareSharedFolders, checkSharedFolders, type ShareCheck} from '../lib/shared-folders';
 import { configureHelios, HELIOS_IMAGE } from '../../shared/helios';
 import {captureGraphics,captureRunning,captureMessage} from '../lib/graphics-capture';
+import {performanceProfile,performanceChanges,PERFORMANCE_PROFILES,type PerformanceProfile} from '../../shared/helios-performance';
+import GraphicsCenter from '../components/GraphicsCenter.vue';
 import {testHelios,trialRunning,trialMessage} from '../lib/graphics-trial';
 import { HELIOS_RESOLUTIONS, DEFAULT_HELIOS_RESOLUTION, heliosResolution, configureHeliosResolution } from '../../shared/helios-resolution';
 import { requireHelios } from '../lib/helios';
@@ -575,7 +588,7 @@ const resolution = ref(DEFAULT_HELIOS_RESOLUTION);
 const origResolution = ref(DEFAULT_HELIOS_RESOLUTION);
 const resolutionMessage = ref('');
 async function saveResolution() {
-    if (isApplyingChanges.value) return;
+    if (isApplyingChanges.value || graphicsBusy.value) return;
     isApplyingChanges.value = true; resolutionMessage.value = '';
     try {
         await requireHelios();
@@ -588,6 +601,24 @@ async function saveResolution() {
     } catch (error) {resolutionMessage.value = error instanceof Error ? error.message : String(error);}
     finally {isApplyingChanges.value = false;}
 }
+const graphicsBusy=ref(false);
+const performanceChoice=ref<PerformanceProfile>('baseline');
+const performanceMessage=ref('');
+async function savePerformance(restore:boolean){
+    if(isApplyingChanges.value || graphicsBusy.value)return;isApplyingChanges.value=true;
+    try{
+        const next=winboat.parseCompose();
+        const candidate=performanceProfile(next.services.windows,restore?'restore':performanceChoice.value);
+        const {dialog}=require('@electron/remote');
+        const answer=await dialog.showMessageBox({type:'warning',message:'Apply this performance change and restart Windows?',
+            detail:JSON.stringify(performanceChanges(next.services.windows,candidate),null,2),
+            buttons:['Apply and restart','Cancel'],defaultId:1,cancelId:1});
+        if(answer.response!==0)return;
+        next.services.windows=candidate;await winboat.replaceCompose(next);compose.value=winboat.parseCompose();
+        performanceMessage.value='Saved. Windows is restarting. Repeat the same workload before comparing measurements.';
+    }catch(error){performanceMessage.value=error instanceof Error?error.message:String(error);}
+    finally{isApplyingChanges.value=false;}
+}
 const checkingShares = ref(false);
 const shareResults = ref<ShareCheck[]>([]);
 const shareTestError = ref('');
@@ -595,7 +626,7 @@ const shareSaveMessage = ref('');
 const sharesNeedSaving = computed(() => JSON.stringify(sharedFolders.value) !== origSharedFolders.value ||
     (!compose.value?.services.windows['x-winboat-shared-folders'] && sharedFolders.value.some(folder => folder.enabled)));
 async function saveShares() {
-    if (isApplyingChanges.value) return;
+    if (isApplyingChanges.value || graphicsBusy.value) return;
     isApplyingChanges.value = true;
     shareSaveMessage.value = '';shareResults.value = [];shareTestError.value = '';
     try {
@@ -732,7 +763,7 @@ async function assignValues() {
  * and then re-assigns the initial values to the reactive refs
  */
 async function saveDockerCompose() {
-    if (isApplyingChanges.value) return;
+    if (isApplyingChanges.value || graphicsBusy.value) return;
     isApplyingChanges.value = true;
     try {
         const previousCompose = JSON.stringify(winboat.parseCompose());
