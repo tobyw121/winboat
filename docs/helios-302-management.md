@@ -161,3 +161,5 @@ interruption tests, a real local DWARF lookup with mismatch refusal, profile
 preservation/restoration, packaged helper imports, support filtering, TypeScript
 checks and app production compilation. Full QEMU/runtime and .302 assembly run
 separately in CI. Physical GPU, DWM recovery and game validation remain required.
+
+See [graphics evidence and recovery](helios-evidence-and-recovery.md) for verified offline backups, lifecycle checkpoints, on-demand guest load, transport trials and the atomic viewer resize handoff.

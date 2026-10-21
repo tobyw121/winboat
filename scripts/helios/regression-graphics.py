@@ -55,6 +55,7 @@ def assess(before,after,scenario):
     adapters=after.get('adapters',{})
     if not 0<=adapters.get('sampleAgeMs',-1)<=10000:missing.append('fresh-adapters')
     if any(adapters.get(name,{}).get('state')!='running' for name in ('basic','helios')):failures.append('adapter-not-running')
+    if adapters.get('helios',{}).get('desktopState')!='active':missing.append('active-helios-output')
     transition=False
     if scenario=='cold-boot':
         transition=bool(before.get('hostStartedAt') and after.get('hostStartedAt') and before['hostStartedAt']!=after['hostStartedAt'] and

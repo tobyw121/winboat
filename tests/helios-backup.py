@@ -17,6 +17,19 @@ class Tests(unittest.TestCase):
    with self.assertRaises(FileExistsError):b.verify(target,storage)
    info['State']['Status']='running'
    with self.assertRaises(ValueError):b.create('vm',root/'bad.tar',lambda _:info)
+ def test_corrupt_archive_never_creates_restore_directory(self):
+  with tempfile.TemporaryDirectory() as directory:
+   root=Path(directory);storage=root/'disk';storage.mkdir();(storage/'data.img').write_bytes(b'disk')
+   info={'Id':'one','State':{'Status':'exited','ExitCode':0},'Mounts':[{'Destination':'/storage','Type':'bind','Source':str(storage)}]}
+   original=root/'original.tar';b.create('vm',original,lambda _:info)
+   bad=root/'corrupt.tar'
+   with tarfile.open(original,'r:') as source,tarfile.open(bad,'w') as target:
+    for member in source:
+     data=source.extractfile(member).read()
+     if member.name=='storage/data.img':data=b'FAIL'
+     target.addfile(member,io.BytesIO(data))
+   with self.assertRaises(ValueError):b.verify(bad,root/'restored')
+   self.assertFalse((root/'restored').exists())
  def test_changed_container_cannot_certify_backup(self):
   with tempfile.TemporaryDirectory() as directory:
    root=Path(directory);storage=root/'disk';storage.mkdir();(storage/'data.img').write_bytes(b'disk')

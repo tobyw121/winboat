@@ -17,7 +17,7 @@ class Tests(unittest.TestCase):
     def test_bound_query_run_never_certifies_unexercised_features(self):
         report={'identity':{'machineId':'same','version':'291','manifestSha256':'a'*64,'bootAtUtc':'boot'},'runId':'one',
             'tests':[{'name':'Capabilities','status':'passed','exitCode':0,'sha256':'a'*64,'capabilities':caps.capture(TEXT,'a'*64)['capabilities']}]}
-        snapshot=caps.from_acceptance(report)
+        snapshot=caps.from_acceptance({'graphics/validation':{'acceptance':report}})
         self.assertEqual(caps.coverage(snapshot,'vulkan.feature.geometryShader')['state'],'uncovered')
         snapshot['tests'].append({'name':'D3D11 format contracts','status':'passed','exitCode':0,'sha256':'b'*64})
         self.assertEqual(caps.coverage(snapshot,'d3d11.format.28.support')['state'],'exercised-subset')

@@ -21,6 +21,7 @@ def capture(text,probe):
             'scope':'Advertised queries only; rendering acceptance is separate.'}
 
 def from_acceptance(report):
+    if 'graphics/validation' in report:report=report['graphics/validation'].get('acceptance',{})
     rows=[r for r in report.get('tests',[]) if r.get('name')=='Capabilities']
     if len(rows)!=1 or rows[0].get('status')!='passed' or rows[0].get('exitCode')!=0:raise ValueError('One successful capability probe in this acceptance run required')
     row=rows[0];text='\n'.join('cap '+key.replace('.', ' ',1)+' '+str(value) for key,value in row.get('capabilities',{}).items())
