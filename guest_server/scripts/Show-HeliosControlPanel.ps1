@@ -45,6 +45,17 @@ Add-HeliosButton 'DWM-Minidumps 30 Minuten aktivieren' {
 Add-HeliosButton 'DWM-Minidumps deaktivieren / Status' {
     Invoke-HeliosPanel {& (Join-Path $PSScriptRoot 'Manage-HeliosCrashCapture.ps1') -Action Disable | ConvertFrom-Json}
 }
+Add-HeliosButton 'DWM-Dump lokal mit cdb auswerten' {
+    Invoke-HeliosPanel {
+        $dump=New-Object Windows.Forms.OpenFileDialog;$dump.Title='Lokalen DWM-Dump wählen';$dump.Filter='Minidump|*.dmp'
+        if($dump.ShowDialog() -ne 'OK'){return @{status='cancelled'}}
+        $debugger=New-Object Windows.Forms.OpenFileDialog;$debugger.Title='Windows SDK cdb.exe wählen';$debugger.Filter='Windows debugger|cdb.exe'
+        if($debugger.ShowDialog() -ne 'OK'){return @{status='cancelled'}}
+        $symbols=New-Object Windows.Forms.FolderBrowserDialog;$symbols.Description='Passenden lokalen PDB-Ordner wählen'
+        if($symbols.ShowDialog() -ne 'OK'){return @{status='cancelled'}}
+        & (Join-Path $PSScriptRoot 'Analyze-HeliosDump.ps1') -DumpPath $dump.FileName -DebuggerPath $debugger.FileName -SymbolsPath $symbols.SelectedPath | ConvertFrom-Json
+    }
+}
 Add-HeliosButton 'Status und geladene Grafikmodule' {
     Invoke-HeliosPanel {& (Join-Path $PSScriptRoot 'Get-HeliosDiagnostics.ps1') | ConvertFrom-Json}
 }

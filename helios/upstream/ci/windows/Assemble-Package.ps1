@@ -110,6 +110,12 @@ foreach ($optional in @("helios_kmd_render.pdb", "helios_kmd_render.map", "helio
 $installerPdb = Join-Path $InstallerArtifact "HeliosSetup.pdb"
 if (Test-Path -LiteralPath $installerPdb -PathType Leaf) { Copy-Required $installerPdb (Join-Path $symbolsRoot "HeliosSetup.pdb") }
 
+# Native PDBs and Mesa DWARF use different analyzers; both stay outside runtime payloads.
+foreach($pair in @(@($MesaArtifact,'x64'),@($MesaX86Artifact,'x86'))) {
+    foreach($name in @('symbols.json','vulkan_virtio.dll.debug','libgallium_wgl.dll.debug')) {
+        Copy-Required (Join-Path $pair[0] ('symbols/'+$name)) (Join-Path $symbolsRoot ('mesa/'+$pair[1]+'/'+$name))
+    }
+}
 $mesaOut = Join-Path $payload "mesa"
 foreach ($name in @("vulkan_virtio.dll", "libgallium_wgl.dll")) {
     Copy-Required (Join-Path $MesaArtifact $name) (Join-Path $mesaOut $name)

@@ -1,5 +1,14 @@
 # ROADMAP — Stage: Correctness and D3D12
 
+## WinBoat diagnostic candidate .302
+
+Mesa builds emit separate, hash-paired DWARF files with PE load bases alongside
+first-party PDBs. Runtime DLL debug sections are stripped; release optimization
+remains unchanged. Local cdb/addr2line analysis requires matching artifacts and
+never uploads a dump. The WinBoat update UI separates stable and experimental
+transactions, including interrupted-install isolation. The bundled .291 remains
+the stable fallback; .302 does not claim hardware acceptance or a flicker fix.
+
 ## WinBoat downstream: explicit DriverStore recovery (22.22.295.0)
 
 The next installer embeds the same verified cleanup script as the standalone

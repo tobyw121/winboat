@@ -29,6 +29,8 @@ on:
       - 'scripts/helios/graphics-center.py'
       - 'scripts/helios/compare-capabilities.py'
       - 'tests/helios-capabilities.test.py'
+      - 'tests/helios-symbols.py'
+      - 'scripts/helios/symbolize-mesa.py'
       - 'tests/helios-graphics-center.py'
       - 'src/shared/helios-performance.ts'
       - 'tests/helios-performance-profile.test.ts'
@@ -91,6 +93,8 @@ on:
       - 'scripts/helios/graphics-center.py'
       - 'scripts/helios/compare-capabilities.py'
       - 'tests/helios-capabilities.test.py'
+      - 'tests/helios-symbols.py'
+      - 'scripts/helios/symbolize-mesa.py'
       - 'tests/helios-graphics-center.py'
       - 'src/shared/helios-performance.ts'
       - 'tests/helios-performance-profile.test.ts'
@@ -144,6 +148,7 @@ jobs:
       - run: python3 tests/helios-support-export.py
       - run: python3 tests/helios-support-bundle.py
       - run: python3 tests/helios-capabilities.test.py
+      - run: python3 tests/helios-symbols.py
       - run: python3 tests/helios-graphics-center.py
       - run: python3 tests/helios-graphics-trial.py
       - run: python3 tests/helios-rescue.test.py

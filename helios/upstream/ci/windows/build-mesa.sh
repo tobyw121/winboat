@@ -70,6 +70,7 @@ meson setup "${setup_mode[@]}" "${build_dir}" "${mesa_src}" \
   -Dbuild-tests=false \
   -Dperfetto=false \
   -Dxmlconfig=disabled \
+  -Ddebug=true \
   --buildtype=release
 
 meson compile -C "${build_dir}"
@@ -77,6 +78,26 @@ meson compile -C "${build_dir}"
 cp "${build_dir}/src/virtio/vulkan/vulkan_virtio.dll" "${output_dir}/"
 cp "${build_dir}/src/gallium/targets/wgl/libgallium_wgl.dll" "${output_dir}/"
 cp "${build_dir}/src/gallium/targets/libgl-gdi/opengl32.dll" "${output_dir}/opengl32-app-local.dll"
+
+# Keep matching DWARF separately; release DLLs retain no bulky debug sections.
+mkdir -p "${output_dir}/symbols"
+for dll in "${output_dir}/vulkan_virtio.dll" "${output_dir}/libgallium_wgl.dll"; do
+  debug="${output_dir}/symbols/$(basename "${dll}").debug"
+  objcopy --only-keep-debug "${dll}" "${debug}"
+  objcopy --strip-debug --add-gnu-debuglink="${debug}" "${dll}"
+done
+python - "${output_dir}" <<'PYMETA'
+import hashlib,json,pathlib,struct,sys
+root=pathlib.Path(sys.argv[1]);rows=[]
+for name in ('vulkan_virtio.dll','libgallium_wgl.dll'):
+    dll=(root/name).read_bytes();debug=(root/'symbols'/(name+'.debug')).read_bytes()
+    pe=struct.unpack_from('<I',dll,0x3c)[0];optional=pe+24
+    magic=struct.unpack_from('<H',dll,optional)[0]
+    if dll[:2]!=b'MZ' or dll[pe:pe+4]!=b'PE\0\0' or magic not in (0x10b,0x20b):raise ValueError('Expected a Windows PE image')
+    base=struct.unpack_from('<Q' if magic==0x20b else '<I',dll,optional+(24 if magic==0x20b else 28))[0]
+    rows.append(dict(module=name,sha256=hashlib.sha256(dll).hexdigest(),debug=name+'.debug',debugSha256=hashlib.sha256(debug).hexdigest(),imageBase=base))
+(root/'symbols/symbols.json').write_text(json.dumps(dict(schema=1,modules=rows),indent=2),encoding='utf-8')
+PYMETA
 
 # WGL ICD dependencies are resolved by opengl32.dll and do not reliably search
 # the private driver directory. Keep the Mesa ICDs self-contained instead of
