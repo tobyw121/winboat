@@ -7,6 +7,7 @@ on:
       - '.github/workflows/build-helios-validation.yml'
       - 'tests/helios-opengl-pixels.c'
       - 'tests/helios-format-contract.cpp'
+      - 'tests/helios-capabilities.cpp'
       - 'tests/helios-shared-process.cpp'
       - 'helios/upstream/tools/d3d11_msaa_present_probe.cpp'
       - 'guest_server/scripts/Test-HeliosAcceptance.ps1'
@@ -19,6 +20,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Fetch pinned Vulkan headers for capability probe
+        shell: pwsh
+        run: |
+          git init "$env:RUNNER_TEMP/vulkan-headers"
+          git -C "$env:RUNNER_TEMP/vulkan-headers" fetch --depth 1 https://github.com/KhronosGroup/Vulkan-Headers.git 11d6898377797e07dbd543aaaa367e4465074597
+          if ($LASTEXITCODE) {throw 'Vulkan headers fetch failed'}
+          git -C "$env:RUNNER_TEMP/vulkan-headers" checkout --detach FETCH_HEAD
+          if ((git -C "$env:RUNNER_TEMP/vulkan-headers" rev-parse HEAD) -ne '11d6898377797e07dbd543aaaa367e4465074597') {throw 'Header pin mismatch'}
       - name: Compile actual D3D11 MSAA/presentation and OpenGL pixel probes
         shell: pwsh
         run: |
@@ -28,6 +37,8 @@ jobs:
             ('call "'+$vs+'\VC\Auxiliary\Build\vcvars64.bat"'),
             'if errorlevel 1 exit /b 1',
             'cl /nologo /W4 /WX /EHsc /std:c++17 /MT helios/upstream/tools/d3d11_msaa_present_probe.cpp /Fe:helios-msaa-present.exe /link d3d11.lib dxgi.lib d3dcompiler.lib user32.lib',
+            'if errorlevel 1 exit /b 1',
+            ('cl /nologo /W4 /WX /EHsc /std:c++17 /MT /I"'+$env:RUNNER_TEMP+'\vulkan-headers\include" tests/helios-capabilities.cpp /Fe:helios-capabilities.exe /link d3d11.lib dxgi.lib'),
             'if errorlevel 1 exit /b 1',
             'cl /nologo /W4 /WX /EHsc /std:c++17 /MT tests/helios-format-contract.cpp /Fe:helios-format-contract.exe /link d3d11.lib dxgi.lib',
             'if errorlevel 1 exit /b 1',
@@ -40,11 +51,13 @@ jobs:
           if ($LASTEXITCODE) {throw 'Native probe compilation failed'}
           ./helios-msaa-present.exe --self-test
           if ($LASTEXITCODE) {throw 'MSAA pixel oracle self-test failed'}
+          ./helios-capabilities.exe --warp
+          if ($LASTEXITCODE) {throw 'WARP capability queries failed'}
           ./helios-format-contract.exe --warp
           if ($LASTEXITCODE) {throw 'Real WARP format/shared-resource contract failed'}
           ./helios-shared-process.exe --warp
           if ($LASTEXITCODE) {throw 'Real WARP two-device/process shared-resource contract failed'}
-          $files=@('helios-msaa-present.exe','helios-opengl-pixels.exe','helios-format-contract.exe','helios-shared-process.exe') | ForEach-Object {
+          $files=@('helios-capabilities.exe','helios-msaa-present.exe','helios-opengl-pixels.exe','helios-format-contract.exe','helios-shared-process.exe') | ForEach-Object {
             @{name=$_;sha256=(Get-FileHash $_ -Algorithm SHA256).Hash}
           }
           @{schema=1;sourceCommit='${{ github.sha }}';files=@($files)} | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 tools.json
@@ -53,6 +66,7 @@ jobs:
         with:
           name: helios-validation-x64
           path: |
+            helios-capabilities.exe
             helios-msaa-present.exe
             helios-opengl-pixels.exe
             helios-format-contract.exe
