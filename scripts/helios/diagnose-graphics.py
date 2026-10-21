@@ -48,6 +48,8 @@ def parse_transport_errors(text):
 def parse_frame_metrics(text):
     records=[]
     patterns=(
+        ('frame-wire',r'frame-wire peer=([a-f0-9]{32}) serial=(\d{1,10}) stage=(send|receive|ack|render|drop) method=(Scanout|Update|ScanoutDMABUF|ScanoutDMABUF2|UpdateDMABUF|Disable|Cached)(?: monotonic_us=(\d{1,20}))?',
+         ('peer','serial','stage','method','monotonicUs')),
         ('dmabuf-export',r'dmabuf-contract export ino=(\d{1,20}) allocated=(\d{1,20}) blob=(\d{1,20}) fd_bytes=(\d{1,20}) memory_type=(\d{1,10}) fd_type=(\d{1,10})',
          ('inode','allocationBytes','blobBytes','bufferBytes','memoryType','fdType')),
         ('dmabuf-import',r'dmabuf-contract import source=(\d{1,10}) ino=(\d{1,20}) bytes=(\d{1,20}) required=(\d{1,20}) alignment=(\d{1,20}) width=(\d{1,10}) height=(\d{1,10}) stride=(\d{1,10}) format=(\d{1,10}) tiling=(\d{1,10}) modifier=(\d{1,20}) usage=(\d{1,10}) flags=(\d{1,10}) image_bits=(\d{1,10}) fd_bits=(\d{1,10})(?: offset=(\d{1,10}) planes=(\d{1,10}))?',
@@ -70,7 +72,7 @@ def parse_frame_metrics(text):
             match=re.search(pattern,line)
             if match:
                 record={'kind':kind}
-                record.update({key:value if key=='transport' else int(value) for key,value in zip(names,match.groups()) if value is not None})
+                record.update({key:value if key in ('transport','peer','stage','method') else int(value) for key,value in zip(names,match.groups()) if value is not None})
                 stamp=re.match(r'^(\d{4}-\d{2}-\d{2}T[0-9:.]+Z) ',line)
                 if stamp: record['hostAtUtc']=stamp[1]
                 if all(type(v) is not int or 0<=v<2**64 for v in record.values()): records.append(record)
@@ -210,12 +212,17 @@ def main():
     parser.add_argument('--output', type=pathlib.Path)
     parser.add_argument('--samples', type=int, choices=range(1, 13), default=1)
     parser.add_argument('--expected-runtime')
+    parser.add_argument('--viewer-log',type=pathlib.Path,help='Optional local viewer log; reads its last 256 KiB only')
     parser.add_argument('--interval', type=int, choices=range(2, 31), default=5)
     args = parser.parse_args()
     if args.expected_runtime and not re.fullmatch(r'glvnd-v\d{1,3}',args.expected_runtime): parser.error('Invalid expected runtime capability')
     try:
         result = collect(args.container, samples=args.samples, interval=args.interval)
         result['host'] = collect_host(args.container)
+        if args.viewer_log:
+            with args.viewer_log.open('rb') as stream:
+                stream.seek(max(0,os.fstat(stream.fileno()).st_size-262144))
+                result['viewerWire']=[r for r in parse_frame_metrics(stream.read().decode('utf-8',errors='replace')) if r['kind']=='frame-wire']
         if args.expected_runtime:
             result['host'].update(expectedRuntimeVersion=args.expected_runtime,
                                   runtimeMatches=result['host'].get('runtimeVersion')==args.expected_runtime)

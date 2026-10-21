@@ -54,8 +54,9 @@ struct Viewer {
  GDBusNodeInfo *info;
  GdkCursor *cursor;
  GLuint program, external_program, vao, texture, source, fbo, source_renderbuffer, source_fbo;
- guint source_x, source_y;
+ guint source_x, source_y, source_width, source_height;
  guint64 source_inode;
+ guint32 trace_serial,published_serial;char trace_peer[33],published_peer[33];
  gboolean source_external;
  GLenum image_error;
  EGLImageKHR image;
@@ -328,6 +329,13 @@ static gboolean save_screenshot(Viewer *v,const char *path) {
  if (error) {g_printerr("Screenshot: %s\n",error->message);g_error_free(error);}
  g_object_unref(flipped);return ok;
 }
+static void trace_wire(Viewer *v,const char *stage,const char *method) {
+ guint32 serial=!strcmp(stage,"render")?v->published_serial:v->trace_serial;
+ const char *peer=!strcmp(stage,"render")?v->published_peer:v->trace_peer;
+ if (!g_strcmp0(g_getenv("HELIOS_FRAME_TRACE"),"1") && serial && strlen(peer)==32)
+  g_print("frame-wire peer=%s serial=%u stage=%s method=%s monotonic_us=%" G_GINT64_FORMAT "\n",
+          peer,serial,stage,method,g_get_monotonic_time());
+}
 static gboolean render(GtkGLArea *area,GdkGLContext *context,Viewer *v) {
  (void)area;(void)context;
  Viewer *d=displayed(v);
@@ -340,6 +348,7 @@ static gboolean render(GtkGLArea *area,GdkGLContext *context,Viewer *v) {
   const float rect[]={0,0,1,1};draw(v,d->texture,rect,d->flip);v->rendered_frames++;
  }
  if (glGetError()!=GL_NO_ERROR) fatal(v,"OpenGL window rendering failed.");
+ else if (d->cache_valid) trace_wire(d,"render","Cached");
  if (v->screenshot_path) {
   gtk_label_set_text(GTK_LABEL(v->status),save_screenshot(v,v->screenshot_path)?"Screenshot saved.":"Screenshot could not be saved; no active frame or file error.");
   g_clear_pointer(&v->screenshot_path,g_free);
@@ -362,7 +371,7 @@ static void dma_geometry(Viewer *v,guint x,guint y,guint w,guint h,guint bw,guin
   * our completed private copy until then, including its presentation flip.
   * Reallocating it on every same-size swap made Helios ineligible and caused
   * a VGA/Helios handoff (and another guest resize) on every buffer change. */
- if (v->width!=w || v->height!=h) texture_size(v,w,h);
+ v->source_width=w;v->source_height=h;
  v->source_x=x;v->source_y=y;
  v->rect[0]=(float)x/bw;v->rect[1]=(float)y/bh;v->rect[2]=(float)w/bw;v->rect[3]=(float)h/bh;
  /* Match QEMU's egl_fb_blit(..., !y0_top): its display-origin flag is
@@ -486,14 +495,26 @@ static gboolean import_dma(Viewer *v,GDBusMethodInvocation *inv,GVariant *handle
 static gboolean copy_dma(Viewer *v) {
  gint64 started=g_get_monotonic_time();
  if (!v->source && !v->source_renderbuffer) return FALSE;
+ guint w=v->source_width,h=v->source_height;
+ if (!dimensions(w,h)) return FALSE;
+ gboolean resize=v->width!=w || v->height!=h;
+ GLuint target=v->texture;
+ /* A new producer extent is pending until its first completed private copy.
+  * Keep the old pixels and geometry together while Scanout precedes Update. */
+ if (resize) {
+  glGenTextures(1,&target);glBindTexture(GL_TEXTURE_2D,target);
+  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+  glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,w,h,0,GL_RGBA,GL_UNSIGNED_BYTE,NULL);
+ }
  GLint previous,previous_read;glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING,&previous);glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING,&previous_read);
- glBindFramebuffer(GL_DRAW_FRAMEBUFFER,v->fbo);glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,v->texture,0);
- if (glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE) {glBindFramebuffer(GL_DRAW_FRAMEBUFFER,previous);return FALSE;}
- glViewport(0,0,v->width,v->height);glDisable(GL_BLEND);glDisable(GL_SCISSOR_TEST);
+ glBindFramebuffer(GL_DRAW_FRAMEBUFFER,v->fbo);glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,target,0);
+ if (glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE) {glBindFramebuffer(GL_DRAW_FRAMEBUFFER,previous);if(resize)glDeleteTextures(1,&target);return FALSE;}
+ glViewport(0,0,w,h);glDisable(GL_BLEND);glDisable(GL_SCISSOR_TEST);
  if (v->source_renderbuffer) {
-  GLint x=v->source_x,y=v->source_y,w=v->width,h=v->height;
+  GLint x=v->source_x,y=v->source_y,rw=w,rh=h;
   glBindFramebuffer(GL_READ_FRAMEBUFFER,v->source_fbo);
-  glBlitFramebuffer(x,v->source_flip?y+h:y,x+w,v->source_flip?y:y+h,0,0,w,h,GL_COLOR_BUFFER_BIT,GL_NEAREST);
+  glBlitFramebuffer(x,v->source_flip?y+rh:y,x+rw,v->source_flip?y:y+rh,0,0,rw,rh,GL_COLOR_BUFFER_BIT,GL_NEAREST);
  } else draw(v,v->source,v->rect,v->source_flip);
  /* QEMU blocks its GL console until UpdateDMABUF returns. Finish source reads
   * before ACK; redraws only sample our own texture, never a released scanout.
@@ -502,8 +523,11 @@ static gboolean copy_dma(Viewer *v) {
  gint64 waiting=g_get_monotonic_time();glFinish();
  v->completion_wait_us+=g_get_monotonic_time()-waiting;
  v->copy_wall_us+=g_get_monotonic_time()-started;v->copy_samples++;
- glBindFramebuffer(GL_DRAW_FRAMEBUFFER,previous);glBindFramebuffer(GL_READ_FRAMEBUFFER,previous_read);v->flip=FALSE;
- v->cache_valid=glGetError()==GL_NO_ERROR;return v->cache_valid;
+ glBindFramebuffer(GL_DRAW_FRAMEBUFFER,previous);glBindFramebuffer(GL_READ_FRAMEBUFFER,previous_read);
+ gboolean valid=glGetError()==GL_NO_ERROR;
+ if (resize && !valid) {glDeleteTextures(1,&target);return FALSE;}
+ if (resize) {glDeleteTextures(1,&v->texture);v->texture=target;v->width=w;v->height=h;}
+ v->flip=FALSE;v->cache_valid=valid;return valid;
 }
 static void report_display_recovery(Viewer *v,const char *message) {
  char *reason=g_strescape(message,NULL);
@@ -533,10 +557,16 @@ static void upload_software(Viewer *v,gint x,gint y,gint w,gint h,guint stride,g
 static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,const gchar *iface,
  const gchar *name,GVariant *params,GDBusMethodInvocation *inv,gpointer data) {
  (void)conn;(void)sender;(void)path;(void)iface;
- Viewer *v=data;gboolean ok=TRUE;v->image_error=GL_NO_ERROR;
+ Viewer *v=data;guint64 before_frames=v->dma_frames+v->software_frames;gboolean ok=TRUE;v->image_error=GL_NO_ERROR;
  gboolean scanout=!strcmp(name,"Scanout") || !strcmp(name,"ScanoutDMABUF") || !strcmp(name,"ScanoutDMABUF2");
  gboolean update=!strcmp(name,"Update") || !strcmp(name,"UpdateDMABUF");
  gboolean frame=scanout || update || !strcmp(name,"Disable");
+ if (frame) {
+  GDBusMessage *message=g_dbus_method_invocation_get_message(inv);
+  v->trace_serial=g_dbus_message_get_serial(message);
+  g_strlcpy(v->trace_peer,g_dbus_connection_get_guid(conn),sizeof(v->trace_peer));
+  trace_wire(v,"receive",name);
+ }
  if (update && v->awaiting_scanout) {
   if (v->background_paused) resume_visible(v->parent?v->parent:v);
   /* Acknowledge/drop queued updates while QEMU republishes the baseline.
@@ -547,7 +577,7 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
   if (!v->width && !v->reconnect_timer && v->parent &&
       (v->accelerated?v->parent->helios_health:v->parent->basic_health)<2)
    refresh_scanout(v);
-  g_dbus_method_invocation_return_value(inv,NULL);return;
+  trace_wire(v,"drop",name);g_dbus_method_invocation_return_value(inv,NULL);return;
  }
  g_strlcpy(v->frame_problem,"Invalid adapter frame",sizeof(v->frame_problem));
  gtk_gl_area_make_current(GTK_GL_AREA(v->area));
@@ -594,7 +624,7 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
  } else if (!strcmp(name,"UpdateDMABUF")) {
   gint x,y,w,h;g_variant_get(params,"(iiii)",&x,&y,&w,&h);
   g_snprintf(v->frame_problem,sizeof(v->frame_problem),"UpdateDMABUF region=%d,%d %dx%d, scanout=%ux%u, imported=%s",x,y,w,h,v->width,v->height,(v->source || v->source_renderbuffer)?"yes":"no");
-  ok=region(v,x,y,w,h);
+  ok=x>=0 && y>=0 && w>0 && h>0 && (guint64)x+w<=v->source_width && (guint64)y+h<=v->source_height;
   if (ok && consume_update(v)) {
    ok=copy_dma(v);
    if (ok) {v->dma_frames++;v->last_dma=TRUE;v->dma_failures=0;}
@@ -634,6 +664,10 @@ static void method(GDBusConnection *conn,const gchar *sender,const gchar *path,c
   if (v->parent) select_console(v->parent);
   if (!strcmp(name,"Scanout") || !strcmp(name,"Update") || !strcmp(name,"UpdateDMABUF") || !strcmp(name,"Disable"))
    queue_frame_redraw(v);
+  if (v->dma_frames+v->software_frames!=before_frames) {
+   v->published_serial=v->trace_serial;g_strlcpy(v->published_peer,v->trace_peer,sizeof(v->published_peer));
+  }
+  if (frame) trace_wire(v,"ack",name);
   g_dbus_method_invocation_return_value(inv,NULL);
  }
  else {

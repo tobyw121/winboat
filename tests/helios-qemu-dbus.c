@@ -16,6 +16,9 @@
 #define CONFIG_LINUX 1
 #define DRM_FORMAT_MOD_INVALID UINT64_C(0x00ffffffffffffff)
 #define DBUS_DEFAULT_TIMEOUT 1000
+#define DBUS_DISPLAY_LISTENER(p) ((DBusDisplayListener *)(p))
+#define trace_dbus_filter(...) ((void)0)
+#define g_dbus_connection_get_guid(p) "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 /* Protocol fixture does not take asynchronous GObject references. */
 #undef g_object_ref
 #define g_object_ref(p) (p)
@@ -40,6 +43,7 @@ typedef struct HeliosVulkanReadback {int unused;} HeliosVulkanReadback;
 typedef struct HeliosVulkanReadbackCache {HeliosVulkanReadback image;QemuDmaBuf *active;} HeliosVulkanReadbackCache;
 typedef struct DBusDisplayListener {
     DisplayChangeListener dcl;
+    gint display_serial_to_discard,cursor_serial_to_discard;
     DisplaySurface *ds;
     int ds_share;
     void *proxy;
@@ -389,6 +393,14 @@ int main(void) {
     eglDestroySurface(qemu_egl_display,draw);eglDestroySurface(qemu_egl_display,read);
     eglDestroyContext(qemu_egl_display,renderer);eglDestroyContext(qemu_egl_display,qemu_egl_rn_ctx);
     eglTerminate(qemu_egl_display);
+    GDBusMessage *wire=g_dbus_message_new_method_call(NULL,"/org/qemu/Display1/Listener","org.qemu.Display1.Listener","Update");
+    g_dbus_message_set_serial(wire,7);listener.display_serial_to_discard=0;
+    g_setenv("HELIOS_FRAME_TRACE","1",TRUE);
+    assert(dbus_filter(NULL,wire,FALSE,&listener)==wire);
+    assert(strstr(diagnostic_line,"frame-wire peer=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa serial=7 stage=send method=Update"));
+    int traced=diagnostics;listener.display_serial_to_discard=7;
+    assert(dbus_filter(NULL,wire,FALSE,&listener)==NULL && diagnostics==traced);
+    g_unsetenv("HELIOS_FRAME_TRACE");
     g_print("QEMU callbacks: real Mesa/EGL texture checks, scanout retirement, Vulkan routing fixtures, immutable frame snapshots, ACK/failure handling and DMA handoff passed.\n");
     return 0;
 }

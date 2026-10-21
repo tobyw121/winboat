@@ -99,6 +99,11 @@ int main(void) {
   glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,4,4);
   draw(&v,v.texture,full,v.flip);expect_corners(fbo);
  }
+ /* Geometry stays bound to the old complete frame until the new copy. */
+ dma_geometry(&v,1,2,2,2,6,8,TRUE);
+ g_assert_cmpuint(v.width,==,4);g_assert_cmpuint(v.height,==,4);g_assert_true(v.cache_valid);
+ g_assert_true(copy_dma(&v));g_assert_cmpuint(v.width,==,2);g_assert_cmpuint(v.height,==,2);
+ dma_geometry(&v,1,2,4,4,6,8,TRUE);g_assert_true(copy_dma(&v));
  /* Software scanouts remain top-down and must still flip on presentation. */
  const guint8 software[][4]={{255,0,0,255},{0,255,0,255},{0,0,255,255},{255,255,0,255}};
  texture_size(&v,2,2);glTexSubImage2D(GL_TEXTURE_2D,0,0,0,2,2,GL_RGBA,GL_UNSIGNED_BYTE,software);

@@ -48,6 +48,13 @@ class ComparisonTests(unittest.TestCase):
             with path.open('a') as output: output.write('game.exe,4,30\n')
             with self.assertRaises(ValueError): metrics.read_frame_times(path,'game.exe')
 
+    def test_wire_guid_serial_joins_without_mixing_clocks_or_reconnects(self):
+        rows=[{'kind':'frame-wire','peer':'a'*32,'serial':1,'stage':stage,'monotonicUs':stamp} for stage,stamp in [('send',900000),('receive',10),('ack',20),('render',30)]]
+        rows.append({'kind':'frame-wire','peer':'b'*32,'serial':1,'stage':'send'})
+        result=correlation.wire_evidence(rows)['frames']
+        self.assertTrue(result[0]['hostViewerMatched']);self.assertEqual(result[0]['sourceCompletionUs'],10)
+        self.assertFalse(result[1]['hostViewerMatched'])
+
     def test_lifetime_does_not_mistake_tail_for_leak(self):
         rows=[{'kind':k} for k in ('resource-frame','resource-release','resource-frame','resource-release')]
         r=correlation.lifetime(rows)

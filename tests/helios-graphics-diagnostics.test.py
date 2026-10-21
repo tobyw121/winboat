@@ -43,6 +43,11 @@ class TestGraphicsCollector(unittest.TestCase):
             self.assertEqual(result['bundledInstaller']['sha256'],'packaged-pin')
             self.assertEqual(result['runtimeVersion'],'glvnd-v12')
             self.assertNotIn('runtimeError',result)
+    def test_wire_trace_retains_only_fixed_tokens(self):
+        row=graphics.parse_frame_metrics('frame-wire peer='+('a'*32)+' serial=9 stage=receive method=UpdateDMABUF monotonic_us=100')[0]
+        self.assertEqual(row['serial'],9);self.assertEqual(row['peer'],'a'*32)
+        self.assertEqual(graphics.parse_frame_metrics('frame-wire peer=PRIVATE serial=9 stage=receive method=UpdateDMABUF'),[])
+
     def test_frame_metrics_are_fixed_fields_and_do_not_invent_fps(self):
         text='dbus: frame-ack source=4 sequence=8 wait_us=123 success=1 in_flight=1 transport=copy\n'
         text+='helios_vulkan_capture ino 99 seq 8 publish 1 1280x800 submit_ns 100 wait_ns 200 cpu_ns 300\n'

@@ -14,3 +14,4 @@ c0a840762b1b4e7ca8f97d3eba94ff2d50afe65f01a632f6925ab9c9dcf4a2e1  0013-shared-vm
 a7f3e75698e7aa7b0b43af7f6296154318143eeb0c195e939529703e8cffd945  0014-dmabuf-import-contract.patch
 2de0bc919ac049a8ad28de1365edd3bfbcf09b5940f6da6b31e2ffabe93881a8  0015-retain-shared-import-budget.patch
 a4c747ff3b0f4e61c089119644ea1cf775edb3babe461a13a72adc1eee579f39  0016-dbus-idle-refresh.patch
+1152c66fce0c2040c6ea8de0146da3f9f3f33c539020b5feb1af50092c533c68  0017-dbus-frame-wire-trace.patch

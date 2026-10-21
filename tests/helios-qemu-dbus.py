@@ -30,7 +30,7 @@ HASHES = {
 
 
 def function(source, name):
-    match = re.search(r'(?:static\s+)?(?:void|bool|VkResult)\s+' + name + r'\([^;]*?\)\s*\{', source)
+    match = re.search(r'(?:static\s+)?(?:void|bool|VkResult|GDBusMessage\s*\*)\s*' + name + r'\([^;]*?\)\s*\{', source)
     assert match, name
     end, depth = match.end(), 1
     while depth:
@@ -109,7 +109,7 @@ with tempfile.TemporaryDirectory(prefix='winboat-qemu-dbus-') as temporary:
     for name in ['egl_fb_delete_texture','egl_fb_destroy','egl_fb_setup_for_tex','egl_fb_setup_new_tex','egl_fb_blit','egl_fb_read']:
         callbacks += function(helpers, name)
     callbacks += '#pragma GCC diagnostic pop\n'
-    for name in ['dbus_helios_readback_clear', 'dbus_helios_readback_select', 'dbus_helios_frame_sent', 'dbus_helios_frame_ack', 'dbus_helios_frame_done', 'dbus_helios_copy_capture', 'dbus_helios_readback_update', 'dbus_scanout_disable', 'dbus_update_gl_cb', 'dbus_call_update_gl', 'dbus_scanout_dmabuf', 'dbus_scanout_texture', 'dbus_release_dmabuf', 'dbus_helios_refresh_activity', 'dbus_gl_gfx_update', 'dbus_gl_gfx_switch', 'dbus_gl_refresh']:
+    for name in ['dbus_filter', 'dbus_helios_readback_clear', 'dbus_helios_readback_select', 'dbus_helios_frame_sent', 'dbus_helios_frame_ack', 'dbus_helios_frame_done', 'dbus_helios_copy_capture', 'dbus_helios_readback_update', 'dbus_scanout_disable', 'dbus_update_gl_cb', 'dbus_call_update_gl', 'dbus_scanout_dmabuf', 'dbus_scanout_texture', 'dbus_release_dmabuf', 'dbus_helios_refresh_activity', 'dbus_gl_gfx_update', 'dbus_gl_gfx_switch', 'dbus_gl_refresh']:
         callbacks += function(listener, name)
     (source / 'callbacks.inc').write_text(callbacks)
     flags = shlex.split(subprocess.check_output(['pkg-config', '--cflags', '--libs', 'gio-2.0', 'epoxy', 'pixman-1'], text=True))

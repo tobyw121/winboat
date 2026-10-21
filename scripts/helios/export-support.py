@@ -20,7 +20,7 @@ vramBudgetPercent vramHardCapBytes
 timelineSemaphore synchronization2 dynamicRendering bgraOptimalImportable imageQueryResult
 externalMemoryFd memoryBudgetAvailable pciMatchesDrm deviceUuid driverUuid heaps sizeBytes deviceLocal
 sizeChecks verdict violations multipleExports bufferContracts allocationBytes blobBytes memoryType fdType alignment stride offset planes tiling modifier usage imageMemoryBits fdMemoryBits
-frameEvidence captureCandidates association endToEndVerified acks lifetime observedCreates tailState possibleViolations eventIndex prefixComplete resourceTimeline firstObservedHostFailure resourceId importedBytes snapshotBytes stagingBytes ownedBytes peakBytes
+viewerWire wireEvidence frames peer serial stage method monotonicUs hostViewerMatched sourceCompletionUs renderCallbackObserved frameEvidence captureCandidates association endToEndVerified acks lifetime observedCreates tailState possibleViolations eventIndex prefixComplete resourceTimeline firstObservedHostFailure resourceId importedBytes snapshotBytes stagingBytes ownedBytes peakBytes
 limitBytes requestedBytes partial x y sourceInode
 frameMetrics inode sequence published width height submitNanoseconds waitNanoseconds
 cpuNanoseconds source waitMicroseconds success inFlight transport capture intervalSeconds
@@ -55,7 +55,7 @@ created format msaa msaa-refused msaa-policy runtime-error resource view shader 
 returned device-ready device-create-failed device-destroyed no-present-observed adapter-open
 producer-init-failed producer-submit-failed buffer-size-mismatch egl-image-error
 egl-import-error memory-accounting-error device-selection-mismatch import-backoff
-live released create-before-release frame-after-release repeated-release candidate ambiguous-or-incomplete undersized size-equal padded-or-different-layout dmabuf-export dmabuf-import vram-budget-refused budget-rejected resource-create resource-release resource-frame frame-region ack capture
+frame-wire send receive render drop Scanout Update ScanoutDMABUF ScanoutDMABUF2 UpdateDMABUF Disable Cached live released create-before-release frame-after-release repeated-release candidate ambiguous-or-incomplete undersized size-equal padded-or-different-layout dmabuf-export dmabuf-import vram-budget-refused budget-rejected resource-create resource-release resource-frame frame-region ack capture
 kvm tcg host max qemu64 qemu32 other unspecified virtio-net-pci e1000 e1000e rtl8139
 writeback writethrough directsync unsafe native io_uring unmap on off raw qcow2
 required-size-exceeds-fd invalid-alignment misaligned-offset unsupported-plane-count no-compatible-memory-type empty-extent short-linear-stride linear-extent-exceeds-fd

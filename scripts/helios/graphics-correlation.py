@@ -65,6 +65,20 @@ def frame_evidence(rows):
     return {'captureCandidates':result,'acks':[r for r in rows if r.get('kind')=='ack'],
             'endToEndVerified':False,'scope':'No common guest/host/viewer frame token yet. Candidate inode/sequence joins require the same process epoch. ACK is source-read completion, not visible presentation.'}
 
+def wire_evidence(rows):
+    groups={}
+    for row in rows:
+        if row.get('kind')=='frame-wire':groups.setdefault((row['peer'],row['serial']),[]).append(row)
+    result=[]
+    for (peer,serial),events in groups.items():
+        stages={r['stage'] for r in events}
+        receive=[r.get('monotonicUs') for r in events if r['stage']=='receive']
+        ack=[r.get('monotonicUs') for r in events if r['stage']=='ack']
+        duration=ack[0]-receive[0] if len(ack)==len(receive)==1 and None not in (ack[0],receive[0]) and ack[0]>=receive[0] else None
+        result.append({'peer':peer,'serial':serial,'events':events,'hostViewerMatched':'send' in stages and 'receive' in stages,
+                       'sourceCompletionUs':duration,'renderCallbackObserved':'render' in stages})
+    return {'frames':result,'scope':'Exact D-Bus peer GUID and message serial. Viewer intervals use one local monotonic clock. Render callback is not physical display visibility; guest and renderer frame identities remain separate.'}
+
 def correlate(report):
     runtime=report.get('graphics/diagnostics/runtime',{}).get('driver',{})
     timing=report.get('requestTiming',{}).get('graphics/diagnostics/runtime',{})
@@ -110,6 +124,7 @@ def correlate(report):
                               'multipleExports':sum(row['kind']=='dmabuf-export' for row in contract_events)>1})
     first_failure=next(iter(report.get('host',{}).get('transportErrors',[])),None)
     return {'schema':1,'captureId':report.get('captureId'),'guestMinusHostClockRange':offset,
+            'wireEvidence':wire_evidence(report.get('host',{}).get('frameMetrics',[])+report.get('viewerWire',[])),
             'bufferContracts':contract_rows,'frameEvidence':frame_evidence(report.get('host',{}).get('frameMetrics',[])),
             'resourceTimeline':list(resources.values()),'firstObservedHostFailure':first_failure,
             'resourceScope':'Process-local IDs and bounded historical tail; no inferred equality with guest KMD IDs or Vulkan object handles.',

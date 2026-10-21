@@ -1,0 +1,19 @@
+--- a/ui/dbus-listener.c
++++ b/ui/dbus-listener.c
+@@ -1648,6 +1648,16 @@
+         }
+     }
+ 
++    if (!g_strcmp0(g_getenv("HELIOS_FRAME_TRACE"), "1") &&
++        g_dbus_message_get_message_type(message) == G_DBUS_MESSAGE_TYPE_METHOD_CALL) {
++        const char *member = g_dbus_message_get_member(message);
++        const char *const frames[] = { "Scanout", "Update", "ScanoutDMABUF",
++                                      "ScanoutDMABUF2", "UpdateDMABUF", "Disable", NULL };
++        if (member && g_strv_contains(frames, member)) {
++            error_report("frame-wire peer=%s serial=%u stage=send method=%s",
++                         g_dbus_connection_get_guid(connection), serial, member);
++        }
++    }
+     return message;
+ }
+ 
