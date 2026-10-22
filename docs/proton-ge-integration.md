@@ -56,3 +56,18 @@ not control the guest's offscreen-to-WDDM presentation chain. D7VK requires a
 separate native compatibility package and per-application validation. None of
 these components is enabled or advertised as working by these patches. HDR
 requires an end-to-end guest, scanout, viewer and host color pipeline.
+
+## Persistent host shader caches
+
+With the existing opt-in `HELIOS_SHADER_CACHE=1`, cache schema 2 includes the
+selected Vulkan device UUID, driver UUID, API/device identity and host runtime
+fingerprints. GPU changes, driver changes and host patch changes create a new
+namespace. Current memory pressure and enumeration order do not. Missing UUIDs
+fail explicitly rather than reusing another GPU's cache. Old cache directories
+are retained; this change never purges them while processes might use them.
+
+`HELIOS_SHADER_CACHE_NAMESPACE=icarus-v2` optionally isolates an A/B experiment
+(maximum 64 letters, digits, dots, dashes or underscores). This host namespace
+is VM/renderer-wide, not an assertion of per-game isolation inside a shared
+renderer. The normal default is `default`. A new namespace may initially stutter
+while shaders compile; a cache is not a substitute for driver correctness.

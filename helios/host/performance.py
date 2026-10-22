@@ -131,6 +131,25 @@ def inspection(args):
         (args[1]=='help' or args[0]=='-device' and args[1].endswith(',help')))
 
 
+def graphics_cache_fingerprint(report, components, namespace='default'):
+    # Free VRAM, budget samples and device enumeration order must not invalidate
+    # compiled shaders; UUIDs and runtime source hashes must.
+    selected = [d for d in report.get('devices', []) if d.get('selected') is True]
+    if len(selected) != 1:
+        raise ValueError('Unique selected GPU required for persistent cache')
+    identity = {key: selected[0].get(key) for key in ('deviceUuid', 'driverUuid', 'vendorId', 'deviceId', 'apiVersion')}
+    for key in ('deviceUuid', 'driverUuid'):
+        if not isinstance(identity[key], str) or not re.fullmatch(r'[0-9a-fA-F]{32}', identity[key]) or int(identity[key], 16) == 0:
+            raise ValueError('GPU/driver UUID unavailable for persistent cache')
+        identity[key] = identity[key].lower()
+    if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}', namespace):
+        raise ValueError('Invalid graphics cache namespace')
+    if not components or not all(isinstance(value, str) and value for value in components.values()):
+        raise ValueError('Runtime identity unavailable for persistent cache')
+    return json.dumps({'schema': 2, 'gpu': identity, 'runtime': components,
+                       'namespace': namespace}, sort_keys=True, separators=(',', ':')).encode()
+
+
 def cache_environment(env, storage, fingerprint):
     if not Path(storage).is_absolute():
         raise ValueError('Graphics cache storage must be an absolute path')
@@ -168,6 +187,7 @@ def vram_environment(env,report,directory='/dev/shm'):
 def main():
     env = dict(os.environ)
     args = options(sys.argv[2:],env)
+    report = {}
     if env.get('HELIOS_RESCUE') != '1' and not inspection(args):
         if any(i and args[i-1]=='-device' and value.split(',')[0] in ('virtio-gpu-gl-pci','virtio-vga-gl') for i,value in enumerate(args)):
             probe=subprocess.run(['/opt/helios/gpu-preflight',env.get('RENDERNODE','/dev/dri/renderD128')],
@@ -185,13 +205,12 @@ def main():
                 raise ValueError('Requested CPUs are unavailable to this container')
             os.sched_setaffinity(0,cpus)
         if number(env,'HELIOS_SHADER_CACHE',1):
-            fingerprint = bytearray()
+            components = {}
             node = Path(env.get('RENDERNODE','/dev/dri/renderD128')).name
-            for path in [Path('/opt/helios/host-patches.sha256'),Path('/proc/driver/nvidia/version'),Path('/sys/class/drm')/node/'device/uevent']:
+            for path in [Path('/opt/helios')/name for name in ('revision','host-patches.sha256','renderer-patches.sha256','vram-budget.sha256','vram-refs.sha256')] + [Path('/proc/driver/nvidia/version'),Path('/sys/class/drm')/node/'device/uevent']:
                 if path.is_file():
-                    fingerprint.extend(path.read_bytes()[:65536])
-            if not fingerprint:
-                raise ValueError('GPU/runtime identity unavailable for persistent cache')
+                    components[str(path)] = hashlib.sha256(path.read_bytes()[:65536]).hexdigest()
+            fingerprint = graphics_cache_fingerprint(report, components, env.get('HELIOS_SHADER_CACHE_NAMESPACE','default'))
             env = cache_environment(env,env.get('STORAGE') or '/storage',fingerprint)
     os.execve(sys.argv[1],[sys.argv[1],*args],env)
 

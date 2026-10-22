@@ -61,6 +61,19 @@ class PerformanceTests(unittest.TestCase):
         with self.assertRaises(ValueError): perf.options(BASE,env,1023)
         with self.assertRaises(ValueError): perf.options(BASE,{'HELIOS_HUGEPAGES':'invalid'})
 
+    def test_cache_fingerprint_tracks_uuid_runtime_and_profile_not_load(self):
+        gpu={'selected':True,'deviceUuid':'a'*32,'driverUuid':'b'*32,'vendorId':4318,'deviceId':7943,'apiVersion':1}
+        report={'devices':[gpu]};runtime={'patches':'hash-a','renderer':'hash-b'}
+        baseline=perf.graphics_cache_fingerprint(report,runtime)
+        self.assertEqual(baseline,perf.graphics_cache_fingerprint({'devices':[{'selected':False},{**gpu,'budget':123}]},dict(reversed(list(runtime.items())))))
+        for changed in ({**gpu,'driverUuid':'c'*32},{**gpu,'deviceUuid':'d'*32}):
+            self.assertNotEqual(baseline,perf.graphics_cache_fingerprint({'devices':[changed]},runtime))
+        self.assertNotEqual(baseline,perf.graphics_cache_fingerprint(report,{**runtime,'patches':'new'}))
+        self.assertNotEqual(baseline,perf.graphics_cache_fingerprint(report,runtime,'icarus-v2'))
+        for report_,runtime_,namespace in (({'devices':[]},runtime,'default'),({'devices':[gpu,gpu]},runtime,'default'),
+                ({'devices':[{**gpu,'driverUuid':'0'*32}]},runtime,'default'),(report,{},'default'),(report,runtime,'../escape')):
+            with self.assertRaises(ValueError):perf.graphics_cache_fingerprint(report_,runtime_,namespace)
+
     def test_cache_identity_and_symlink_rejection(self):
         with tempfile.TemporaryDirectory() as root:
             a=perf.cache_environment({},root,b'driver-a'); b=perf.cache_environment({},root,b'driver-b')
