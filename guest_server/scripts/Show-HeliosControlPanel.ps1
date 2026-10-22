@@ -56,6 +56,17 @@ Add-HeliosButton 'DWM-Dump lokal mit cdb auswerten' {
         & (Join-Path $PSScriptRoot 'Analyze-HeliosDump.ps1') -DumpPath $dump.FileName -DebuggerPath $debugger.FileName -SymbolsPath $symbols.SelectedPath | ConvertFrom-Json
     }
 }
+Add-HeliosButton 'Automatischen Helios-Ausfallschutz aktivieren' {
+    Invoke-HeliosPanel {
+        $key='HKLM:\SOFTWARE\WinBoat\DisplayRecovery'
+        New-Item -Path $key -Force | Out-Null
+        New-ItemProperty -LiteralPath $key -Name AutoIsolateHelios -Value 1 -PropertyType DWord -Force | Out-Null
+        @{status='enabled';scope='Confirmed failures or three attributed DWM crashes in two minutes. Requires active primary VGA. Never enables VGA or changes primary output.'}
+    }
+}
+Add-HeliosButton 'Automatischen Ausfallschutz deaktivieren' {
+    Invoke-HeliosPanel {Remove-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\WinBoat\DisplayRecovery' -Name AutoIsolateHelios -ErrorAction SilentlyContinue;@{status='disabled'}}
+}
 Add-HeliosButton 'Status und geladene Grafikmodule' {
     Invoke-HeliosPanel {& (Join-Path $PSScriptRoot 'Get-HeliosDiagnostics.ps1') | ConvertFrom-Json}
 }

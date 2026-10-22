@@ -42,3 +42,20 @@ func TestBreakerRequiresRepeatedConfirmedFailureAndNeverLoops(t *testing.T) {
 		}
 	}
 }
+
+func TestCrashBurstPreservesVGAAndRequiresAttributedEvents(t *testing.T) {
+	p := displayAdapters{Basic: displayAdapter{State: "running"}, Helios: displayAdapter{State: "running"}}
+	d := desktopSnapshot{SessionID: 1, Managed: true, Basic: desktopOutput{State: "active", Primary: true}}
+	var b graphicsBreaker
+	if b.crashBurst(true, 2, p, d, nil) || b.crashBurst(false, 3, p, d, nil) {
+		t.Fatal("unconfirmed burst")
+	}
+	d.Basic.Primary = false
+	if b.crashBurst(true, 3, p, d, nil) {
+		t.Fatal("VGA not primary")
+	}
+	d.Basic.Primary = true
+	if !b.crashBurst(true, 3, p, d, nil) || b.crashBurst(true, 3, p, d, nil) {
+		t.Fatal("isolation must run once")
+	}
+}

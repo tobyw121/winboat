@@ -33,3 +33,13 @@ func (b *graphicsBreaker) observe(now time.Time, enabled bool, p displayAdapters
 	b.attempted = true
 	return true
 }
+
+// Event-log failure or unknown desktop state never authorizes a mutation.
+func (b *graphicsBreaker) crashBurst(enabled bool, count int, p displayAdapters, d desktopSnapshot, probeErr error) bool {
+	if b.attempted || !enabled || count < 3 || probeErr != nil || d.SessionID == 0 || !d.Managed ||
+		p.Helios.State != "running" || p.Basic.State != "running" || d.Basic.State != "active" || !d.Basic.Primary {
+		return false
+	}
+	b.attempted = true
+	return true
+}

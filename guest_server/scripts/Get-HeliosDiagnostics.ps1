@@ -4,6 +4,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false)
 $diagnosticsLibraryOnly=$LibraryOnly
+. (Join-Path $PSScriptRoot 'Compare-HeliosStack.ps1')
 . (Join-Path $PSScriptRoot 'Start-HeliosProvisioning.ps1') -LibraryOnly
 . (Join-Path $PSScriptRoot 'Get-HeliosApplicationDiagnostics.ps1') -LibraryOnly
 function Get-HeliosDriverDiagnostics {
@@ -29,6 +30,8 @@ function Get-HeliosDriverDiagnostics {
         $rescue=Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\WinBoat\DisplayRecovery' -ErrorAction Stop
         $hold=($null -ne $rescue.PSObject.Properties['HeliosDisabled'] -and $rescue.HeliosDisabled -eq 1)
     } catch [System.Management.Automation.ItemNotFoundException] {$hold=$false} catch {}
-    return [ordered]@{diagnosticsVersion=2;rescueHold=$hold;application=(Get-HeliosApplicationDiagnostics);testSigning=$signing;controllers=$controllers;driverRegistry=$values;updatedAtUtc=[DateTime]::UtcNow.ToString('o')}
+    $application=Get-HeliosApplicationDiagnostics
+    $coherence=Compare-HeliosStack $controllers $application
+    return [ordered]@{diagnosticsVersion=2;stackCoherence=$coherence;rescueHold=$hold;application=$application;testSigning=$signing;controllers=$controllers;driverRegistry=$values;updatedAtUtc=[DateTime]::UtcNow.ToString('o')}
 }
 if (-not $diagnosticsLibraryOnly) {Get-HeliosDriverDiagnostics | ConvertTo-Json -Depth 10 -Compress}

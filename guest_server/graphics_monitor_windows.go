@@ -58,7 +58,12 @@ func collectDisplayAdapters(ctx context.Context, viewerUnavailable bool) ([]byte
 		}
 		return next, err
 	})
-	if containment.observe(time.Now(), !rescue && graphicsContainmentEnabled(), pnp, desktop, probeErr) {
+	containmentEnabled := !rescue && graphicsContainmentEnabled()
+	crashBurst := false
+	if containmentEnabled {
+		crashBurst = containment.crashBurst(true, recentHeliosDwmCrashes(time.Now()), pnp, desktop, probeErr)
+	}
+	if crashBurst || containment.observe(time.Now(), containmentEnabled, pnp, desktop, probeErr) {
 		// The fixed rescue script rechecks VGA health and takes the existing
 		// provisioning mutex. No VGA enable, topology change or reboot allowed.
 		if graphicsRescueMutex.TryLock() {
