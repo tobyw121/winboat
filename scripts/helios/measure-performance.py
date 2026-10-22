@@ -34,6 +34,7 @@ def read_frame_times(path, application):
             except (ValueError,KeyError): rejected+=1
     if len(pids)!=1 or len(values)<2: raise ValueError('Select one application process with at least two valid presents')
     result=module.frame_summary(values)
+    result.update(meanPresentIntervalMs=sum(values)/len(values),presentCallsPerSecond=1000*len(values)/sum(values))
     result.update(processId=next(iter(pids)),rejectedSamples=rejected,
                   scope='PresentMon MsBetweenPresents; presentation intervals, not input latency or displayed-frame proof')
     return result

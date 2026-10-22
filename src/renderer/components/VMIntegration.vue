@@ -1,7 +1,7 @@
 <template>
 <section class="mt-4 border-t border-neutral-700 pt-3 space-y-3">
  <h2 class="font-semibold">VM integration</h2>
- <fieldset :disabled="busy || displayBusy || blocked" class="space-y-3">
+ <fieldset :disabled="busy || displayBusy || workbenchBusy || blocked" class="space-y-3">
   <div><h3>Windows power and status</h3>
    <x-button @click="run(refresh)">Refresh status</x-button><x-button @click="run(start)">Start VM</x-button>
    <x-button @click="run(()=>power('shutdown'))">Shut down Windows</x-button><x-button @click="run(()=>power('reboot'))">Restart Windows</x-button>
@@ -32,7 +32,8 @@
    <x-button @click="run(sendFiles)">Send files to Windows</x-button><x-button @click="run(receiveFile)">Receive a file</x-button>
    <x-button @click="run(openHostExchange)">Open Linux folder</x-button><x-button @click="run(openWindowsExchange)">Open Windows folder</x-button>
   </div>
-  <IntegrationDisplay :blocked="busy || blocked" @busy="displayBusy=$event" @changed="emit('changed')" />
+  <VMWorkbench :blocked="busy || displayBusy || blocked" @busy="workbenchBusy=$event" @changed="emit('changed')" />
+  <IntegrationDisplay :blocked="busy || workbenchBusy || blocked" @busy="displayBusy=$event" @changed="emit('changed')" />
  </fieldset>
  <p role="status" class="text-sm whitespace-pre-wrap">{{ message }}</p>
  <x-button v-if="transfer" @click="transfer.abort()">Cancel file transfer</x-button>
@@ -47,6 +48,7 @@ import {copyExchangeFile,exchangeDirectory} from '../../shared/exchange-files';
 import {configuredSharedFolders,prepareSharedFolders} from '../lib/shared-folders';
 import {nativeDesktopEnvironment} from '../../shared/native-desktop-environment';
 import {hostEnvironment} from '../lib/host-environment';
+import VMWorkbench from './VMWorkbench.vue';
 import IntegrationDisplay from './IntegrationDisplay.vue';
 const props=defineProps<{blocked:boolean}>(),emit=defineEmits<{busy:[value:boolean];changed:[]}>();
 const remote:typeof import('@electron/remote')=require('@electron/remote');
@@ -55,11 +57,11 @@ const child:typeof import('child_process')=require('child_process'),util:typeof 
 const fetch:typeof import('node-fetch').default=require('node-fetch');
 const winboat=new Winboat(),busy=ref(false),message=ref(''),status=ref('Refresh to query QEMU and the guest independently.');
 const toGuest=ref(true),toHost=ref(true),label=ref('Before changes'),snapshots=ref<Array<{id:string;label:string;createdAtUtc:string;archiveBytes:number}>>([]);
-const displayBusy=ref(false);
+const displayBusy=ref(false),workbenchBusy=ref(false);
 let transfer:AbortController|undefined;
 onBeforeUnmount(()=>transfer?.abort());
-watch([busy,displayBusy],([a,b])=>emit('busy',a||b));
-async function run(action:()=>Promise<unknown>){if(busy.value||displayBusy.value||props.blocked)return;busy.value=true;message.value='Working…';try{await action();if(message.value==='Working…')message.value='Completed.';}catch(error){message.value=String(error);}finally{busy.value=false;}}
+watch([busy,displayBusy,workbenchBusy],([a,b,c])=>emit('busy',a||b||c));
+async function run(action:()=>Promise<unknown>){if(busy.value||displayBusy.value||workbenchBusy.value||props.blocked)return;busy.value=true;message.value='Working…';try{await action();if(message.value==='Working…')message.value='Completed.';}catch(error){message.value=String(error);}finally{busy.value=false;}}
 async function confirm(title:string,detail:string){return (await remote.dialog.showMessageBox({type:'question',title,message:title,detail,buttons:['Cancel','Continue'],defaultId:0,cancelId:0})).response===1;}
 async function guest(route:string,headers:Record<string,string>={}){
  const response=await fetch(`http://127.0.0.1:${winboat.getHostPort(GUEST_API_PORT)}${route}`,{method:Object.keys(headers).length?'POST':'GET',headers,timeout:6000});

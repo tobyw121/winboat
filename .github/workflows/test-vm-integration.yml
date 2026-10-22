@@ -6,8 +6,15 @@ on:
     paths:
       - 'guest_server/clipboard*'
       - 'guest_server/vm_*'
+      - 'guest_server/application_profile*'
+      - 'guest_server/acceptance_agent_windows.go'
       - 'guest_server/main.go'
       - 'native/helios-audio/**'
+      - 'helios/host/live-backup.py'
+      - 'helios/host/performance.py'
+      - 'tests/live-backup*'
+      - 'tests/workbench.py'
+      - 'scripts/helios/workbench.py'
       - 'native/helios-viewer/**'
       - 'src/**'
       - 'package.json'
@@ -20,6 +27,8 @@ on:
       - 'tests/*snapshots*'
       - 'tests/*qmp*'
       - 'tests/*usb-host*'
+      - 'tests/vm-policies.test.ts'
+      - 'tests/relative-mouse.c'
       - '.github/workflows/test-vm-integration.yml'
 permissions:
   contents: read
@@ -39,11 +48,14 @@ jobs:
           cache-dependency-path: guest_server/go.sum
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run test:integration
+      - run: npm run test:workbench
+      - name: Check relative mouse coordinates and invalid input
+        run: cc -std=c11 -Wall -Wextra -Werror tests/relative-mouse.c -lm -o /tmp/relative-mouse && /tmp/relative-mouse
       - run: npx vue-tsc --noEmit --skipLibCheck -p src/renderer/tsconfig.json
       - run: npm run build
       - name: Test clipboard consent, expiry and controlled power
         working-directory: guest_server
-        run: go test clipboard_broker.go clipboard_broker_test.go vm_power.go vm_power_test.go
+        run: go test clipboard_broker.go clipboard_broker_test.go vm_power.go vm_power_test.go application_profile.go application_profile_test.go
       - name: Cross-build native Windows session helper
         working-directory: guest_server
         run: GOOS=windows GOARCH=amd64 go build -o /tmp/winboat-server.exe .

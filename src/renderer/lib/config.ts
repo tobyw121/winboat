@@ -13,6 +13,11 @@ export type WinboatConfigObj = {
     customApps: WinApp[]
     experimentalFeatures: boolean
     multiMonitor: number
+    viewerContractTrace?:boolean;
+    lastLiveBackupId?:string;
+    viewerProfileBefore?:'auto'|'copy'|'dmabuf';
+    viewerBackgroundFPS?:number;
+    viewerTransport?:'auto'|'copy'|'dmabuf';
     localDisplayPreferred?: boolean
 };
 

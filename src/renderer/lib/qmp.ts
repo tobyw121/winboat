@@ -57,7 +57,7 @@ type QMPError = {
 type QMPReturn<T> = T extends never ? never : { return: T } | QMPError;
 
 type QMPCommandWithArgs = "human-monitor-command" | "device_add" | "device_del" | "device-list-properties";
-type QMPCommandNoArgs = "qmp_capabilities" | "query-commands" | "query-status" | "query-block";
+type QMPCommandNoArgs = "qmp_capabilities" | "query-commands" | "query-status" | "query-block" | "query-kvm";
 type QMPCommand = QMPCommandWithArgs | QMPCommandNoArgs;
 
 type QMPArgumentProps = {
@@ -89,6 +89,7 @@ export type QMPResponse<T extends QMPCommand> = QMPReturn<
             T extends "qmp_capabilities" ? QMPGreeting : 
             T extends "query-commands" ? QMPCommandInfo[] :
             T extends "query-status" ? QMPStatusInfo :
+            T extends "query-kvm" ? {enabled:boolean;present:boolean} :
             T extends "human-monitor-command" ? string :
             T extends "device_add" ? object :
             T extends "device_del" ? string : // TODO: change this 

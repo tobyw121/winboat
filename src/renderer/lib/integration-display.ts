@@ -1,4 +1,5 @@
 import {ref} from 'vue';
+import {WinboatConfig} from './config';
 import {Winboat} from './winboat';
 import {localDisplayDirectory} from './helios-display';
 import {heliosDisplayAddress} from '../../shared/helios-display';
@@ -9,7 +10,7 @@ const child:typeof import('child_process')=require('child_process'),path:typeof 
 const winboat=new Winboat();let audio:import('child_process').ChildProcess|undefined;
 const windows=new Set<import('child_process').ChildProcess>();
 export const audioStatus=ref('stopped');
-function env(){return nativeDesktopEnvironment(hostEnvironment(),remote.app.isPackaged?path.dirname(process.resourcesPath):undefined);}
+function env(){return {...nativeDesktopEnvironment(hostEnvironment(),remote.app.isPackaged?path.dirname(process.resourcesPath):undefined),HELIOS_VIEWER_CONTRACT:new WinboatConfig().config.viewerContractTrace?'1':'0',HELIOS_VIEWER_BACKGROUND_FPS:String(new WinboatConfig().config.viewerBackgroundFPS??0),HELIOS_VIEWER_TRANSPORT:new WinboatConfig().config.viewerTransport??'auto'};}
 function helper(){return remote.app.isPackaged?path.join(process.resourcesPath,'native/helios-audio.py'):path.resolve(remote.app.getAppPath(),'../..','native/helios-audio/audio.py');}
 function viewer(){return remote.app.isPackaged?path.join(process.resourcesPath,'native/winboat-helios-viewer'):path.resolve(remote.app.getAppPath(),'../..','build/native/winboat-helios-viewer');}
 export async function startAudio(microphone:boolean){

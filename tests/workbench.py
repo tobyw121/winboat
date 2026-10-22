@@ -13,6 +13,13 @@ class Tests(unittest.TestCase):
   result=m.transport_contracts(host,__import__('json').dumps(v,separators=(',',':')))
   self.assertIn('allocation-extent',result['checks'][0]['mismatches']);self.assertIn('optimal-shape',result['checks'][0]['mismatches'])
   v['inode']=7;self.assertEqual(m.transport_contracts(host,__import__('json').dumps(v,separators=(',',':')))['checks'][0]['state'],'unmatched')
+ def test_presentmon_rate_keeps_one_application_process(self):
+  import tempfile
+  with tempfile.TemporaryDirectory() as folder:
+   path=Path(folder)/'frames.csv';path.write_text('Application,ProcessID,MsBetweenPresents\napp.exe,42,20\napp.exe,42,20\nother.exe,7,5\n')
+   result=m.load('measure-performance').read_frame_times(path,'app.exe');self.assertEqual(result['presentCallsPerSecond'],50);self.assertEqual(result['processId'],42)
+   with path.open('a') as stream:stream.write('app.exe,43,20\n')
+   with self.assertRaises(ValueError):m.load('measure-performance').read_frame_times(path,'app.exe')
  def test_release_gate_rejects_missing_or_other_package_evidence(self):
   identity={'manifestSha256':'a'*64,'machineId':'m','version':'v'};v={'hostImage':'host','acceptance':{'automatedPassed':True,'finishedAtUtc':__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat(),'tests':[{'name':name,'status':'passed','exitCode':0,'sha256':'a'*64} for name in ('D3D11','Vulkan features','Vulkan presentation','OpenGL','D3D11 1x resize','D3D11 format contracts')],'identity':identity}}
   scenarios={name:{'hostImage':'host','acceptance':{'identity':identity},'assessment':{'state':'passed'}} for name in ('cold-boot','resize','logon')}

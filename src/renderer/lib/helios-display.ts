@@ -8,6 +8,7 @@ import { HELIOS_DISPLAY_CAPABILITY, HELIOS_DISPLAY_VERSION, HELIOS_DISPLAY_MOUNT
     heliosDisplayAddress, heliosDisplayBusConfig, heliosDisplayDirectory } from '../../shared/helios-display';
 import type { ComposeConfig } from '../../types';
 import { ref } from 'vue';
+import {WinboatConfig} from './config';
 import { HeliosViewer, type ViewerState } from '../../shared/helios-viewer';
 const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
@@ -62,7 +63,7 @@ function reportViewerAvailability(unavailable:boolean):void {
 }
 function desktopEnvironment(api: HeliosGLAPI = graphicsAPI): NodeJS.ProcessEnv {
     return {...nativeDesktopEnvironment(hostEnvironment(), remote.app.isPackaged ? path.dirname(process.resourcesPath) : undefined),
-        WINBOAT_HELIOS_GL_API: api};
+        WINBOAT_HELIOS_GL_API: api,HELIOS_VIEWER_CONTRACT:new WinboatConfig().config.viewerContractTrace?'1':'0',HELIOS_VIEWER_BACKGROUND_FPS:String(new WinboatConfig().config.viewerBackgroundFPS??0),HELIOS_VIEWER_TRANSPORT:new WinboatConfig().config.viewerTransport??'auto'};
 }
 
 function binary(): string {

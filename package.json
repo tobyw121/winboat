@@ -29,7 +29,8 @@
         "test:helios:viewer": "bash scripts/helios/smoke-viewer.sh",
         "test:helios:windows": "pwsh -NoProfile -File tests/guest-update-provisioning.test.ps1 && pwsh -NoProfile -File tests/vcredist-provisioning.test.ps1 && pwsh -NoProfile -File tests/display-adapters.test.ps1 && pwsh -NoProfile -File tests/helios-provisioning.test.ps1 && pwsh -NoProfile -File tests/helios-windows.test.ps1",
         "test:shared-folders": "tsx --test tests/shared-folders.test.ts",
-        "test:integration": "tsx --test tests/clipboard-sync.test.ts tests/qmp-protocol.test.ts tests/exchange-files.test.ts tests/usb-host-use.test.ts && python3 tests/vm-snapshots.py && python3 tests/helios-audio.py"
+        "test:integration": "tsx --test tests/clipboard-sync.test.ts tests/qmp-protocol.test.ts tests/exchange-files.test.ts tests/usb-host-use.test.ts && python3 tests/vm-snapshots.py && python3 tests/helios-audio.py",
+        "test:workbench": "tsx --test tests/vm-policies.test.ts && python3 tests/workbench.py && python3 tests/live-backup.py && python3 tests/helios-performance.py"
     },
     "repository": "https://github.com/TibixDev/winboat",
     "author": {

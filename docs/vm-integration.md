@@ -22,8 +22,9 @@ These are verified, uncompressed **offline storage checkpoints**. Shut Windows
 and the container down cleanly first. Snapshots include bind-mounted `/storage`,
 including firmware stored there, and a private container description. Shared
 folders and external disks are excluded; external QEMU disk arguments and QCOW2
-backing chains are rejected. No live VSS snapshot, RAM snapshot or GPU-state
-restoration is advertised or implemented.
+backing chains are rejected. This offline manager does not restore RAM or GPU state. Separate VSS live disk
+exports are available in the [workbench](vm-workbench.md); they use a different
+format and require Windows QGA/VSS.
 
 Archives and records are private under `~/.winboat/snapshots`. They can contain
 Windows data and configuration secrets. Allow enough space for the complete
