@@ -101,3 +101,15 @@ unmanaged prefixes and mismatched identities are refused. Removing a JSON
 profile does not delete saves or its prefix. Keep saves separately backed up.
 The launcher returns UMU's exit code; success in a fixture test is not a claim
 that Icarus or FurMark works with this route. There is no GUI entry yet.
+
+## Local Desktop spatial sharpening
+
+Workbench → **Local Desktop sharpening** offers Off, 25%, 50% and 100%. Save and
+reopen the viewer to apply it; Off restores the original output. The native
+OpenGL/OpenGL ES shader uses a neighborhood-clamped unsharp filter on the final
+completed display texture. Source copies, guest API selection, DMA-BUF ownership
+and guest resolution are unchanged. No additional image-sized buffer is created.
+The extra texture samples can cost GPU time; this is an image-quality option,
+not a measured performance improvement or AMD FSR implementation. Test rendering
+covers both GL and GLES. The equivalent native viewer environment option is
+`HELIOS_VIEWER_SHARPEN=0..100`.

@@ -48,6 +48,9 @@
   <x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>restore('readback-cache'))">Restore readback cache</x-button>
   <label><input type="checkbox" v-model="background"> Limit background viewer work to 5 updates/s</label>
   <x-button :disabled="busy || toolsBusy || blocked" @click="run(saveBackground)">Save background limit</x-button>
+  <label>Local Desktop sharpening <select v-model.number="sharpen" aria-label="Viewer sharpening" class="bg-neutral-900"><option :value="0">Off</option><option :value="25">25%</option><option :value="50">50%</option><option :value="100">100%</option></select></label>
+  <x-button :disabled="busy || toolsBusy || blocked" @click="run(saveSharpen)">Save sharpening</x-button>
+  <p class="text-sm text-neutral-400">Adjusts Local Desktop image sharpness. Extra filtering can increase GPU use. Reopen Local Desktop after saving.</p>
   <select v-model="network" aria-label="Network mode" class="bg-neutral-900"><option value="nat">NAT</option><option value="bridge">LAN via existing Docker macvlan</option><option value="isolated">Isolated (no guest networking)</option></select>
   <input v-if="network==='bridge'" v-model="networkName" aria-label="Existing Docker macvlan network" placeholder="Existing Docker macvlan network" class="bg-neutral-900 p-1">
   <x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>apply('network'))">Apply network and restart</x-button>
@@ -102,6 +105,7 @@ const {promisify}:typeof import('util')=require('util'),fetch:typeof import('nod
 const toolsBusy=ref(false);
 const winboat=new Winboat(),config=new WinboatConfig();const busy=ref(false),message=ref(''),automatic=ref(false),metrics=ref<any>(),metricText=ref('No sample yet. Viewer rate is not application FPS.');let previous:any;
 const exe=ref(''),argumentsJSON=ref('[]'),resolution=ref('1920x1080'),api=ref<ApplicationProfile['api']>('native'),transport=ref<ApplicationProfile['transport']>('auto'),profiles=ref<{id:string;exe:string}[]>([]),selected=ref('');
+const sharpen=ref(config.config.viewerSharpenPercent??0);
 const cpuSet=ref(''),hugepages=ref(false),background=ref(config.config.viewerBackgroundFPS===5),network=ref<NetworkMode>('nat'),networkName=ref(''),scenario=ref('cold-boot'),backupId=ref(config.config.lastLiveBackupId??'');let before='';
 const tick=setInterval(()=>{if(automatic.value&&!busy.value&&!toolsBusy.value&&!props.blocked)void run(sample);},5000);onBeforeUnmount(()=>clearInterval(tick));watch([busy,toolsBusy],([a,b])=>emit('busy',a||b));
 async function run(fn:()=>Promise<unknown>){if(busy.value||toolsBusy.value||props.blocked)return;busy.value=true;message.value='Working…';try{await fn();if(message.value==='Working…')message.value='Completed.';}catch(e){message.value=String(e);}finally{busy.value=false;}}
@@ -142,6 +146,7 @@ async function restore(kind:string){
  try{await replace(changePolicy(winboat.parseCompose().services.windows,kind,null));if(kind==='application')config.config.viewerProfileBefore=undefined;if(kind==='diagnostics')config.config.viewerContractTrace=false;}catch(error){config.config.viewerTransport=old;config.config.viewerContractTrace=oldTrace;throw error;}
 }
 async function compactCache(){if(await confirm('Trial a smaller display readback cache?','Keeps two import entries instead of the default eight. The shared dynamic VRAM ceiling stays in force. Measure cache misses and frame times; confirm this trial within five minutes.'))await replace(changePolicy(winboat.parseCompose().services.windows,'readback-cache',{environment:{HELIOS_READBACK_CACHE_ENTRIES:'2'}}),true);}
+async function saveSharpen(){if(![0,25,50,100].includes(sharpen.value))throw new Error('Invalid sharpening strength');config.config.viewerSharpenPercent=sharpen.value;message.value='Saved. Reopen Local Desktop to apply; choose Off to restore the original image.';}
 async function saveBackground(){config.config.viewerBackgroundFPS=background.value?5:0;message.value='Saved. Reopen Local Desktop for this viewer setting.';}
 async function versions(){message.value=JSON.stringify(await execute('graphics-center.py',['preflight']),null,2);}
 async function rollback(){if(await confirm('Prepare the recorded stable graphics package?','Requires the existing VGA-only rescue and verified backup prerequisites. This prepares rollback; driver replacement remains a Windows maintenance action.'))message.value=JSON.stringify(await execute('graphics-center.py',['prepare-rollback']),null,2);}

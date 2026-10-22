@@ -76,7 +76,7 @@ struct Viewer {
  guint64 coalesced_updates;
  guint8 *software_scratch;gsize software_scratch_capacity;
  gboolean pointer_grabbed;
- guint background_fps,transport_mode;
+ guint background_fps,transport_mode,sharpen_percent;
  gboolean background_paused;
  FramePacer frame_pacer;
  int exit_code;
@@ -346,13 +346,14 @@ static void configure_gl(void) {
   else if (use_gles()) add_gtk_flag("GDK_DEBUG","gl-gles");
  }
 }
-static void draw(Viewer *v, GLuint texture, const float *rect, gboolean flip) {
+static void draw(Viewer *v, GLuint texture, const float *rect, gboolean flip, float sharpen) {
  gboolean external=v->source_external && texture==v->source;
  GLuint program=external?v->external_program:v->program;
  glUseProgram(program);glBindVertexArray(v->vao);glActiveTexture(GL_TEXTURE0);
  glBindTexture(external?GL_TEXTURE_EXTERNAL_OES:GL_TEXTURE_2D,texture);
  glUniform1i(glGetUniformLocation(program,"image"),0);
  glUniform4fv(glGetUniformLocation(program,"rect"),1,rect);
+ glUniform1f(glGetUniformLocation(program,"sharpen"),sharpen);
  glUniform1i(glGetUniformLocation(program,"flip"),flip);glDrawArrays(GL_TRIANGLES,0,3);
 }
 static gboolean save_screenshot(Viewer *v,const char *path) {
@@ -386,7 +387,7 @@ static gboolean render(GtkGLArea *area,GdkGLContext *context,Viewer *v) {
  viewport(v,gtk_widget_get_width(v->area),gtk_widget_get_height(v->area),&x,&y,&w,&h);
  glViewport(x*scale,y*scale,w*scale,h*scale);
  if (d->texture && d->width && d->cache_valid) {
-  const float rect[]={0,0,1,1};draw(v,d->texture,rect,d->flip);v->rendered_frames++;
+  const float rect[]={0,0,1,1};draw(v,d->texture,rect,d->flip,v->sharpen_percent/100.0f);v->rendered_frames++;
  }
  if (glGetError()!=GL_NO_ERROR) fatal(v,"OpenGL window rendering failed.");
  else if (d->cache_valid) trace_wire(d,"render","Cached");
@@ -559,7 +560,7 @@ static gboolean copy_dma(Viewer *v) {
   GLint x=v->source_x,y=v->source_y,rw=w,rh=h;
   glBindFramebuffer(GL_READ_FRAMEBUFFER,v->source_fbo);
   glBlitFramebuffer(x,v->source_flip?y+rh:y,x+rw,v->source_flip?y:y+rh,0,0,rw,rh,GL_COLOR_BUFFER_BIT,GL_NEAREST);
- } else draw(v,v->source,v->rect,v->source_flip);
+ } else draw(v,v->source,v->rect,v->source_flip,0.0f);
  /* QEMU blocks its GL console until UpdateDMABUF returns. Finish source reads
   * before ACK; redraws only sample our own texture, never a released scanout.
   * Producer completion still relies on the protocol/driver's implicit sync.
@@ -855,7 +856,7 @@ static gboolean initialize_gl(Viewer *v) {
  gboolean desktop=epoxy_is_desktop_gl();
  const char *header=desktop?"#version 330\n":"#version 300 es\nprecision highp float;\n";
  char *vertex=g_strconcat(header,"out vec2 uv;void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);uv=p;gl_Position=vec4(p*2.0-1.0,0.0,1.0);}",NULL);
- char *fragment=g_strconcat(header,"in vec2 uv;out vec4 color;uniform sampler2D image;uniform vec4 rect;uniform bool flip;void main(){vec2 p=uv;if(flip)p.y=1.0-p.y;color=vec4(texture(image,rect.xy+p*rect.zw).rgb,1.0);}",NULL);
+ char *fragment=g_strconcat(header,"in vec2 uv;out vec4 color;uniform sampler2D image;uniform vec4 rect;uniform bool flip;uniform float sharpen;vec3 sampleAt(vec2 p){return texture(image,clamp(p,rect.xy,rect.xy+rect.zw)).rgb;}void main(){vec2 p=uv;if(flip)p.y=1.0-p.y;p=rect.xy+p*rect.zw;vec3 c=sampleAt(p);if(sharpen>0.0){vec2 t=1.0/vec2(textureSize(image,0));vec3 a=sampleAt(p+vec2(t.x,0)),b=sampleAt(p-vec2(t.x,0)),d=sampleAt(p+vec2(0,t.y)),e=sampleAt(p-vec2(0,t.y));vec3 lo=min(c,min(min(a,b),min(d,e))),hi=max(c,max(max(a,b),max(d,e)));c=clamp(c+sharpen*(c-(a+b+d+e)*0.25),lo,hi);}color=vec4(c,1.0);}",NULL);
  v->program=presentation_program(vertex,fragment);g_free(fragment);
  if (v->program && epoxy_has_gl_extension(desktop?"GL_OES_EGL_image_external":"GL_OES_EGL_image_external_essl3")) {
   const char *external_header=desktop?"#version 330\n#extension GL_OES_EGL_image_external : require\n":"#version 300 es\n#extension GL_OES_EGL_image_external_essl3 : require\nprecision highp float;\n";
@@ -1355,6 +1356,12 @@ int main(int argc,char **argv) {
   g_io_channel_set_flags(channel,g_io_channel_get_flags(channel)|G_IO_FLAG_NONBLOCK,NULL);
   v.health_watch=g_io_add_watch(channel,G_IO_IN|G_IO_HUP|G_IO_ERR|G_IO_NVAL,adapter_control,&v);
   g_io_channel_unref(channel);v.health_timer=g_timeout_add_seconds(2,expire_adapter_health,&v);
+ }
+ const char *sharp=g_getenv("HELIOS_VIEWER_SHARPEN");
+ if (sharp && *sharp) {
+  char *end=NULL;guint64 amount=g_ascii_strtoull(sharp,&end,10);
+  if (*end || amount>100) fatal(&v,"HELIOS_VIEWER_SHARPEN must be 0..100");
+  else v.sharpen_percent=amount;
  }
  const char *background=g_getenv("HELIOS_VIEWER_BACKGROUND_FPS");
  if (background && *background) {

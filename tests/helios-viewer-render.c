@@ -93,14 +93,14 @@ int main(void) {
   g_assert_cmpuint(v.copy_samples,>,0);
   g_assert_cmpuint(v.copy_wall_us,>=,v.completion_wait_us);
   glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,4,4);
-  draw(&v,v.texture,full,v.flip);expect_corners(fbo);
+  draw(&v,v.texture,full,v.flip,0.0f);expect_corners(fbo);
   /* A replacement DMA-BUF of the same size has not yet received Update.
    * Keep the last completed frame instead of exposing uninitialized storage
    * or making the selector fall back to VGA on every buffer swap. */
   dma_geometry(&v,1,2,4,4,6,8,top);
   g_assert_true(v.cache_valid);
   glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,4,4);
-  draw(&v,v.texture,full,v.flip);expect_corners(fbo);
+  draw(&v,v.texture,full,v.flip,0.0f);expect_corners(fbo);
  }
  /* Geometry stays bound to the old complete frame until the new copy. */
  dma_geometry(&v,1,2,2,2,6,8,TRUE);
@@ -113,15 +113,31 @@ int main(void) {
  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
  glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,4,4);
- draw(&v,v.texture,full,TRUE);expect_corners(fbo);
+ draw(&v,v.texture,full,TRUE,0.0f);expect_corners(fbo);
+ /* Optional spatial sharpening executes only on final display, never on
+  * source-copy passes. A bounded unsharp filter must preserve flat fields. */
+ const guint8 gray[]={32,32,32,255,96,96,96,255,112,112,112,255,224,224,224,255};
+ texture_size(&v,4,1);glTexSubImage2D(GL_TEXTURE_2D,0,0,0,4,1,GL_RGBA,GL_UNSIGNED_BYTE,gray);
+ glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+ glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,4,4);
+ guint8 unfiltered[4],enhanced[4];draw(&v,v.texture,full,FALSE,0.0f);glReadPixels(1,1,1,1,GL_RGBA,GL_UNSIGNED_BYTE,unfiltered);
+ draw(&v,v.texture,full,FALSE,0.5f);glReadPixels(1,1,1,1,GL_RGBA,GL_UNSIGNED_BYTE,enhanced);
+ g_assert_cmpuint(enhanced[0],>,unfiltered[0]);g_assert_cmpuint(enhanced[0],<=,112);
+ g_assert_cmpuint(enhanced[0],==,enhanced[1]);g_assert_cmpuint(enhanced[3],==,255);
+ glViewport(0,0,4,4);draw(&v,v.texture,full,FALSE,1.0f);g_assert_cmpuint(glGetError(),==,GL_NO_ERROR);
+ const guint8 flat[]={80,80,80,255};
+ texture_size(&v,1,1);glTexSubImage2D(GL_TEXTURE_2D,0,0,0,1,1,GL_RGBA,GL_UNSIGNED_BYTE,flat);
+ glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,4,4);draw(&v,v.texture,full,FALSE,1.0f);
+ glReadPixels(1,1,1,1,GL_RGBA,GL_UNSIGNED_BYTE,enhanced);g_assert_cmpuint(enhanced[0],==,80);
  /* Use the real software upload with BGRA pixels and row padding. */
  guint8 padded[24]={0};
  for (int row=0;row<2;row++) for(int col=0;col<2;col++) {
   const guint8 *color=software[row*2+col];guint8 *pixel=padded+row*12+col*4;
   pixel[0]=color[2];pixel[1]=color[1];pixel[2]=color[0];pixel[3]=color[3];
  }
- upload_software(&v,0,0,2,2,12,TRUE,padded);
- draw(&v,v.texture,full,TRUE);expect_corners(fbo);
+ texture_size(&v,2,2);upload_software(&v,0,0,2,2,12,TRUE,padded);
+ glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,4,4);
+ draw(&v,v.texture,full,TRUE,0.0f);expect_corners(fbo);
  /* Reallocate real textures across HD, odd/padded rows, UHD and back down.
   * Presentation must retain orientation while scaling to a small viewport. */
  const unsigned extents[][2]={{1920,1080},{1366,768},{3840,2160},{1280,800}};
@@ -135,7 +151,7 @@ int main(void) {
   }
   texture_size(&v,width,height);upload_software(&v,0,0,width,height,stride,TRUE,pixels);g_free(pixels);
   glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,4,4);
-  draw(&v,v.texture,full,TRUE);expect_corners(fbo);
+  draw(&v,v.texture,full,TRUE,0.0f);expect_corners(fbo);
  }
  /* Real EGLImage binding, independently of DMA-BUF availability in Xvfb.
   * A stale GL error must not make a valid imported image look unsupported. */
@@ -150,7 +166,7 @@ int main(void) {
  g_assert_true(bind_egl_source(&v,image,FALSE));
  dma_geometry(&v,0,0,2,2,2,2,FALSE);g_assert_true(copy_dma(&v));
  glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,4,4);
- draw(&v,v.texture,full,v.flip);expect_corners(fbo);
+ draw(&v,v.texture,full,v.flip,0.0f);expect_corners(fbo);
  if (epoxy_has_gl_extension(epoxy_is_desktop_gl()?"GL_OES_EGL_image_external":"GL_OES_EGL_image_external_essl3")) {
   g_assert_cmpuint(v.external_program,!=,0);
   reject_texture_binding=2;
@@ -158,7 +174,7 @@ int main(void) {
   reject_texture_binding=0;g_assert_true(v.source_external);
   g_assert_true(copy_dma(&v));
   glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,4,4);
-  draw(&v,v.texture,full,v.flip);expect_corners(fbo);
+  draw(&v,v.texture,full,v.flip,0.0f);expect_corners(fbo);
   puts("External EGLImage sampler and presentation copy passed.");
  } else puts("External EGLImage sampler unavailable in this GL context; external sampling test skipped.");
  puts("Real EGLImage binding, stale GL error isolation and presentation corners passed.");
@@ -185,7 +201,7 @@ int main(void) {
    g_assert_true(copy_dma(&v));
    GLint read,write;glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING,&read);glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING,&write);
    g_assert_cmpuint(read,==,fbo);g_assert_cmpuint(write,==,fbo);
-   draw(&v,v.texture,full,v.flip);expect_corners(fbo);
+   draw(&v,v.texture,full,v.flip,0.0f);expect_corners(fbo);
   }
   discard_source(&v);g_assert_cmpuint(v.source_fbo,==,0);g_assert_cmpuint(v.source_renderbuffer,==,0);
   g_assert_true(eglDestroyImageKHR(display,image));glDeleteTextures(1,&original);

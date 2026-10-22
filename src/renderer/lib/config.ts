@@ -18,6 +18,7 @@ export type WinboatConfigObj = {
     lastLiveBackupId?:string;
     viewerProfileBefore?:'auto'|'copy'|'dmabuf';
     viewerBackgroundFPS?:number;
+    viewerSharpenPercent?:number;
     viewerTransport?:'auto'|'copy'|'dmabuf';
     localDisplayPreferred?: boolean
 };

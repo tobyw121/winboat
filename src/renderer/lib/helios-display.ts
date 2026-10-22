@@ -64,7 +64,7 @@ function reportViewerAvailability(unavailable:boolean):void {
 }
 function desktopEnvironment(api: HeliosGLAPI = graphicsAPI): NodeJS.ProcessEnv {
     return {...nativeDesktopEnvironment(hostEnvironment(), remote.app.isPackaged ? path.dirname(process.resourcesPath) : undefined),
-        WINBOAT_HELIOS_GL_API: api,HELIOS_VIEWER_CONTRACT:new WinboatConfig().config.viewerContractTrace?'1':'0',HELIOS_VIEWER_BACKGROUND_FPS:String(new WinboatConfig().config.viewerBackgroundFPS??0),HELIOS_VIEWER_TRANSPORT:new WinboatConfig().config.viewerTransport??'auto'};
+        WINBOAT_HELIOS_GL_API: api,HELIOS_VIEWER_SHARPEN:String(new WinboatConfig().config.viewerSharpenPercent??0),HELIOS_VIEWER_CONTRACT:new WinboatConfig().config.viewerContractTrace?'1':'0',HELIOS_VIEWER_BACKGROUND_FPS:String(new WinboatConfig().config.viewerBackgroundFPS??0),HELIOS_VIEWER_TRANSPORT:new WinboatConfig().config.viewerTransport??'auto'};
 }
 
 function binary(): string {
