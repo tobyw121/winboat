@@ -578,7 +578,7 @@ export class Winboat {
         this.containerActionLoading.value = false;
     }
 
-    async configurationTrial(action: 'status'|'confirm'|'recover' = 'status') {
+    async configurationTrial(action: 'status'|'confirm'|'recover'|'accept-external' = 'status') {
         const script = remote.app.isPackaged ? path.join(process.resourcesPath,'graphics-tools','config-trial.py') : path.resolve(remote.app.getAppPath(),'../..','scripts/helios/config-trial.py');
         const {stdout} = await execFileAsync('python3',[script,action],{timeout:330000,maxBuffer:65536});
         return JSON.parse(stdout) as {status:string;deadline?:number};
@@ -596,6 +596,7 @@ export class Winboat {
         await validateConfiguredShares(composeConfig.services.windows);
         logger.info("Going to replace compose config");
         this.containerActionLoading.value = true;
+        let trialStarted=false;
         try {
             const composeFilePath = path.join(WINBOAT_DIR, 'docker-compose.yml');
 
@@ -603,6 +604,7 @@ export class Winboat {
                 const script = remote.app.isPackaged ? path.join(process.resourcesPath,'graphics-tools','config-trial.py') : path.resolve(remote.app.getAppPath(),'../..','scripts/helios/config-trial.py');
                 const hash = require('crypto').createHash('sha256').update(PrettyYAML.stringify(composeConfig)).digest('hex');
                 await execFileAsync('python3',[script,'begin','--compose',composeFilePath,'--expected',hash]);
+                trialStarted=true;
                 const watcher = require('child_process').spawn('python3',[script,'watch'],{detached:true,stdio:'ignore'});
                 await new Promise<void>((resolve,reject)=>{watcher.once('spawn',resolve);watcher.once('error',reject);});
                 watcher.unref();
@@ -618,18 +620,22 @@ export class Winboat {
             // 2. Create a backup directory if it doesn't exist
             const backupDir = path.join(WINBOAT_DIR, 'backup');
             if (!fs.existsSync(backupDir)) {
-                fs.mkdirSync(backupDir);
+                fs.mkdirSync(backupDir,{mode:0o700});
                 logger.info(`Created compose backup dir: ${backupDir}`)
             }
 
             // 3. Move the current compose file to backup
             const backupFile = `${Date.now()}-docker-compose.yml`;
-            fs.renameSync(composeFilePath, path.join(backupDir, backupFile));
+            fs.chmodSync(backupDir,0o700);
+            fs.copyFileSync(composeFilePath, path.join(backupDir, backupFile));
+            fs.chmodSync(path.join(backupDir,backupFile),0o600);
             logger.info(`Backed up current compose at: ${path.join(backupDir, backupFile)}`);
 
             // 4. Write new compose file
             const newComposeYAML = PrettyYAML.stringify(composeConfig);
-            fs.writeFileSync(composeFilePath, newComposeYAML, { encoding: 'utf8' });
+            const pendingFile=composeFilePath+'.'+require('crypto').randomBytes(8).toString('hex');
+            fs.writeFileSync(pendingFile,newComposeYAML,{encoding:'utf8',mode:0o600,flag:'wx'});
+            fs.renameSync(pendingFile,composeFilePath);
             logger.info(`Wrote new compose file to: ${composeFilePath}`);
 
             // 5. Deploy the container with the new compose file
@@ -637,6 +643,12 @@ export class Winboat {
 
             logger.info("Replace compose config completed, successfully deployed new container");
 
+        } catch(error) {
+            if(trialStarted) {
+                try {await this.configurationTrial('recover');}
+                catch(recovery) {throw new Error('Configuration change failed and rollback needs attention: '+String(recovery),{cause:error});}
+            }
+            throw error;
         } finally {
             this.containerActionLoading.value = false;
         }

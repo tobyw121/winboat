@@ -73,8 +73,8 @@ def scheduled(root,container,keep,min_free):
   except ValueError:return {'status':'skipped-running-or-unclean','deleted':[]}
   source=v.storage(info);size=sum(p.stat().st_size for p in v.backup.files(source))
   if shutil.disk_usage(root).free<size+min_free*1024**3:return {'status':'skipped-capacity','requiredBytes':size+min_free*1024**3,'deleted':[]}
-  created=manager.create(container,'Scheduled offline checkpoint')
-  rows=sorted((r for r in manager.list() if r['label']=='Scheduled offline checkpoint'),key=lambda r:r['createdAtUtc'],reverse=True)
+  created=manager.create(container,'Scheduled offline checkpoint');created['scheduleManaged']=True;v.write(manager.paths(created['id'])[1],created)
+  rows=sorted((r for r in manager.list() if r.get('scheduleManaged') is True),key=lambda r:r['createdAtUtc'],reverse=True)
   deleted=[]
   for r in rows[keep:]:manager.delete(r['id']);deleted.append(r['id'])
   return {'status':'created','id':created['id'],'deleted':deleted}
@@ -87,9 +87,9 @@ def schedule(action,keep=5,min_free=10):
   subprocess.run(['systemctl','--user','disable','--now',timer.name],check=True,capture_output=True);return {'status':'disabled'}
  worker=Path.home()/'.winboat'/'BackupWorker';load('config-trial').private(worker)
  for name in ('backup-manager.py','vm-snapshots.py','backup-vm.py','config-trial.py'):
-  target=worker/name
+  target=worker/name;data=(Path(__file__).parent/name).read_bytes()
   fd=os.open(target,os.O_WRONLY|os.O_CREAT|os.O_TRUNC|os.O_NOFOLLOW,0o600)
-  with os.fdopen(fd,'wb') as stream:stream.write((Path(__file__).parent/name).read_bytes())
+  with os.fdopen(fd,'wb') as stream:stream.write(data)
  script=worker/'backup-manager.py'
  # systemd command quoting: escape percent specifiers and reject unsafe quote/control characters.
  if any(c in str(script) for c in '"\\\n\r'):raise ValueError('Unsupported script path for systemd unit')
