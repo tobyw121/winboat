@@ -3,7 +3,7 @@
 Open **Configuration → VM integration → Compatibility and performance workbench**.
 Rebuild the AppImage and Helios host image with `./scripts/build-helios.sh` and
 update the Windows guest service. The added guest endpoints require
-`helios-watchdog-v20`. No Helios kernel/UMD package or bundled .291 installer is
+`helios-watchdog-v21`. No Helios kernel/UMD package or bundled .291 installer is
 changed by these features.
 
 ## Measurements and application profiles
@@ -128,3 +128,5 @@ policy restoration tests, failure-injected freeze/thaw tests, real QEMU full-cop
 and exact disk comparison (with **simulated VSS**), GTK rendering/fallback tests
 and relative-coordinate tests. Real Windows VSS writers, UAC, physical NVIDIA
 rendering, LAN reachability and games still require validation on a desktop VM.
+
+The [project reliability guide](project-reliability.md) documents the added configuration watchdog, backup staging/timers, scoped API sessions and extended clipboard.

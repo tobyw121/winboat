@@ -6,6 +6,8 @@ on:
     paths:
       - '.github/workflows/test-helios-qemu-dbus.yml'
       - 'helios/host/**'
+      - 'scripts/helios/backup-manager.py'
+      - 'tests/backup-stage-qemu.py'
       - 'helios/source.lock.json'
       - 'tests/helios-qemu-dbus.*'
       - 'tests/helios-renderer-budget.py'
@@ -76,6 +78,8 @@ on:
   pull_request:
     paths:
       - 'helios/host/**'
+      - 'scripts/helios/backup-manager.py'
+      - 'tests/backup-stage-qemu.py'
       - 'helios/source.lock.json'
       - 'tests/helios-qemu-dbus.*'
       - 'tests/helios-renderer-budget.py'
@@ -189,6 +193,8 @@ jobs:
         run: docker run --rm --network none -e LD_LIBRARY_PATH=/opt/helios/renderer/lib:/opt/helios/lib --entrypoint python3 -v "$PWD:/src:ro" -w /src winboat-helios-test:drm-node tests/helios-io-poll-qemu.py
       - name: Verify live disk export against real QEMU with simulated VSS
         run: docker run --rm --network none -e LD_LIBRARY_PATH=/opt/helios/renderer/lib:/opt/helios/lib --entrypoint python3 -v "$PWD:/src:ro" -w /src winboat-helios-test:drm-node tests/live-backup-qemu.py
+      - name: Verify synthetic export staging with actual qemu-img conversion and comparison
+        run: python3 tests/backup-stage-qemu.py winboat-helios-test:drm-node
       - name: Verify runtime capability label
         run: |
           test "$(docker image inspect --format '{{index .Config.Labels "org.winboat.helios.runtime"}}' winboat-helios-test:drm-node)" = glvnd-v12

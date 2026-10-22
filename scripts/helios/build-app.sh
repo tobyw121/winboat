@@ -11,6 +11,8 @@ python3 scripts/helios/verify-source.py
 python3 tests/helios-build-update.test.py
 npm run helios:stage -- resources/helios
 npm run test:helios
+npm run test:integration
+npm run test:workbench
 npm run test:shared-folders
 npm run test:virgl
 npm run test:packaging
@@ -41,6 +43,8 @@ cp docs/helios-301-stability.md /out/helios-301-stability.md
 cp docs/helios-302-management.md /out/helios-302-management.md
 cp docs/helios-evidence-and-recovery.md /out/helios-evidence-and-recovery.md
 cp docs/shared-folders.md /out/SHARED-FOLDERS.md
+cp docs/project-reliability.md /out/project-reliability.md
+cp docs/vm-workbench.md /out/vm-workbench.md
 cp docs/vm-hardware-profile.md /out/vm-hardware-profile.md
 cp docs/atlas-installation.md /out/atlas-installation.md
 node --input-type=module - <<'JS' > /out/BUILD-INFO.json

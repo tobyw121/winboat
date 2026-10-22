@@ -5,6 +5,10 @@ on:
     branches: [work, main]
     paths:
       - 'guest_server/clipboard*'
+      - 'guest_server/api_session*'
+      - 'guest_server/graphics_breaker*'
+      - 'guest_server/graphics_crash*'
+      - 'guest_server/scripts/Compare-HeliosStack.ps1'
       - 'guest_server/vm_*'
       - 'guest_server/application_profile*'
       - 'guest_server/acceptance_agent_windows.go'
@@ -14,6 +18,15 @@ on:
       - 'helios/host/performance.py'
       - 'tests/live-backup*'
       - 'tests/workbench.py'
+      - 'tests/config-trial.py'
+      - 'tests/project-health.py'
+      - 'tests/backup-manager.py'
+      - 'tests/release-set.py'
+      - 'tests/guest-session.test.ts'
+      - 'scripts/helios/config-trial.py'
+      - 'scripts/helios/project-health.py'
+      - 'scripts/helios/backup-manager.py'
+      - 'scripts/helios/release-set.py'
       - 'scripts/helios/workbench.py'
       - 'native/helios-viewer/**'
       - 'src/**'
@@ -55,7 +68,10 @@ jobs:
       - run: npm run build
       - name: Test clipboard consent, expiry and controlled power
         working-directory: guest_server
-        run: go test clipboard_broker.go clipboard_broker_test.go vm_power.go vm_power_test.go application_profile.go application_profile_test.go
+        run: go test ./...
+      - name: Check PowerShell stack version assessment
+        shell: pwsh
+        run: ./tests/helios-stack.test.ps1
       - name: Cross-build native Windows session helper
         working-directory: guest_server
         run: GOOS=windows GOARCH=amd64 go build -o /tmp/winboat-server.exe .
