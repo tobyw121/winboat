@@ -578,6 +578,10 @@ export class Winboat {
     }
 
     async replaceCompose(composeConfig: ComposeConfig) {
+        if (this.containerStatus.value===ContainerStatus.Running && this.parseCompose().services.windows.environment.HELIOS_AGENT_CHANNEL==='1') {
+            const {stdout}=await execFileAsync('docker',['exec','WinBoat','python3','/opt/helios/live-backup.py','busy'],{timeout:5000});
+            if(JSON.parse(stdout).state!=='idle')throw new Error('A live export or VSS operation is active. Wait for it to finish before applying configuration changes.');
+        }
         if (composeConfig.services.windows.environment.HELIOS === '1') await requireHelios();
         await prepareLocalDisplay(composeConfig);
         await validateConfiguredShares(composeConfig.services.windows);

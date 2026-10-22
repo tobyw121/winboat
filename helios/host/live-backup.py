@@ -133,7 +133,7 @@ def export(qmp,agent,root,clock=time.monotonic,pause=time.sleep,create_target=No
 def main():
  def interrupted(*_):raise InterruptedError('Backup interrupted')
  for number in (signal.SIGINT,signal.SIGTERM):signal.signal(number,interrupted)
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('action',choices=('check','export','status','thaw'));p.add_argument('--id');a=p.parse_args();qmp=agent=None;root=None
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('action',choices=('check','export','status','thaw','busy'));p.add_argument('--id');a=p.parse_args();qmp=agent=None;root=None
  try:
   if a.action in ('export','status'):
    if not re.fullmatch(r'[a-f0-9]{32}',a.id or ''):raise ValueError('Invalid backup identity')
@@ -147,6 +147,10 @@ def main():
     print(record.read_text());return
    candidate.mkdir(mode=0o700);owner=base.stat();os.chown(candidate,owner.st_uid,owner.st_gid);root=candidate
   lock=os.open('/run/winboat-live-backup.lock',os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600)
+  if a.action=='busy':
+   try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB);state='idle'
+   except BlockingIOError:state='active'
+   print(json.dumps({'state':state}));return
   fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
   agent=RPC(QGA)
   if a.action=='check':result=readiness(agent)
