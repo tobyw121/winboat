@@ -54,7 +54,7 @@ def export(qmp,agent,root,clock=time.monotonic,pause=time.sleep,create_target=No
   if not node or not source.startswith('/storage/') or '..' in Path(source).parts:raise ValueError('Only local /storage block nodes are supported')
   size=data.get('image',{}).get('virtual-size')
   if type(size) is not int or not 0<size<2**63:raise ValueError('Disk virtual size unavailable')
-  disks.append({'node':node,'source':source,'bytes':size,'targetNode':'wb-target-'+root.name+'-'+str(len(disks)),'target':str(root/('disk-'+str(len(disks))+'.qcow2'))})
+  disks.append({'node':node,'source':source,'sourceFormat':data.get('image',{}).get('format'),'bytes':size,'targetNode':'wb-target-'+root.name+'-'+str(len(disks)),'target':str(root/('disk-'+str(len(disks))+'.qcow2'))})
  if not disks or len(disks)>8:raise ValueError('Expected 1..8 writable disks including writable firmware nodes')
  if shutil.disk_usage(root).free<sum(d['bytes'] for d in disks)+67108864:raise ValueError('Not enough space for a complete disk export')
  started=[];created=[];state={'schema':1,'status':'preparing','disks':disks,'scope':'Live disk export, no RAM/GPU state. Restore offline with the recorded block mapping.'};atomic(root/'status.json',state)
