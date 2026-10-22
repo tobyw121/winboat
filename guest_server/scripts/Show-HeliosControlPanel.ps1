@@ -59,7 +59,8 @@ Add-HeliosButton 'DWM-Dump lokal mit cdb auswerten' {
 Add-HeliosButton 'Automatischen Helios-Ausfallschutz aktivieren' {
     Invoke-HeliosPanel {
         $key='HKLM:\SOFTWARE\WinBoat\DisplayRecovery'
-        New-Item -Path $key -Force | Out-Null
+        . (Join-Path $PSScriptRoot 'Initialize-DisplayRecoveryKey.ps1')
+        Initialize-DisplayRecoveryKey $key
         New-ItemProperty -LiteralPath $key -Name AutoIsolateHelios -Value 1 -PropertyType DWord -Force | Out-Null
         @{status='enabled';scope='Confirmed failures or three attributed DWM crashes in two minutes. Requires active primary VGA. Never enables VGA or changes primary output.'}
     }

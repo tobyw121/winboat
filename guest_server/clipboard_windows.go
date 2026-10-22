@@ -126,7 +126,7 @@ func readClipboardTextBounded(hwnd uintptr, limit uintptr) (string, error) {
 		return "", fmt.Errorf("no text")
 	}
 	bytes, _, _ := clipKernel.NewProc("GlobalSize").Call(handle)
-	if bytes < 2 || bytes > limit*2 {
+	if bytes < 2 || bytes > limit*2+2 {
 		return "", fmt.Errorf("text too large")
 	}
 	pointer, _, _ := clipGlobalLock.Call(handle)

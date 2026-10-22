@@ -4,7 +4,7 @@ s=importlib.util.spec_from_file_location('manager',Path(__file__).resolve().pare
 class Tests(unittest.TestCase):
  def test_only_completed_matching_regular_exports_verify(self):
   with tempfile.TemporaryDirectory() as folder:
-   root=Path(folder);key='a'*32;d=root/key;d.mkdir();data=b'test';(d/'disk-0.qcow2').write_bytes(data)
+   root=Path(folder);key='a'*32;d=root/key;d.mkdir(mode=0o700);data=b'test';(d/'disk-0.qcow2').write_bytes(data)
    row={'target':f'/backup/{key}/disk-0.qcow2','source':'/storage/windows.img','sha256':hashlib.sha256(data).hexdigest()}
    p=d/'status.json';p.write_text(json.dumps({'schema':1,'status':'completed','disks':[row]}))
    self.assertEqual(m.verify(root,key)['state'],'verified')
