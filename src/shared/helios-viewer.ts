@@ -3,6 +3,10 @@ import type { ChildProcess } from 'node:child_process';
 export function viewerWire(line:string):string|undefined {
     return /^frame-wire peer=[a-f0-9]{32} serial=[0-9]{1,10} stage=(receive|ack|render|drop) method=(Scanout|Update|ScanoutDMABUF|ScanoutDMABUF2|UpdateDMABUF|Disable|Cached) monotonic_us=[0-9]{1,20}$/.test(line)?line:undefined;
 }
+/** Preserve exact 64-bit metadata as a bounded numeric-only JSON line. */
+export function viewerContract(line:string):string|undefined {
+    return /^\{"event":"dmabuf-contract","console":\d{1,10},"inode":\d{1,20},"bytes":\d{1,20},"width":\d{1,10},"height":\d{1,10},"stride":\d{1,10},"offset":\d{1,10},"fourcc":\d{1,10},"modifier":\d{1,20}\}$/.test(line)?line:undefined;
+}
 export function viewerStatistics(line:string):Record<string,number>|undefined {
     let value:Record<string,unknown>;
     try {value=JSON.parse(line);} catch {return;}
@@ -118,7 +122,9 @@ export class HeliosViewer {
             if(closed)return;
             errors = (errors + data.toString()).slice(-8192);
             metrics=(metrics+data.toString()).slice(-16384);const lines=metrics.split('\n');metrics=lines.pop()||'';
-            for(const line of lines){const row=viewerStatistics(line);
+            for(const line of lines){const row=viewerStatistics(line),contract=viewerContract(line),now=Date.now();
+                if(now-wireWindow>=1000){wireWindow=now;wireCount=0;}
+                if(contract && wireCount++<32){try{this.wire?.(contract);}catch{/* Layout tracing cannot stop display. */}}
                 if(row && Date.now()-lastMetricAt>=1000){lastMetricAt=Date.now();try{this.telemetry?.(row);}catch{/* Diagnostics cannot stop the display. */}}
             }
         });

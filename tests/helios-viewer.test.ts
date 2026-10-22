@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import type { ChildProcess } from 'node:child_process';
-import { HeliosViewer,viewerStatistics,viewerWire } from '../src/shared/helios-viewer';
+import { HeliosViewer,viewerStatistics,viewerWire,viewerContract } from '../src/shared/helios-viewer';
 
 class FakeViewer extends EventEmitter {
     stdin = new PassThrough(); stdout = new PassThrough(); stderr = new PassThrough(); kills = 0;
@@ -163,4 +163,13 @@ test('viewer statistics retain numeric counters and discard arbitrary text',()=>
 test('wire evidence accepts only fixed D-Bus tokens',()=>{
     const line='frame-wire peer='+('a'.repeat(32))+' serial=1 stage=ack method=Update monotonic_us=5';
     assert.equal(viewerWire(line),line);assert.equal(viewerWire(line+' PRIVATE'),undefined);
+});
+
+test('DMA-BUF layout evidence survives stderr framing without losing 64-bit precision or accepting free text',async()=>{
+ const line='{"event":"dmabuf-contract","console":0,"inode":18446744073709551615,"bytes":4096000,"width":1280,"height":800,"stride":5120,"offset":0,"fourcc":875713089,"modifier":72057594037927935}';
+ assert.equal(viewerContract(line),line);assert.equal(viewerContract(line.replace('"width":1280','"width":"PRIVATE"')),undefined);
+ const child=new FakeViewer(),evidence:string[]=[];
+ const viewer=new HeliosViewer(()=>child as unknown as ChildProcess,()=>{},1000,1000,undefined,undefined,line=>evidence.push(line));
+ const opening=viewer.open(()=>{});child.ready();await opening;child.stderr.write(line.slice(0,50));child.stderr.write(line.slice(50)+'\n');
+ assert.deepEqual(evidence,[line]);viewer.close();
 });
