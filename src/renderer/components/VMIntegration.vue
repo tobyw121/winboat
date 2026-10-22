@@ -1,51 +1,65 @@
 <template>
-<section class="mt-4 border-t border-neutral-700 pt-3 space-y-3">
- <h2 class="font-semibold">VM integration</h2>
- <fieldset :disabled="busy || displayBusy || workbenchBusy || blocked" class="space-y-3">
-  <div><h3>Windows power and status</h3>
-   <x-button @click="run(refresh)">Refresh status</x-button><x-button @click="run(start)">Start VM</x-button>
-   <x-button @click="run(()=>power('shutdown'))">Shut down Windows</x-button><x-button @click="run(()=>power('reboot'))">Restart Windows</x-button>
-   <p class="text-sm">{{ status }}</p>
+<section class="vm-integration" aria-labelledby="vm-integration-title">
+ <header class="integration-header">
+  <div><h2 id="vm-integration-title">VM integration</h2><p>Make Windows feel at home on Linux.</p></div>
+  <span v-if="busy || displayBusy || workbenchBusy" class="integration-activity" role="status">Operation in progress…</span>
+ </header>
+ <nav class="integration-nav" aria-label="VM integration sections">
+  <button v-for="item in integrationSections" :key="item.id" type="button" :aria-pressed="active===item.id" @click="active=item.id">
+   <Icon :icon="item.icon" width="16" aria-hidden="true" />{{ item.label }}
+  </button>
+ </nav>
+ <div class="integration-intro"><h3>{{ currentSection.label }}</h3><p>{{ currentSection.description }}</p></div>
+ <fieldset :disabled="busy || displayBusy || workbenchBusy || blocked" class="integration-stack" :aria-busy="busy || displayBusy || workbenchBusy">
+  <div v-show="active==='overview'" class="integration-card"><h3>Windows controls</h3>
+   <p>Start your VM or send a normal shutdown request to Windows.</p>
+   <div class="integration-actions"><x-button class="integration-primary" @click="run(start)">Start Windows</x-button><x-button @click="run(refresh)">Refresh status</x-button></div>
+   <p class="integration-notice">{{ status }}</p>
+   <details><summary>Power options</summary><x-button @click="run(()=>power('shutdown'))">Shut down Windows</x-button><x-button @click="run(()=>power('reboot'))">Restart Windows</x-button></details>
   </div>
-  <div><h3>Shared text clipboard</h3>
-   <label><input type="checkbox" v-model="toGuest"> Linux → Windows</label>
-   <label class="ml-3"><input type="checkbox" v-model="toHost"> Windows → Linux</label>
-   <x-button @click="run(()=>startClipboard(toGuest,toHost,images))" :disabled="!toGuest && !toHost">Connect and ask Windows</x-button>
-   <label class="ml-3"><input type="checkbox" v-model="images"> Allow explicit PNG image transfers</label>
-   <x-button @click="run(stopClipboard)">Disconnect</x-button>
-   <x-button @click="run(()=>transferClipboard('send'))" :disabled="!toGuest">Send text now</x-button>
-   <x-button @click="run(()=>transferClipboard('receive'))" :disabled="!toHost">Receive text now</x-button>
-   <x-button @click="run(()=>transferClipboardImage('send'))" :disabled="!toGuest || !images">Send image now</x-button>
-   <x-button @click="run(()=>transferClipboardImage('receive'))" :disabled="!toHost || !images">Receive image now</x-button>
-   <p class="text-sm">{{ clipboardState }} — {{ clipboardMessage }}</p>
-   <p class="text-sm text-neutral-400">Automatic text up to 256 KiB; manual text up to 4 MiB. Explicit PNG images up to 8 MiB / 8 megapixels; uncompressed 24/32-bit Windows bitmaps are supported too. Windows asks for consent. Locking, logging off or losing host contact stops sharing. Reconnect after unlocking.</p>
+  <div v-show="active==='sharing'" class="integration-card"><h3>Shared clipboard</h3>
+   <p>Choose what can move between your Linux and Windows clipboards. Windows will ask you to approve the connection.</p>
+   <div class="integration-fields">
+    <label class="integration-toggle"><input type="checkbox" v-model="toGuest"> Linux → Windows</label>
+    <label class="integration-toggle"><input type="checkbox" v-model="toHost"> Windows → Linux</label>
+   </div>
+   <div class="integration-actions"><x-button class="integration-primary" @click="run(()=>startClipboard(toGuest,toHost,images))" :disabled="!toGuest && !toHost">Connect clipboard</x-button><x-button @click="run(stopClipboard)">Disconnect</x-button></div>
+   <p role="status">{{ clipboardState }} — {{ clipboardMessage }}</p>
+   <details><summary>Manual transfers & image sharing</summary>
+    <label class="integration-toggle"><input type="checkbox" v-model="images"> Allow manual image transfers</label>
+    <x-button @click="run(()=>transferClipboard('send'))" :disabled="!toGuest">Send text</x-button><x-button @click="run(()=>transferClipboard('receive'))" :disabled="!toHost">Receive text</x-button>
+    <x-button @click="run(()=>transferClipboardImage('send'))" :disabled="!toGuest || !images">Send image</x-button><x-button @click="run(()=>transferClipboardImage('receive'))" :disabled="!toHost || !images">Receive image</x-button>
+    <p>Automatic text: up to 256 KiB. Manual text: up to 4 MiB. PNG images: up to 8 MiB / 8 megapixels. Reconnect after locking or signing out of Windows. Changes to image sharing apply when you reconnect.</p>
+   </details>
   </div>
-  <div><h3>Offline snapshots</h3>
-   <p class="text-sm text-neutral-400">Shut down Windows cleanly first. Includes the VM storage and firmware; excludes shared folders and external disks. Restore keeps the previous storage and leaves the VM stopped. Archives can contain passwords.</p>
-   <input v-model="label" maxlength="80" aria-label="Snapshot name" class="bg-neutral-900 p-1" />
-   <x-button @click="run(()=>snapshot('create'))">Create snapshot</x-button><x-button @click="run(()=>snapshot('list'))">Refresh snapshots</x-button>
-   <x-button @click="run(()=>snapshot('recover'))">Recover interrupted restore</x-button>
-   <ul><li v-for="row in snapshots" :key="row.id" class="text-sm my-2">{{ row.label }} — {{ row.createdAtUtc }} ({{ Math.ceil(row.archiveBytes/1048576) }} MiB)
-    <x-button @click="run(()=>snapshot('restore',row.id))">Restore</x-button><x-button @click="run(()=>snapshot('delete',row.id))">Delete snapshot</x-button>
-   </li></ul>
-  </div>
-  <div><h3>File exchange</h3>
-   <p class="text-sm text-neutral-400">Uses the authenticated WinBoatExchange share. Send to ToWindows; save Windows files into ToLinux before receiving them here. Existing destinations are never overwritten.</p>
-   <x-button @click="run(prepareExchange)">Set up exchange folder (restarts VM)</x-button>
-   <x-button @click="run(sendFiles)">Send files to Windows</x-button><x-button @click="run(receiveFile)">Receive a file</x-button>
+  <div v-show="active==='sharing'" class="integration-card"><h3>File exchange</h3>
+   <p>Send files to Windows or collect files saved in the shared exchange folder.</p>
+   <div class="integration-actions"><x-button @click="run(sendFiles)">Send files</x-button><x-button @click="run(receiveFile)">Receive a file</x-button></div>
    <x-button @click="run(openHostExchange)">Open Linux folder</x-button><x-button @click="run(openWindowsExchange)">Open Windows folder</x-button>
+   <details><summary>First-time setup</summary><p>Creates the authenticated WinBoatExchange share and restarts Windows. Windows files go in ToLinux; files you send appear in ToWindows. Existing files are kept.</p><x-button @click="run(prepareExchange)">Set up exchange & restart</x-button></details>
   </div>
-  <VMWorkbench :blocked="busy || displayBusy || blocked" @busy="workbenchBusy=$event" @changed="emit('changed')" />
-  <IntegrationDisplay :blocked="busy || workbenchBusy || blocked" @busy="displayBusy=$event" @changed="emit('changed')" />
+  <div v-show="active==='backups'" class="integration-card"><h3>Snapshots</h3>
+   <p>Save a complete checkpoint before changing your VM. Shut Windows down cleanly before creating or restoring one.</p>
+   <label class="integration-field">Snapshot name<input v-model="label" maxlength="80" placeholder="Before a driver update" /></label>
+   <div class="integration-actions"><x-button class="integration-primary" @click="run(()=>snapshot('create'))">Create snapshot</x-button><x-button @click="run(()=>snapshot('list'))">Refresh list</x-button></div>
+   <p v-if="!snapshots.length" class="integration-empty">Refresh the list to see your saved snapshots.</p>
+   <ul><li v-for="row in snapshots" :key="row.id" class="integration-snapshot"><div>{{ row.label }}<small>{{ row.createdAtUtc }} · {{ Math.ceil(row.archiveBytes/1048576) }} MiB</small></div><div><x-button @click="run(()=>snapshot('restore',row.id))">Restore</x-button><x-button @click="run(()=>snapshot('delete',row.id))">Delete</x-button></div></li></ul>
+   <details><summary>What is saved & recovery options</summary><p>Includes VM storage and firmware. Shared folders and external disks are excluded. Restoring keeps the previous storage and leaves the VM stopped. Archives may contain passwords; keep them private.</p><x-button @click="run(()=>snapshot('recover'))">Recover interrupted restore</x-button></details>
+  </div>
+  <VMWorkbench :section="active" :blocked="busy || displayBusy || blocked" @busy="workbenchBusy=$event" @changed="emit('changed')" />
+  <IntegrationDisplay v-show="active==='display'" :blocked="busy || workbenchBusy || blocked" @busy="displayBusy=$event" @changed="emit('changed')" />
  </fieldset>
- <p role="status" class="text-sm whitespace-pre-wrap">{{ message }}</p>
+ <div v-if="message" class="integration-feedback" role="status"><details v-if="message.trim().startsWith('{') || message.trim().startsWith('[')"><summary>View operation result</summary><pre>{{ message }}</pre></details><span v-else>{{ message }}</span></div>
  <x-button v-if="transfer" @click="transfer.abort()">Cancel file transfer</x-button>
 </section>
 </template>
 <script setup lang="ts">
 import {guestFetch} from '../lib/guest-session';
 
-import {ref,watch,onBeforeUnmount} from 'vue';
+import {ref,watch,computed,onBeforeUnmount} from 'vue';
+import {Icon} from '@iconify/vue';
+import {integrationSections} from '../../shared/integration-navigation';
+import type {IntegrationSection} from '../../shared/integration-navigation';
 import {Winboat} from '../lib/winboat';
 import {WINBOAT_DIR,GUEST_API_PORT} from '../lib/constants';
 import {startClipboard,stopClipboard,transferClipboard,transferClipboardImage,clipboardState,clipboardMessage} from '../lib/clipboard-sync';
@@ -55,6 +69,8 @@ import {nativeDesktopEnvironment} from '../../shared/native-desktop-environment'
 import {hostEnvironment} from '../lib/host-environment';
 import VMWorkbench from './VMWorkbench.vue';
 import IntegrationDisplay from './IntegrationDisplay.vue';
+const active=ref<IntegrationSection>('overview');
+const currentSection=computed(()=>integrationSections.find(item=>item.id===active.value)!);
 const props=defineProps<{blocked:boolean}>(),emit=defineEmits<{busy:[value:boolean];changed:[]}>();
 const remote:typeof import('@electron/remote')=require('@electron/remote');
 const fs:typeof import('fs')=require('fs'),path:typeof import('path')=require('path');
@@ -111,3 +127,5 @@ async function receiveFile(){
 async function openHostExchange(){const error=await remote.shell.openPath(directory());if(error)throw new Error(error);}
 async function openWindowsExchange(){requireExchange();await guest('/integration/exchange/open',{'X-WinBoat-Exchange':'open'});}
 </script>
+
+<style src="../styles/vm-integration.css"></style>

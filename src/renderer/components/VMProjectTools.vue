@@ -1,17 +1,17 @@
 <template>
-<section class="border-t border-neutral-700 pt-3 space-y-3">
- <h3>Host checks, backups and API permissions</h3>
+<section class="integration-stack">
+ <div v-show="section==='diagnostics'" class="integration-card"><h3>Host & connection checks</h3>
  <div class="flex flex-wrap gap-2">
   <x-button :disabled="busy || blocked" @click="run(()=>tool('project-health.py',['host']))">Host hardware preflight</x-button>
   <x-button :disabled="busy || blocked" @click="run(()=>tool('project-health.py',['network']))">Check API / RDP / network reachability</x-button>
   <x-button :disabled="busy || blocked" @click="run(shares)">Check authenticated shared folders</x-button>
   <x-button :disabled="busy || blocked" @click="run(incidents)">Explain a graphics diagnostic report</x-button>
- </div>
- <details><summary>Application compatibility observations</summary>
+ </div></div>
+ <details v-show="section==='diagnostics'" class="integration-card"><summary>Application compatibility observations</summary>
   <p v-for="entry in compatibility" :key="entry.application" class="text-sm">{{ entry.application }} — {{ entry.status }}: {{ entry.note }}</p>
   <p class="text-sm">Observations are tied to their reported driver/hardware. They do not certify your current installation; profiles are applied explicitly.</p>
  </details>
- <div><h4>Private measurement history</h4>
+ <div v-show="section==='performance'" class="integration-card"><h4>Measurement history</h4>
   <input v-model="label" maxlength="80" aria-label="Measurement label" class="bg-neutral-900 p-1">
   <x-button :disabled="busy || blocked" @click="run(record)">Record CPU / GPU sample</x-button>
   <x-button :disabled="busy || blocked" @click="run(history)">Load history</x-button>
@@ -21,7 +21,7 @@
   <svg v-if="points" viewBox="0 0 400 100" role="img" aria-label="Container CPU history, scaled to largest observed sample" class="w-full h-24"><polyline :points="points" fill="none" stroke="currentColor" stroke-width="2" /></svg>
   <p class="text-sm">Chart: container CPU, 100% equals one core; vertical scale follows the largest sample. Point samples do not establish an FPS improvement.</p>
  </div>
- <div><h4>Verified disk export recovery</h4>
+ <div v-show="section==='backups'" class="integration-card"><h4>Verify & restore disk exports</h4>
   <input v-model="exportId" aria-label="Export identity to verify" placeholder="32-character export identity" class="bg-neutral-900 p-1">
   <x-button :disabled="busy || blocked" @click="run(()=>backup('inventory'))">Export capacity / inventory</x-button>
   <x-button :disabled="busy || blocked || !exportId" @click="run(()=>backup('verify'))">Verify disk checksums</x-button>
@@ -32,7 +32,7 @@
   <x-button :disabled="busy || blocked" @click="run(()=>schedule(false))">Disable scheduled check</x-button>
   <p class="text-sm">The user timer skips running or uncleanly stopped VMs. Retention applies only to scheduled offline checkpoints; manual snapshots and live exports are preserved. Requires a systemd user session.</p>
  </div>
- <div><h4>Scoped Windows API session</h4>
+ <div v-show="section==='diagnostics'" class="integration-card"><h4>Windows API permissions</h4>
   <label v-for="scope in availableScopes" :key="scope" class="mr-3"><input type="checkbox" v-model="scopes" :value="scope"> {{ scope }}</label>
   <x-button :disabled="busy || blocked || !scopes.length" @click="run(pair)">Pair with Windows consent (10 minutes)</x-button>
   <x-button :disabled="busy || blocked" @click="run(revokeGuestSession)">Revoke this session</x-button>
@@ -44,13 +44,14 @@
 </template>
 <script setup lang="ts">
 import {ref,computed} from 'vue';
+import type {IntegrationSection} from '../../shared/integration-navigation';
 import {Winboat} from '../lib/winboat';import {WinboatConfig} from '../lib/config';
 import {pairGuestSession,revokeGuestSession,guestSessionEnvironment} from '../lib/guest-session';
 import {GUEST_API_PORT,WINBOAT_DIR} from '../lib/constants';
 import {checkSharedFolders} from '../lib/shared-folders';
 import {nativeDesktopEnvironment} from '../../shared/native-desktop-environment';import {hostEnvironment} from '../lib/host-environment';
 import {compatibility} from '../data/compatibility';
-const props=defineProps<{blocked:boolean}>(),emit=defineEmits<{busy:[value:boolean]}>();
+const props=defineProps<{blocked:boolean;section:IntegrationSection}>(),emit=defineEmits<{busy:[value:boolean]}>();
 const remote:typeof import('@electron/remote')=require('@electron/remote'),path:typeof import('path')=require('path'),child:typeof import('child_process')=require('child_process'),util:typeof import('util')=require('util'),crypto:typeof import('crypto')=require('crypto');
 const busy=ref(false),result=ref(''),pairingCode=ref(''),label=ref('Manual sample'),records=ref<Array<{id:string;label:string;timeUtc:string;cpuPercentOfOneCore?:number}>>([]),before=ref(''),after=ref(''),exportId=ref(new WinboatConfig().config.lastLiveBackupId??''),keep=ref(5);
 const availableScopes=['read','graphics','power','application','clipboard','maintenance'],scopes=ref(['read']),winboat=new Winboat();

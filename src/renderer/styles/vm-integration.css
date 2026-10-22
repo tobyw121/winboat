@@ -1,0 +1,48 @@
+.vm-integration { --integration-accent: #b49af9; color: #eceaf2; min-width: 0; }
+.vm-integration .integration-header { display: flex; justify-content: space-between; align-items: start; gap: 16px; margin-bottom: 20px; }
+.vm-integration .integration-header h2 { font-size: 1.3rem; font-weight: 650; letter-spacing: -.025em; margin: 0 0 6px; }
+.vm-integration .integration-header p, .vm-integration .integration-intro p { color: #a9a6b5; margin: 0; font-size: .875rem; line-height: 1.6; }
+.vm-integration .integration-activity { border: 1px solid #6f589b; border-radius: 999px; padding: 6px 12px; font-size: .75rem; white-space: nowrap; color: #d5c5ff; }
+.vm-integration .integration-nav { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px; border: 1px solid #ffffff12; background: #11111555; border-radius: 14px; margin-bottom: 22px; }
+.vm-integration .integration-nav button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 10px 12px; border-radius: 9px; color: #b7b4c2; font-size: .8rem; font-weight: 550; border: 1px solid transparent; cursor: pointer; transition: background .15s, color .15s; }
+.vm-integration .integration-nav button:hover { background: #ffffff08; color: #fff; }
+.vm-integration .integration-nav button[aria-pressed="true"] { background: #b49af91c; border-color: #b49af944; color: #dfd1ff; }
+.vm-integration :is(button, input, select, summary, x-button):focus-visible { outline: 2px solid var(--integration-accent); outline-offset: 3px; }
+.vm-integration .integration-intro { margin: 0 0 18px; }
+.vm-integration .integration-intro h3 { font-size: 1.05rem; font-weight: 600; margin: 0 0 4px; }
+.vm-integration fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.vm-integration .integration-stack { display: grid; gap: 16px; min-width: 0; }
+.vm-integration .integration-card { padding: 20px; border: 1px solid #ffffff14; border-radius: 14px; background: linear-gradient(135deg, #ffffff05, #ffffff02); min-width: 0; }
+.vm-integration .integration-card > h3, .vm-integration .integration-card > h4 { font-size: .95rem; font-weight: 600; margin: 0 0 14px; }
+.vm-integration .integration-card p { line-height: 1.65; margin: 10px 0; color: #aaa7b4; font-size: .82rem; }
+.vm-integration .integration-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 14px 0 4px; }
+.vm-integration x-button { display: inline-flex; margin: 4px 6px 4px 0; max-width: 100%; white-space: normal; }
+.vm-integration x-button[skin="default"] { --accent-color: var(--integration-accent); }
+.vm-integration .integration-primary { --background: #7753bd; }
+.vm-integration .integration-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 14px; margin: 16px 0; }
+.vm-integration .integration-field { display: grid; align-content: start; gap: 7px; color: #d5d1df; font-size: .82rem; }
+.vm-integration .integration-field small { color: #9e99ab; font-size: .75rem; line-height: 1.5; }
+.vm-integration input:not([type="checkbox"]), .vm-integration select { background: #17171e; border: 1px solid #ffffff20; border-radius: 8px; color: #eeeaf7; padding: 9px 11px; min-height: 38px; max-width: 100%; box-sizing: border-box; font: inherit; font-size: .82rem; }
+.vm-integration .integration-field :is(input:not([type="checkbox"]), select) { width: 100%; }
+.vm-integration input[type="checkbox"] { accent-color: var(--integration-accent); width: 16px; height: 16px; vertical-align: middle; margin-right: 7px; }
+.vm-integration .integration-toggle { display: flex; align-items: center; gap: 8px; font-size: .85rem; margin: 12px 0; }
+.vm-integration details { border-top: 1px solid #ffffff12; padding-top: 12px; margin-top: 16px; }
+.vm-integration summary { color: #c8b7ee; cursor: pointer; font-size: .82rem; padding: 4px 0; }
+.vm-integration details[open] > summary { margin-bottom: 12px; }
+.vm-integration pre { overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: #121218; padding: 12px; border-radius: 8px; max-height: 280px; font-size: .75rem; }
+.vm-integration .integration-notice { border-left: 3px solid #9c7bd8; background: #ac8ceb0a; padding: 12px 15px; border-radius: 0 8px 8px 0; font-size: .82rem; line-height: 1.6; }
+.vm-integration .integration-feedback { margin-top: 16px; padding: 12px 16px; border: 1px solid #ffffff18; border-radius: 10px; background: #191720; overflow-wrap: anywhere; }
+.vm-integration .integration-feedback:empty { display: none; }
+.vm-integration .integration-snapshot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; border-top: 1px solid #ffffff12; }
+.vm-integration .integration-snapshot small { display: block; color: #a9a6b5; margin-top: 4px; }
+.vm-integration .integration-empty { padding: 24px 12px; text-align: center; border: 1px dashed #ffffff20; border-radius: 10px; }
+.vm-integration dl { margin: 16px 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.vm-integration dt { color: #a9a6b5; }
+.vm-integration dd { text-align: right; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+ .vm-integration .integration-header { flex-direction: column; }
+ .vm-integration .integration-nav button { flex: 1 1 42%; justify-content: start; }
+ .vm-integration .integration-card { padding: 16px; }
+ .vm-integration .integration-snapshot { align-items: start; flex-direction: column; }
+}
+@media (prefers-reduced-motion: reduce) { .vm-integration .integration-nav button { transition: none; } }
