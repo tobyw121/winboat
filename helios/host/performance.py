@@ -34,6 +34,24 @@ def options(args, env, huge_free=None):
     args = list(args)
     if env.get('HELIOS_RESCUE') == '1' or inspection(args):
         return args
+    if number(env,'HELIOS_AUDIO_DBUS',1):
+        if env.get('HELIOS_DISPLAY')!='dbus' or '-audio' in args:raise ValueError('Local audio requires D-Bus display and an explicit compatible audio configuration')
+        backends=[i for i,value in enumerate(args) if value=='-audiodev']
+        codecs=[i for i,value in enumerate(args) if i and args[i-1]=='-device' and value.startswith('hda-duplex')]
+        if len(backends)>1 or len(codecs)>1:raise ValueError('Ambiguous audio configuration')
+        identity='winboat-audio'
+        if backends:
+            parts=args[backends[0]+1].split(',');ids=[p[3:] for p in parts if p.startswith('id=')]
+            if len(ids)!=1 or not re.fullmatch(r'[a-zA-Z0-9_-]{1,64}',ids[0]):raise ValueError('Audio backend identity unavailable')
+            identity=ids[0];args[backends[0]+1]='dbus,id='+identity
+        else:args+=['-audiodev','dbus,id='+identity]
+        if codecs:
+            parts=args[codecs[0]].split(',');existing=[p[9:] for p in parts if p.startswith('audiodev=')]
+            if existing and existing!=[identity]:raise ValueError('Custom audio routing must be preserved')
+            if not existing:args[codecs[0]]+=',audiodev='+identity
+        elif not any(i and args[i-1]=='-device' and ('hda' in v or 'AC97' in v) for i,v in enumerate(args)):
+            args+=['-device','ich9-intel-hda,id=winboat-hda','-device','hda-duplex,audiodev='+identity]
+        else:raise ValueError('Custom sound device requires an explicit supported codec')
     if env.get('HELIOS_READBACK_CACHE_ENTRIES','8') not in ('1','2','4','8'):
         raise ValueError('Readback cache entries must be 1, 2, 4 or 8')
     budget=env.get('HELIOS_READBACK_BUDGET_MIB','0')

@@ -17,6 +17,7 @@ cd qemu-helios/build-helios
 ninja -j "$jobs"
 ninja install
 /opt/helios/qemu/bin/qemu-system-x86_64 --version
+/opt/helios/qemu/bin/qemu-system-x86_64 -audiodev help | grep -E '^[[:space:]]*dbus[[:space:]]*$'
 /opt/helios/qemu/bin/qemu-system-x86_64 -device virtio-gpu-gl-pci,help | grep 'venus'
 printf '%s\n' "$revision" > /opt/helios/revision
 # A runtime-only rebuild must not relabel an older QEMU as a newer capability.

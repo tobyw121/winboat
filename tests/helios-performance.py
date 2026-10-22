@@ -12,6 +12,14 @@ BASE = ['-m','2G','-device','virtio-scsi-pci,id=scsi','-drive','file=disk.raw,ca
 
 
 class PerformanceTests(unittest.TestCase):
+    def test_dbus_audio_is_opt_in_preserves_backend_identity_and_never_changes_rescue(self):
+        env={'HELIOS_AUDIO_DBUS':'1','HELIOS_DISPLAY':'dbus'}
+        result=perf.options(BASE,env);self.assertIn('dbus,id=winboat-audio',result)
+        old=BASE+['-device','intel-hda','-device','hda-duplex','-audiodev','none,id=old']
+        result=perf.options(old,env);self.assertIn('dbus,id=old',result);self.assertIn('hda-duplex,audiodev=old',result)
+        self.assertEqual(perf.options(BASE,{**env,'HELIOS_RESCUE':'1'}),BASE)
+        with self.assertRaises(ValueError):perf.options(BASE,{'HELIOS_AUDIO_DBUS':'1'})
+
     def test_vram_admission_uses_85_percent_and_private_launch_ledger(self):
         report={'devices':[{'selected':True,'heaps':[{'deviceLocal':True,'sizeBytes':8*1024**3},{'deviceLocal':False,'sizeBytes':32*1024**3}]}]}
         with tempfile.TemporaryDirectory() as folder:
