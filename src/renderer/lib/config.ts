@@ -14,6 +14,7 @@ export type WinboatConfigObj = {
     experimentalFeatures: boolean
     multiMonitor: number
     viewerContractTrace?:boolean;
+    liveBackupDirectory?:string;
     lastLiveBackupId?:string;
     viewerProfileBefore?:'auto'|'copy'|'dmabuf';
     viewerBackgroundFPS?:number;

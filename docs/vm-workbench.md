@@ -98,7 +98,10 @@ SHA-256 hashing. Status moves through preparing/copying/hashing/completed; an
 incomplete or failed export must not be restored as a completed one. Files remain
 private and owned by the owner of the mounted backup directory.
 
-Exports live under `.winboat/LiveBackups/<id>`, with a private `<id>.container.json`
+Exports default to `.winboat/LiveBackups/<id>`. Choose backup destination can
+place the private export subdirectory on another disk, outside Windows storage.
+Remove the current export configuration before changing destinations; files are
+kept. Each export has a private `<id>.container.json`
 record containing the host image and container configuration. That record can
 contain passwords; do not publish it. The export includes writable disk and
 firmware block nodes, not RAM, GPU state, shared folders or every non-disk file in
