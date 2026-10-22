@@ -30,7 +30,7 @@
         "test:helios:windows": "pwsh -NoProfile -File tests/guest-update-provisioning.test.ps1 && pwsh -NoProfile -File tests/vcredist-provisioning.test.ps1 && pwsh -NoProfile -File tests/display-adapters.test.ps1 && pwsh -NoProfile -File tests/helios-provisioning.test.ps1 && pwsh -NoProfile -File tests/helios-windows.test.ps1",
         "test:shared-folders": "tsx --test tests/shared-folders.test.ts",
         "test:integration": "tsx --test tests/clipboard-sync.test.ts tests/qmp-protocol.test.ts tests/exchange-files.test.ts tests/usb-host-use.test.ts && python3 tests/vm-snapshots.py && python3 tests/helios-audio.py",
-        "test:workbench": "tsx --test tests/vm-policies.test.ts && python3 tests/workbench.py && python3 tests/live-backup.py && python3 tests/helios-performance.py && python3 tests/config-trial.py && python3 tests/project-health.py && python3 tests/backup-manager.py && python3 tests/release-set.py && tsx --test tests/guest-session.test.ts"
+        "test:workbench": "tsx --test tests/vm-policies.test.ts && python3 tests/workbench.py && python3 tests/live-backup.py && python3 tests/helios-performance.py && python3 tests/config-trial.py && python3 tests/project-health.py && python3 tests/backup-manager.py && python3 tests/release-set.py && python3 tests/host-game.py && tsx --test tests/guest-session.test.ts"
     },
     "repository": "https://github.com/TibixDev/winboat",
     "author": {

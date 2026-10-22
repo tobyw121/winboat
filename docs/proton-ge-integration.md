@@ -71,3 +71,33 @@ are retained; this change never purges them while processes might use them.
 is VM/renderer-wide, not an assertion of per-game isolation inside a shared
 renderer. The normal default is `default`. A new namespace may initially stutter
 while shaders compile; a cache is not a substitute for driver correctness.
+
+## Optional Linux host launch via UMU
+
+`scripts/compatibility/host-game.py` runs a game **on the Linux host**, alongside
+the existing Windows VM launch route. Install `umu-run`, its runtime and an
+official GE-Proton release first. This script does not download or execute an
+unverified build. Use normal desktop user permissions, not sudo.
+
+Create a dedicated profile (replace paths with actual installed files):
+
+```bash
+python3 scripts/compatibility/host-game.py create --exe '/home/me/Games/MyGame/Game.exe' --proton '/home/me/.local/share/Steam/compatibilitytools.d/GE-Proton10-XX' --prefix '/home/me/.local/share/winboat-prefixes/mygame' --output '/home/me/mygame.json'
+python3 scripts/compatibility/host-game.py run '/home/me/mygame.json' --dry-run
+python3 scripts/compatibility/host-game.py run '/home/me/mygame.json'
+```
+
+Optional repeatable `--argument=VALUE` passes arguments without a shell. The JSON
+profile has four boolean options: `log`, `wined3d`, `disableEsync`, `disableFsync`.
+They map to Proton's process-local options; change one at a time for A/B tests.
+Native DXVK/vkd3d is the default, WineD3D an explicit fallback. No graphics driver
+is installed in Windows. No Wine setting is applied to DWM or Helios.
+
+The launcher pins the game executable, Proton launcher and version file hashes.
+After updating a game or runtime, create a new profile and use a new prefix;
+it does not silently migrate an existing prefix. A prefix is private (0700),
+owned by the current user and locked for the lifetime of `umu-run`. Existing
+unmanaged prefixes and mismatched identities are refused. Removing a JSON
+profile does not delete saves or its prefix. Keep saves separately backed up.
+The launcher returns UMU's exit code; success in a fixture test is not a claim
+that Icarus or FurMark works with this route. There is no GUI entry yet.
