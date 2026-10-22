@@ -40,7 +40,7 @@ def proton_identity(value):
 
 def validate(profile):
     required = {'schema', 'exe', 'exeSha256', 'proton', 'prefix', 'gameId', 'args', 'options'}
-    if not isinstance(profile, dict) or set(profile) != required or profile['schema'] != 1:
+    if not isinstance(profile, dict) or set(profile) != required or type(profile['schema']) is not int or profile['schema'] != 1:
         raise ValueError('Unknown host game profile schema')
     exe = regular(profile['exe'])
     if exe.suffix.lower() != '.exe' or digest(exe) != profile['exeSha256']:

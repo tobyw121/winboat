@@ -209,7 +209,7 @@ def main():
             node = Path(env.get('RENDERNODE','/dev/dri/renderD128')).name
             for path in [Path('/opt/helios')/name for name in ('revision','host-patches.sha256','renderer-patches.sha256','vram-budget.sha256','vram-refs.sha256')] + [Path('/proc/driver/nvidia/version'),Path('/sys/class/drm')/node/'device/uevent']:
                 if path.is_file():
-                    components[str(path)] = hashlib.sha256(path.read_bytes()[:65536]).hexdigest()
+                    components[path.name] = hashlib.sha256(path.read_bytes()[:65536]).hexdigest()
             fingerprint = graphics_cache_fingerprint(report, components, env.get('HELIOS_SHADER_CACHE_NAMESPACE','default'))
             env = cache_environment(env,env.get('STORAGE') or '/storage',fingerprint)
     os.execve(sys.argv[1],[sys.argv[1],*args],env)

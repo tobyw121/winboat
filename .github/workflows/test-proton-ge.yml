@@ -1,0 +1,38 @@
+name: Test pinned GE compatibility patches
+on:
+  workflow_dispatch:
+  push:
+    branches: [work]
+    paths:
+      - 'helios/compatibility/**'
+      - 'tests/proton-ge-patches.py'
+      - '.github/workflows/test-proton-ge.yml'
+permissions:
+  contents: read
+jobs:
+  pinned-engines:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Fetch only pinned engine test source files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json,pathlib,subprocess
+          manifest=json.loads(pathlib.Path('helios/compatibility/proton-ge.lock.json').read_text())
+          targets={'dxvk-helios':('winboat-org/dxvk','src/dxvk/dxvk_presenter.cpp'),
+                   'vkd3d-proton-helios':('winboat-org/vkd3d-proton','libs/vkd3d/swapchain.c')}
+          for patch in manifest['patches']:
+              repo,file=targets[patch['component']]
+              target=pathlib.Path('temp/ge-test-sources')/patch['component']/file
+              target.parent.mkdir(parents=True,exist_ok=True)
+              with target.open('wb') as output:
+                  subprocess.run(['gh','api',f'repos/{repo}/contents/{file}?ref={patch["baseRevision"]}',
+                                  '-H','Accept: application/vnd.github.raw'],stdout=output,check=True)
+          PY
+      - name: Exercise patched acquisition and verify patch applicability
+        run: python3 tests/proton-ge-patches.py temp/ge-test-sources

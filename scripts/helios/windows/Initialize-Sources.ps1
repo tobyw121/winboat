@@ -74,6 +74,10 @@ foreach ($name in $wanted) {
     if ($LASTEXITCODE -ne 0) { throw "Dependency checkout failed: $name" }
     $head = (& git -C $destination rev-parse HEAD).Trim()
     if ($LASTEXITCODE -ne 0 -or $head -ne $dep[0].revision) { throw "Dependency revision mismatch: $name" }
+    if (-not $CompatibilityPatches) {
+        & git -C $destination diff --quiet HEAD
+        if ($LASTEXITCODE -ne 0) { throw 'Unpatched builds require clean dependency sources. Choose a new BuildRoot.' }
+    }
     if ($name -ne 'icd/mesa') {
         & git -C $destination submodule update --init --recursive
         if ($LASTEXITCODE -ne 0) { throw "Nested dependency initialization failed: $name" }

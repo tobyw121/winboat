@@ -58,6 +58,12 @@ print(base64.b64encode(header+lzma.compress(data)).decode())
         $receipt.driverVersion -ne '22.22.291.0' -or $receipt.manifestSha256 -notmatch '^[a-f0-9]{64}$') {
         throw 'Exported receipt lost source identity or installer integrity.'
     }
+    '{"schema":1,"fixture":true}' | Set-Content (Join-Path $package 'compatibility-patches.json')
+    & $export -RepoRoot $RepoRoot -PackageRoot $package -WinBoatCommit ('a' * 40)
+    $candidate = Get-Content (Join-Path $package 'helios-build.json') -Raw | ConvertFrom-Json
+    if ($candidate.compatibilityPatchSha256 -ne (Get-FileHash (Join-Path $package 'compatibility-patches.json') -Algorithm SHA256).Hash.ToLowerInvariant()) {
+        throw 'Experimental patch receipt is not bound to installer provenance.'
+    }
     $bytes[130] = $bytes[130] -bxor 1
     [IO.File]::WriteAllBytes($installer, $bytes)
     Assert-Fails { & $export -RepoRoot $RepoRoot -PackageRoot $package -WinBoatCommit ('a' * 40) } 'payload checksum mismatch'
