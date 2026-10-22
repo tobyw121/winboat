@@ -67,6 +67,17 @@ Add-HeliosButton 'Automatischen Helios-Ausfallschutz aktivieren' {
 Add-HeliosButton 'Automatischen Ausfallschutz deaktivieren' {
     Invoke-HeliosPanel {Remove-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\WinBoat\DisplayRecovery' -Name AutoIsolateHelios -ErrorAction SilentlyContinue;@{status='disabled'}}
 }
+Add-HeliosButton 'API-Sitzungsberechtigungen einschalten' {
+    Invoke-HeliosPanel {
+        . (Join-Path $PSScriptRoot 'Initialize-DisplayRecoveryKey.ps1')
+        Initialize-DisplayRecoveryKey 'HKLM:\SOFTWARE\WinBoat\API'
+        New-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\WinBoat\API' -Name RequireSession -Value 1 -PropertyType DWord -Force | Out-Null
+        @{status='pairing-required';scope='Pair in WinBoat. Tokens last 10 minutes and are invalidated on sign-out. Older external scripts need a token.'}
+    }
+}
+Add-HeliosButton 'API-Sitzungspflicht lokal ausschalten' {
+    Invoke-HeliosPanel {Remove-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\WinBoat\API' -Name RequireSession -ErrorAction SilentlyContinue;@{status='legacy-access-restored'}}
+}
 Add-HeliosButton 'Status und geladene Grafikmodule' {
     Invoke-HeliosPanel {& (Join-Path $PSScriptRoot 'Get-HeliosDiagnostics.ps1') | ConvertFrom-Json}
 }

@@ -1,3 +1,4 @@
+import {guestFetch} from './guest-session';
 import { prepareSharedFolders } from './shared-folders';
 import { volumeTarget } from '../../shared/compose-volumes';
 import { configureHelios, validateHeliosProgress, HELIOS_REVISION } from '../../shared/helios';
@@ -26,7 +27,7 @@ const fs: typeof import('fs') = require('fs');
 const { exec, execFile }: typeof import('child_process') = require('child_process');
 const path: typeof import('path') = require('path');
 const { promisify }: typeof import('util') = require('util');
-const nodeFetch: typeof import('node-fetch').default = require('node-fetch');
+const nodeFetch: typeof import('node-fetch').default = guestFetch;
 const remote: typeof import('@electron/remote') = require('@electron/remote');
 
 const execAsync = promisify(exec);

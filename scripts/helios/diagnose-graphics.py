@@ -15,6 +15,12 @@ import uuid
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def http_request(self, request):
+        import os,urllib.parse
+        url=urllib.parse.urlparse(request.full_url);token=os.environ.get('WINBOAT_SESSION_TOKEN','')
+        if url.scheme=='http' and url.hostname=='127.0.0.1' and len(token)==64 and all(c in '0123456789abcdef' for c in token):request.add_header('X-WinBoat-Session',token)
+        return request
+
     def redirect_request(self, request, response, code, message, headers, new_url):
         raise urllib.error.URLError('The local guest API unexpectedly redirected')
 

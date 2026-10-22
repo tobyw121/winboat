@@ -1,3 +1,4 @@
+import {guestFetch} from './guest-session';
 import { GUEST_API_PORT,WINBOAT_DIR } from './constants';
 import { skipWhileRunning } from '../utils/interval';
 import { hostEnvironment } from './host-environment';
@@ -55,7 +56,7 @@ function reportViewerAvailability(unavailable:boolean):void {
     const now=performance.now();
     if (unavailable && now-lastFallback<5000) return;
     lastFallback=unavailable ? now : -Infinity;
-    const nodeFetch: typeof import('node-fetch').default = require('node-fetch');
+    const nodeFetch: typeof import('node-fetch').default = guestFetch;
     void nodeFetch(`http://127.0.0.1:${adapterAPIPort}/graphics/adapters/recovery`,{
         method:'POST',timeout:3000,headers:{'X-WinBoat-Recovery':unavailable?'display-fallback':'display-ready'},
     }).then(response=>{if(!response.ok) console.warn(`Display recovery hint rejected: ${response.status}`);})
@@ -159,7 +160,7 @@ export function followLocalDisplay(enabled: boolean, apiPort = GUEST_API_PORT): 
     const generation=++adapterGeneration;
     viewer.updateAdapters(null);
     if (enabled) {
-        const nodeFetch: typeof import('node-fetch').default = require('node-fetch');
+        const nodeFetch: typeof import('node-fetch').default = guestFetch;
         const poll = skipWhileRunning(async () => {
             if (viewerUnavailable) reportViewerAvailability(true);
             try {

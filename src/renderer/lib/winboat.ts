@@ -1,3 +1,4 @@
+import {guestFetch} from './guest-session';
 import { guestNeedsUpdate } from '../../shared/guest-protocol';
 import { validateConfiguredShares } from './shared-folders';
 import { volumeTarget, volumeSource } from '../../shared/compose-volumes';
@@ -20,7 +21,7 @@ import { assert } from "@vueuse/core";
 import { setIntervalImmediately, skipWhileRunning } from "../utils/interval";
 import { ComposePortEntry, PortManager } from "../utils/port";
 
-const nodeFetch: typeof import('node-fetch').default = require('node-fetch');
+const nodeFetch: typeof import('node-fetch').default = guestFetch;
 const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
 const process: typeof import('process') = require('process');

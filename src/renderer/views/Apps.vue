@@ -171,6 +171,8 @@
 </template>
 
 <script setup lang="ts">
+import {guestFetch} from '../lib/guest-session';
+
 import { Icon } from '@iconify/vue';
 import { computed, onMounted, ref, useTemplateRef, watch } from 'vue';
 import { ContainerStatus, Winboat } from '../lib/winboat';
@@ -181,7 +183,7 @@ import { AppIcons, DEFAULT_ICON } from '../data/appicons';
 import { GUEST_API_PORT } from '../lib/constants';
 import { debounce } from '../utils/debounce';
 import { Jimp, JimpMime } from 'jimp';
-const nodeFetch: typeof import('node-fetch').default = require('node-fetch');
+const nodeFetch: typeof import('node-fetch').default = guestFetch;
 const FormData: typeof import('form-data') = require('form-data');
 
 const winboat = new Winboat();

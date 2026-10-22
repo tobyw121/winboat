@@ -294,6 +294,10 @@ func getIcon(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--api-session-agent" {
+		runAPISessionAgent()
+		return
+	}
 	if len(os.Args) == 2 && os.Args[1] == "--graphics-acceptance-agent" {
 		runAcceptanceAgent()
 		return
@@ -364,7 +368,8 @@ func main() {
 	r.HandleFunc("/rdp/status", getRdpConnectedStatus).Methods("GET")
 	r.HandleFunc("/update", applyUpdate).Methods("POST")
 	r.HandleFunc("/get-icon", getIcon).Methods("POST")
-	handler := cors.Default().Handler(r)
+	sessions := &apiSessions{enabled: apiSessionRequired, identity: apiConsoleIdentity, consent: apiSessionConsent}
+	handler := cors.Default().Handler(sessions.middleware(r))
 
 	log.Println("Starting WinBoat Guest Server on :7148...")
 	if err := http.ListenAndServe(":7148", handler); err != nil {
