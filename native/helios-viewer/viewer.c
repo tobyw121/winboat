@@ -62,7 +62,8 @@ struct Viewer {
  EGLImageKHR image;
  EGLDisplay display;
  guint width, height, resize_timer, requested_width, requested_height;
- gboolean auto_resize, stretch, resize_failed, last_dma;
+ gboolean auto_resize, stretch, resize_failed, last_dma, explicit_output;
+ guint output_id;
  guint64 resize_requests;
  guint32 qemu_uid;
  float rect[4];
@@ -858,7 +859,7 @@ static void console_ready(GObject *object,GAsyncResult *result,gpointer data) {
           *head=g_dbus_proxy_get_cached_property(console,"Head");
  gboolean graphic=type && g_variant_is_of_type(type,G_VARIANT_TYPE_STRING) && !strcmp(g_variant_get_string(type,NULL),"Graphic");
  /* The default desktop is head 0; do not replace it with an extended monitor. */
- if (!v->exit_code && graphic && (!head || (g_variant_is_of_type(head,G_VARIANT_TYPE_UINT32) && g_variant_get_uint32(head)==0))) {
+ if (!v->exit_code && graphic && (v->explicit_output || !head || (g_variant_is_of_type(head,G_VARIANT_TYPE_UINT32) && g_variant_get_uint32(head)==0))) {
   const char *name=label && g_variant_is_of_type(label,G_VARIANT_TYPE_STRING)?g_variant_get_string(label,NULL):"";
   char *normalized=g_ascii_strdown(name,-1);
   /* QEMU labels this VM's device by its explicit id, "heliosgpu". */
@@ -884,6 +885,7 @@ static void console_ids_ready(GObject *object,GAsyncResult *result,gpointer data
   fatal(v,"QEMU provides no graphical desktop console.");
  } else for (gsize i=0;i<g_variant_n_children(ids);i++) {
   guint id;g_variant_get_child(ids,i,"u",&id);
+  if (v->explicit_output && id!=v->output_id) {console_discovered(v);continue;}
   /* Copy only shared resources: another console may already be displaying
    * frames when its asynchronous sibling finishes discovery. */
   Viewer *d=g_new0(Viewer,1);
@@ -903,12 +905,13 @@ static void register_consoles(Viewer *v) {
   g_variant_new("(ss)",IFACE "VM","ConsoleIDs"),G_VARIANT_TYPE("(v)"),G_DBUS_CALL_FLAGS_NONE,5000,NULL,console_ids_ready,v);
 }
 static gboolean console_eligible(Viewer *v,Viewer *d) {
+ if (v->explicit_output && d->console_id!=v->output_id) return FALSE;
  if ((v->display_mode==1 && d->accelerated) || (v->display_mode==2 && !d->accelerated)) return FALSE;
  if (!d->cache_valid || (d->accelerated?v->helios_health:v->basic_health)>=2) return FALSE;
  /* QEMU can update a virtio placeholder before the Windows Helios driver is
   * installed. During bootstrap, only confirmed guest health may promote it.
   * A transient API outage can retain an already verified active desktop. */
- if (d->accelerated && v->display_mode!=2 && v->helios_health!=1 && (v->has_basic_console || v->pending_consoles))
+ if (d->accelerated && !v->explicit_output && v->display_mode!=2 && v->helios_health!=1 && (v->has_basic_console || v->pending_consoles))
   return v->active==d && d->driver_confirmed;
  return TRUE;
 }
@@ -1196,9 +1199,19 @@ int main(int argc,char **argv) {
   puts("Viewer bounds, key mapping and D-Bus interfaces passed.");return 0;
  }
  gboolean ping=argc==3 && !strcmp(argv[1],"--ping");
- gboolean control=argc==4 && !strcmp(argv[3],"--control-stdin");
- gboolean smoke=(argc==3 || control) && !strcmp(argv[1],"--smoke-test");
- if ((argc!=3 && !control) || (!ping && !smoke && strcmp(argv[1],"--address"))) {g_printerr("Usage: winboat-helios-viewer --address unix:path=...\n");return 2;}
+ gboolean list=argc==3 && !strcmp(argv[1],"--list-outputs");
+ gboolean control=FALSE,automatic_resize=FALSE,explicit_output=FALSE;guint output_id=0;
+ gboolean smoke=argc>=3 && !strcmp(argv[1],"--smoke-test");
+ if (argc<3 || (!ping && !list && !smoke && strcmp(argv[1],"--address"))) {g_printerr("Usage: winboat-helios-viewer --address unix:path=... [--output ID] [--auto-resize] [--control-stdin]\n");return 2;}
+ for (int i=3;i<argc;i++) {
+  if (!strcmp(argv[i],"--control-stdin")) control=TRUE;
+  else if (!strcmp(argv[i],"--auto-resize")) automatic_resize=TRUE;
+  else if (!strcmp(argv[i],"--output") && i+1<argc) {
+   char *end=NULL;const char *number=argv[++i];guint64 parsed=g_ascii_strtoull(number,&end,10);
+   if (!*number || *end || parsed>G_MAXUINT32 || *number=='-') {g_printerr("Invalid output ID\n");return 2;}
+   explicit_output=TRUE;output_id=(guint)parsed;
+  } else {g_printerr("Unknown viewer option\n");return 2;}
+ }
  if (!g_str_has_prefix(argv[2],"unix:path=")) {g_printerr("Only local Unix display sockets are supported.\n");return 2;}
  Viewer v={.image=EGL_NO_IMAGE_KHR,.display=EGL_NO_DISPLAY,.cursor_visible=TRUE};GError *err=NULL;v.loop=g_main_loop_new(NULL,FALSE);
  v.bus=g_dbus_connection_new_for_address_sync(argv[2],G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT|G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION,NULL,NULL,&err);
@@ -1212,6 +1225,27 @@ int main(int argc,char **argv) {
  GVariant *owner=g_dbus_connection_call_sync(v.bus,"org.freedesktop.DBus","/org/freedesktop/DBus","org.freedesktop.DBus","GetConnectionUnixUser",g_variant_new("(s)","org.qemu"),G_VARIANT_TYPE("(u)"),G_DBUS_CALL_FLAGS_NONE,3000,NULL,&err);
  if (!owner) {g_printerr("No authenticated QEMU display: %s\n",err->message);g_error_free(err);return 1;}
  g_variant_get(owner,"(u)",&v.qemu_uid);g_variant_unref(owner);
+ if (list) {
+  GVariant *reply=g_dbus_connection_call_sync(v.bus,"org.qemu",VM,"org.freedesktop.DBus.Properties","Get",g_variant_new("(ss)",IFACE "VM","ConsoleIDs"),G_VARIANT_TYPE("(v)"),G_DBUS_CALL_FLAGS_NONE,3000,NULL,&err);
+  if (!reply) {g_printerr("Cannot enumerate QEMU outputs: %s\n",err->message);g_error_free(err);return 1;}
+  GVariant *boxed,*ids;g_variant_get(reply,"(@v)",&boxed);ids=g_variant_get_variant(boxed);
+  if (!g_variant_is_of_type(ids,G_VARIANT_TYPE("au")) || g_variant_n_children(ids)>32) {g_printerr("Invalid QEMU output list\n");return 1;}
+  gboolean first=TRUE;g_print("[");
+  for (gsize i=0;i<g_variant_n_children(ids);i++) {
+   guint id;g_variant_get_child(ids,i,"u",&id);char *object=g_strdup_printf(CONSOLE_PREFIX "%u",id);
+   GDBusProxy *console=g_dbus_proxy_new_sync(v.bus,G_DBUS_PROXY_FLAGS_DO_NOT_CONNECT_SIGNALS,NULL,"org.qemu",object,IFACE "Console",NULL,&err);g_free(object);
+   if (!console) {g_printerr("Cannot inspect QEMU output\n");return 1;}
+   GVariant *type=g_dbus_proxy_get_cached_property(console,"Type"),*head=g_dbus_proxy_get_cached_property(console,"Head");
+   if (type && g_variant_is_of_type(type,G_VARIANT_TYPE_STRING) && !strcmp(g_variant_get_string(type,NULL),"Graphic")) {
+    guint index=head && g_variant_is_of_type(head,G_VARIANT_TYPE_UINT32)?g_variant_get_uint32(head):0;
+    /* Label uses a fixed ASCII prefix; arbitrary QEMU labels never become JSON. */
+    g_print("%s{\"id\":%u,\"label\":\"QEMU output %u\",\"head\":%u}",first?"":",",id,id,index);first=FALSE;
+   }
+   g_clear_pointer(&type,g_variant_unref);g_clear_pointer(&head,g_variant_unref);g_object_unref(console);
+  }
+  g_print("]\n");g_variant_unref(ids);g_variant_unref(boxed);g_variant_unref(reply);g_object_unref(v.bus);g_main_loop_unref(v.loop);return 0;
+ }
+ v.explicit_output=explicit_output;v.output_id=output_id;v.auto_resize=automatic_resize;
  const char *transport=g_getenv("HELIOS_VIEWER_TRANSPORT");
  if (transport && strcmp(transport,"auto") && strcmp(transport,"copy") && strcmp(transport,"dmabuf")) {g_printerr("HELIOS_VIEWER_TRANSPORT must be auto, copy or dmabuf\n");return 2;}
  v.transport_mode=!g_strcmp0(transport,"copy") || (!transport && !g_strcmp0(g_getenv("HELIOS_VIEWER_COPY"),"1"))?1:!g_strcmp0(transport,"dmabuf")?2:0;
@@ -1238,7 +1272,9 @@ int main(int argc,char **argv) {
  gtk_check_button_set_active(GTK_CHECK_BUTTON(aspect),TRUE);
  gtk_widget_set_tooltip_text(resize,"Send a window-size hint. The bundled Helios driver uses its startup resolution; choose it in WinBoat Configuration and restart the VM.");
  gtk_header_bar_pack_start(GTK_HEADER_BAR(bar),resize);gtk_header_bar_pack_start(GTK_HEADER_BAR(bar),aspect);
- gtk_header_bar_pack_start(GTK_HEADER_BAR(bar),display_selector(&v));
+ GtkWidget *selector=display_selector(&v);gtk_widget_set_sensitive(selector,!v.explicit_output);
+ gtk_header_bar_pack_start(GTK_HEADER_BAR(bar),selector);
+ gtk_check_button_set_active(GTK_CHECK_BUTTON(resize),v.auto_resize);
  const char *transports[]={"Auto transfer","Copy test","DMA-BUF test",NULL};
  GtkWidget *transfer=gtk_drop_down_new_from_strings(transports);gtk_drop_down_set_selected(GTK_DROP_DOWN(transfer),v.transport_mode);
  gtk_widget_set_tooltip_text(transfer,"Diagnostic transfer comparison. Copy and DMA-BUF require that path on Helios; unsupported paths stay unavailable. Auto restores fallback. Does not change Windows drivers or VGA.");

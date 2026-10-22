@@ -1,3 +1,4 @@
+import {usbHostUse} from '../../shared/usb-host-use';
 const { usb, getDeviceList }: typeof import("usb") = require("usb");
 const fs: typeof import("fs") = require("fs");
 const  { execSync }: typeof import('child_process') = require('child_process');
@@ -207,6 +208,11 @@ export class USBManager {
      * @param device The USB device to add
      */
     async addDeviceToPassthroughList(device: Device) {
+        const use=usbHostUse(device.busNumber,device.deviceAddress);
+        if(use.mounted)throw new Error('This USB device contains mounted Linux storage. Unmount every partition before passing it to Windows.');
+        const {dialog}:typeof import('@electron/remote')=require('@electron/remote');
+        const warning=use.input?'This device includes keyboard or mouse input. Passing it through can remove your Linux controls. Keep another input device connected.':!use.known?'Host use could not be inspected. Close Linux applications using this device first.':'Close Linux applications using this device first.';
+        if((await dialog.showMessageBox({type:'warning',message:'Give Windows exclusive access to this USB device?',detail:warning+' The saved selection may reconnect automatically while this VM runs. Remove it from the passthrough list to return it to Linux.',buttons:['Cancel','Connect'],defaultId:0,cancelId:0})).response!==1)return;
         const ptDevice = this.#convertDeviceToPTSerializable(device);
 
         // Avoid duplicates
@@ -333,7 +339,7 @@ export class USBManager {
         let response = null;
         try {
             response = await this.#winboat.qmpMgr!.executeCommand("human-monitor-command", {"command-line": "info qtree"})
-            assert("result" in response);
+            assert("return" in response);
     
             // @ts-ignore property "result" already exists due to assert
             return response.return.includes(`usb-host, id "${vendorId}:${productId}"`);
@@ -347,6 +353,7 @@ export class USBManager {
     
     // TODO: handle hostaddr/hostbus in case of duplicate VID/PID
     async #QMPAddDevice(device: Device) {
+        if(usbHostUse(device.busNumber,device.deviceAddress).mounted)throw new Error("USB passthrough blocked: Linux storage is mounted on this device.");
         let response = null;
         const vendorid = device.deviceDescriptor.idVendor;
         const productid = device.deviceDescriptor.idProduct;
@@ -365,11 +372,12 @@ export class USBManager {
                 hostdevice: deviceBusPath
             });
     
-            assert("result" in response);
+            assert("return" in response);
         } catch(e) {
             logger.error(`There was an error adding USB device '${vendorid}:${productid}'`);
             logger.error(e);
             logger.error(`QMP response: ${response}`);
+            throw e;
         }
         logger.info("QMPAddDevice", vendorid, productid);
     }
@@ -378,11 +386,12 @@ export class USBManager {
         let response = null;
         try {
             response = await this.#winboat.qmpMgr!.executeCommand("device_del", { id: `${vendorId}:${productId}`});
-            assert("result" in response);
+            assert("return" in response);
         } catch(e) {
             logger.error(`There was an error removing USB device '${vendorId}:${productId}'`);
             logger.error(e);
             logger.error(`QMP response: ${response}`);
+            throw e;
         }
         logger.info("QMPRemoveDevice", vendorId, productId);
     }

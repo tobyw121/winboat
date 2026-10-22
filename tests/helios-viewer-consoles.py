@@ -78,6 +78,7 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
         bus = Gio.DBusConnection.new_for_address_sync(address, Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION, None, None)
         bus.call_sync('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'RequestName', GLib.Variant('(su)', ('org.qemu', 0)), None, 0, 3000, None)
         peers, resizes, failures = {}, [], []
+        extra_head = False
         info = Gio.DBusNodeInfo.new_for_xml(XML)
 
         def prop(connection, sender, path, interface, name):
@@ -85,7 +86,7 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
                 return GLib.Variant('au', [0, 1, 2])
             identifier = int(path.rsplit('_', 1)[1])
             values = {'Type': ('s', 'Text' if identifier == 2 else 'Graphic'),
-                      'Head': ('u', 0), 'Label': ('s', 'helios-bootstrap' if identifier == 0 else 'heliosgpu'),
+                      'Head': ('u', 1 if extra_head and identifier==1 else 0), 'Label': ('s', 'helios-bootstrap' if identifier == 0 else 'heliosgpu'),
                       'Width': ('u', 32), 'Height': ('u', 24), 'IsAbsolute': ('b', True)}
             kind, value = values[name]
             return GLib.Variant(kind, value)
@@ -357,6 +358,38 @@ with tempfile.TemporaryDirectory(prefix='winboat-console-test-') as temporary:
         recovery_events = [json.loads(line) for line in output.splitlines() if line.startswith('{"event":"display-recovery"')]
         assert not any(event['accelerated'] for event in recovery_events), ('Normal Disable triggered Helios driver recovery', output)
         print('Both adapters recover from silent disable/re-enable through viewer-requested fresh baselines; corrupt Basic frames cannot replace healthy Helios; one viewer process/window stays alive.')
+        # Explicit output selection can display an extended head; default
+        # discovery must continue to leave nonzero heads alone.
+        extra_head = True
+        listing = subprocess.Popen([sys.argv[1], '--list-outputs', address], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        deadline = time.monotonic()+8
+        def listing_tick():
+            if listing.poll() is not None:loop.quit();return False
+            if time.monotonic()>=deadline:
+                failures.append('Output enumeration timed out');loop.quit();return False
+            return True
+        GLib.timeout_add(50,listing_tick);loop.run()
+        listed, errors = listing.communicate(timeout=1)
+        assert listing.returncode==0,errors
+        assert json.loads(listed)==[{'id':0,'label':'QEMU output 0','head':0},{'id':1,'label':'QEMU output 1','head':1}],listed
+        peers.clear();resizes.clear()
+        viewer=subprocess.Popen([sys.argv[1],'--address',address,'--output','1','--auto-resize'],env=environment,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+        output_stage=0;deadline=time.monotonic()+8
+        def output_tick():
+            global output_stage
+            try:
+                assert viewer.poll() is None,'Explicit head viewer exited'
+                assert time.monotonic()<deadline,'Explicit head timed out'
+                if 1 not in peers:return True
+                assert list(peers)==[1],'Explicit output subscribed to another console'
+                if output_stage==0:call(1,'Scanout','(uuuuay)',(32,24,128,0x20020888,pixels));output_stage=1;return True
+                visible_frame();assert 1 in resizes,'Automatic resize did not target extended head'
+                loop.quit();return False
+            except Exception as error:failures.append(str(error));loop.quit();return False
+        GLib.timeout_add(400,output_tick);loop.run()
+        assert not failures,failures
+        viewer.terminate();viewer.communicate(timeout=3);extra_head=False
+        print('Output listing and isolated extended-head window with automatic resize passed.')
         # Losing one adapter is recoverable; losing the VM must report failure
         # instead of leaving a permanently blank window marked as connected.
         peers.clear()
