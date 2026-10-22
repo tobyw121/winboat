@@ -294,6 +294,14 @@ func getIcon(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--graphics-acceptance-agent" {
+		runAcceptanceAgent()
+		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == "--application-profile-agent" {
+		runApplicationProfileAgent()
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "--clipboard-agent" {
 		runClipboardAgent()
 		return
@@ -306,6 +314,8 @@ func main() {
 		}
 	}
 	r := mux.NewRouter()
+	r.HandleFunc("/graphics/validation/run", startAcceptance).Methods("POST")
+	r.HandleFunc("/integration/application", applicationProfileHandler(launchApplicationProfile)).Methods("POST")
 	r.HandleFunc("/integration/power", vmPowerHandler(requestWindowsPower)).Methods("POST")
 	r.HandleFunc("/integration/exchange/open", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Origin") != "" || r.Header.Get("X-WinBoat-Exchange") != "open" {
