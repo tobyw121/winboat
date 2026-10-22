@@ -1,5 +1,7 @@
 # Keep the checksum-locked upstream snapshot byte-identical on Windows too.
 helios/upstream/** -text
+# Preserve the exact bytes of checksum-locked third-party engine patches.
+helios/compatibility/patches/*.patch -text whitespace=-blank-at-eol
 # The standalone recovery script must match its embedded installer copy.
 scripts/helios/Clear-HeliosDriverStore.ps1 -text
 guest_server/scripts/Clear-HeliosDriverStore.ps1 -text

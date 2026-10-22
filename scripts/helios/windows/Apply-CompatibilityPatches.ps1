@@ -16,7 +16,8 @@ function Get-DiffHash([string]$Target){
 foreach($patch in $manifest.patches){
     if($patch.component -notin @('dxvk-helios','vkd3d-proton-helios') -or $patch.file -notmatch '^patches/[a-z0-9-]+\.patch$'){throw 'Invalid compatibility patch target.'}
     $file=Join-Path $root $patch.file
-    if((Get-FileHash $file -Algorithm SHA256).Hash -ine $patch.sha256){throw 'Compatibility patch checksum mismatch.'}
+    $actualHash=(Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant()
+    if($actualHash -ine $patch.sha256){throw "Compatibility patch checksum mismatch: $($patch.file); expected $($patch.sha256), got $actualHash. Check Git checkout attributes and local modifications."}
     $target=Join-Path $BuildRoot $patch.component
     $head=(& git -C $target rev-parse HEAD)
     if($LASTEXITCODE -ne 0 -or $head -ne $patch.baseRevision){throw 'Compatibility patch base revision differs.'}

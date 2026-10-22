@@ -6,10 +6,24 @@ on:
     paths:
       - 'helios/compatibility/**'
       - 'tests/proton-ge-patches.py'
+      - 'tests/compatibility-checkout.py'
+      - '.gitattributes'
       - '.github/workflows/test-proton-ge.yml'
 permissions:
   contents: read
 jobs:
+  checkout-integrity:
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify checksum-locked patches with Windows checkout conversion
+        run: python tests/compatibility-checkout.py
   pinned-engines:
     runs-on: ubuntu-24.04
     timeout-minutes: 10

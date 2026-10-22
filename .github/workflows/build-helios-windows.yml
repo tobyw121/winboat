@@ -17,6 +17,8 @@ on:
       - 'helios/upstream/**'
       - 'helios/source.lock.json'
       - 'helios/compatibility/**'
+      - '.gitattributes'
+      - 'tests/compatibility-checkout.py'
       - 'tests/helios-device-features.*'
 
 permissions:
@@ -67,6 +69,8 @@ jobs:
         run: |
           ./tests/helios-windows.test.ps1 -RepoRoot $env:GITHUB_WORKSPACE
           ./tests/compatibility-patches.test.ps1
+          python ./tests/compatibility-checkout.py
+          if ($LASTEXITCODE -ne 0) { throw 'Compatibility patch checkout integrity failed.' }
       - name: Prepare embedded Helios sources
         shell: pwsh
         working-directory: .
