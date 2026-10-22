@@ -1091,14 +1091,18 @@ static void screenshot_clicked(GtkButton *button,Viewer *v) {
  gtk_native_dialog_set_modal(GTK_NATIVE_DIALOG(dialog),TRUE);
  g_signal_connect(dialog,"response",G_CALLBACK(screenshot_response),v);gtk_native_dialog_show(GTK_NATIVE_DIALOG(dialog));
 }
+typedef struct {Viewer *root,*output;guint width,height;} ResizeHint;
 static void resize_finished(GObject *object,GAsyncResult *result,gpointer data) {
- Viewer *v=data;GError *error=NULL;
+ ResizeHint *hint=data;Viewer *v=hint->root,*d=hint->output;GError *error=NULL;
  GVariant *reply=g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),result,&error);
  if (!reply) {
-  v->resize_failed=TRUE;
-  gtk_label_set_text(GTK_LABEL(v->status),"Guest resolution request failed; scaling remains available.");
+  if (d->requested_width==hint->width && d->requested_height==hint->height) {
+   d->resize_failed=TRUE;d->requested_width=d->requested_height=0;
+  }
+  if (displayed(v)==d) gtk_label_set_text(GTK_LABEL(v->status),"Guest resolution request failed; previous image and scaling are preserved.");
   g_printerr("Guest resize request failed: %s\n",error->message);g_error_free(error);
- } else {v->resize_failed=FALSE;v->resize_requests++;g_variant_unref(reply);}
+ } else {if(d->requested_width==hint->width && d->requested_height==hint->height)d->resize_failed=FALSE;v->resize_requests++;g_variant_unref(reply);}
+ g_free(hint);
 }
 static gboolean request_resize(gpointer data) {
  Viewer *v=data;v->resize_timer=0;
@@ -1107,10 +1111,11 @@ static gboolean request_resize(gpointer data) {
  guint scale=gtk_widget_get_scale_factor(v->area);
  guint w=gtk_widget_get_width(v->area)*scale,h=gtk_widget_get_height(v->area)*scale;
  if (!dimensions(w,h) || w<640 || h<480 || (w==d->requested_width && h==d->requested_height)) return G_SOURCE_REMOVE;
- d->requested_width=w;d->requested_height=h;
+ d->requested_width=w;d->requested_height=h;d->resize_failed=FALSE;
+ ResizeHint *hint=g_new(ResizeHint,1);*hint=(ResizeHint){.root=v,.output=d,.width=w,.height=h};
  g_dbus_connection_call(v->bus,"org.qemu",d->console_path,IFACE "Console","SetUIInfo",
   g_variant_new("(qqiiuu)",(guint16)(w*25.4/96),(guint16)(h*25.4/96),0,0,w,h),
-  NULL,G_DBUS_CALL_FLAGS_NONE,2000,NULL,resize_finished,v);
+  NULL,G_DBUS_CALL_FLAGS_NONE,2000,NULL,resize_finished,hint);
  return G_SOURCE_REMOVE;
 }
 static void resized(GtkGLArea *area,int width,int height,Viewer *v) {
@@ -1144,17 +1149,17 @@ static gboolean stats(Viewer *v) {
  char zoom[32];
  if (v->zoom) g_snprintf(zoom,sizeof zoom,"%.0f%%",v->zoom*100);
  else g_strlcpy(zoom,v->stretch?"stretch":"fit",sizeof zoom);
- const char *resize_state=v->resize_failed?"failed":!v->auto_resize?"off":
+ const char *resize_state=d->resize_failed?"failed":!v->auto_resize?"off":
   (d->requested_width && (d->requested_width!=d->width || d->requested_height!=d->height))?"requested / not applied":"matched";
  char *text=g_strdup_printf("%u × %u · zoom: %s · %s · guest resize: %s (%" G_GUINT64_FORMAT " requests sent)",
   d->width,d->height,zoom,d->last_dma?"DMA-BUF / OpenGL":"Software / OpenGL",resize_state,v->resize_requests);
  gtk_label_set_text(GTK_LABEL(v->status),text);g_free(text);
  g_printerr("{\"event\":\"statistics\",\"requestedTransportMode\":%u,\"accelerated\":%u,\"width\":%u,\"height\":%u,\"pid\":%d,\"console\":%u,\"monotonicUs\":%" G_GINT64_FORMAT
-  ",\"dmabufFrames\":%" G_GUINT64_FORMAT ",\"softwareFrames\":%" G_GUINT64_FORMAT
+  ",\"requestedWidth\":%u,\"requestedHeight\":%u,\"resizeRequestFailed\":%u,\"dmabufFrames\":%" G_GUINT64_FORMAT ",\"softwareFrames\":%" G_GUINT64_FORMAT
   ",\"renderedFrames\":%" G_GUINT64_FORMAT ",\"sourceCopyWallUs\":%" G_GUINT64_FORMAT
   ",\"completionWaitUs\":%" G_GUINT64_FORMAT ",\"copySamples\":%" G_GUINT64_FORMAT
   ",\"skippedRedraws\":%" G_GUINT64_FORMAT ",\"coalescedUpdates\":%" G_GUINT64_FORMAT ",\"sourceInode\":%" G_GUINT64_FORMAT "}\n",
-  d->transport_mode,d->accelerated?1u:0u,d->width,d->height,getpid(),d->console_id,g_get_monotonic_time(),d->dma_frames,d->software_frames,
+  d->transport_mode,d->accelerated?1u:0u,d->width,d->height,getpid(),d->console_id,g_get_monotonic_time(),d->requested_width,d->requested_height,d->resize_failed?1u:0u,d->dma_frames,d->software_frames,
   v->rendered_frames,d->copy_wall_us,d->completion_wait_us,d->copy_samples,
   v->skipped_redraws,d->coalesced_updates,d->source_inode);
  return G_SOURCE_CONTINUE;

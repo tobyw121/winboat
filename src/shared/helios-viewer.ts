@@ -12,7 +12,7 @@ export function viewerStatistics(line:string):Record<string,number>|undefined {
     try {value=JSON.parse(line);} catch {return;}
     if(!value || value.event!=='statistics')return;
     const clean:Record<string,number>={};
-    for(const key of ['pid','console','monotonicUs','requestedTransportMode','accelerated','width','height','dmabufFrames','softwareFrames','renderedFrames','sourceCopyWallUs','completionWaitUs','copySamples','skippedRedraws','coalescedUpdates','sourceInode']){
+    for(const key of ['pid','console','monotonicUs','requestedTransportMode','accelerated','width','height','requestedWidth','requestedHeight','resizeRequestFailed','dmabufFrames','softwareFrames','renderedFrames','sourceCopyWallUs','completionWaitUs','copySamples','skippedRedraws','coalescedUpdates','sourceInode']){
         const n=value[key];if(typeof n==='number' && Number.isSafeInteger(n) && n>=0)clean[key]=n;
     }
     if(['pid','console','monotonicUs'].every(key=>key in clean))return clean;

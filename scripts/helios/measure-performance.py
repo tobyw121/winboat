@@ -15,7 +15,7 @@ import statistics
 import subprocess
 import time
 
-VIEWER_FIELDS = ('requestedTransportMode','accelerated','width','height','pid','console','monotonicUs','dmabufFrames','softwareFrames','renderedFrames',
+VIEWER_FIELDS = ('requestedTransportMode','accelerated','width','height','requestedWidth','requestedHeight','resizeRequestFailed','pid','console','monotonicUs','dmabufFrames','softwareFrames','renderedFrames',
                  'sourceCopyWallUs','completionWaitUs','copySamples','skippedRedraws','coalescedUpdates','sourceInode')
 
 
