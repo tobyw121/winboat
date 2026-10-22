@@ -1,89 +1,88 @@
 <template>
 <section v-show="section!=='overview' && section!=='sharing'" class="integration-stack">
- <div v-show="section==='performance'" class="integration-card"><h3>Live measurements</h3>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(sample)">Refresh CPU / GPU / display</x-button>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(checkTransport)">Compare host / viewer DMA-BUF layouts</x-button>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(layoutTrace)">Enable layout diagnostics (restart)</x-button><x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>restore('diagnostics'))">Stop layout diagnostics</x-button>
-  <label><input type="checkbox" v-model="automatic"> Refresh every 5 seconds while this page is open</label>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(importFrames)">Read application PresentMon CSV</x-button>
-  <p class="text-sm">{{ metricText }}</p>
+ <div v-show="section==='performance'" class="integration-card"><h3>Live resource use</h3>
+  <p>Check CPU, memory and display activity before changing performance settings.</p>
+  <div class="integration-actions"><x-button class="integration-primary" :disabled="busy || toolsBusy || blocked" @click="run(sample)">Refresh measurements</x-button></div>
+  <label class="integration-toggle"><input type="checkbox" v-model="automatic"> Update every 5 seconds while this section is open</label>
+  <p role="status">{{ metricText }}</p>
   <dl v-if="metrics" class="grid grid-cols-2 gap-1 text-sm">
-   <dt>Container CPU (100% = one core)</dt><dd>{{ metrics.container?.cpuPercentOfOneCore ?? 'unknown' }}%</dd>
-   <dt>Container memory share</dt><dd>{{ metrics.container?.memoryPercent ?? 'unknown' }}%</dd>
-   <dt>Viewer extent</dt><dd>{{ metrics.viewer?.width ?? '?' }} × {{ metrics.viewer?.height ?? '?' }}</dd>
-   <dt>Requested / actual resolution</dt><dd>{{ metrics.viewer?.requestedWidth ?? '?' }} × {{ metrics.viewer?.requestedHeight ?? '?' }} / {{ metrics.viewer?.width ?? '?' }} × {{ metrics.viewer?.height ?? '?' }}</dd>
-   <dt>Application presents/s (CSV)</dt><dd>{{ metrics.applicationFrames?.presentCallsPerSecond?.toFixed(1) ?? 'not recorded' }}</dd>
-   <dt>Presentation interval p95 / p99</dt><dd>{{ metrics.applicationFrames?.p95Ms?.toFixed(2) ?? '?' }} / {{ metrics.applicationFrames?.p99Ms?.toFixed(2) ?? '?' }} ms</dd>
+   <dt>VM container CPU · 100% = one core</dt><dd>{{ metrics.container?.cpuPercentOfOneCore ?? 'unknown' }}%</dd>
+   <dt>Container memory</dt><dd>{{ metrics.container?.memoryPercent ?? 'unknown' }}%</dd>
+   <dt>Display resolution</dt><dd>{{ metrics.viewer?.width ?? '?' }} × {{ metrics.viewer?.height ?? '?' }}</dd>
+   <dt>Application presents / second</dt><dd>{{ metrics.applicationFrames?.presentCallsPerSecond?.toFixed(1) ?? 'Not recorded' }}</dd>
+   <dt>Frame intervals · p95 / p99</dt><dd>{{ metrics.applicationFrames?.p95Ms?.toFixed(2) ?? '?' }} / {{ metrics.applicationFrames?.p99Ms?.toFixed(2) ?? '?' }} ms</dd>
   </dl>
-  <p v-for="gpu in metrics?.hostGPU?.devices ?? []" :key="gpu.pciBusId" class="text-sm">Host GPU {{ gpu.pciBusId }}: {{ gpu.utilizationPercent ?? '?' }}% load; {{ gpu.memoryUsedMiB ?? '?' }} MiB used; {{ gpu.powerWatts ?? '?' }} W</p>
-  <details v-if="metrics"><summary>Measurement and transport details</summary><pre class="text-xs whitespace-pre-wrap max-h-48 overflow-auto">{{ JSON.stringify(metrics,null,2) }}</pre></details>
+  <p v-for="gpu in metrics?.hostGPU?.devices ?? []" :key="gpu.pciBusId">Host GPU {{ gpu.pciBusId }}: {{ gpu.utilizationPercent ?? '?' }}% load · {{ gpu.memoryUsedMiB ?? '?' }} MiB used · {{ gpu.powerWatts ?? '?' }} W</p>
+  <details><summary>Application frame times & measurement details</summary><p>Import a PresentMon CSV for the application selected under Applications. Viewer redraws are not game FPS.</p><x-button :disabled="busy || toolsBusy || blocked" @click="run(importFrames)">Import frame-time CSV</x-button><pre v-if="metrics">{{ JSON.stringify(metrics,null,2) }}</pre></details>
  </div>
  <div v-show="section==='applications'" class="integration-card"><h3>Windows application profiles</h3>
-  <input v-model="exe" aria-label="Windows executable" placeholder="C:\Games\Game.exe" class="bg-neutral-900 p-1 w-full">
-  <input v-model="argumentsJSON" aria-label="Arguments as JSON array" placeholder='["-windowed"]' class="bg-neutral-900 p-1 w-full">
-  <select v-model="resolution" class="bg-neutral-900" aria-label="Profile resolution"><option v-for="r in HELIOS_RESOLUTIONS" :key="r.key">{{ r.key }}</option></select>
-  <select v-model="api" class="bg-neutral-900" aria-label="Application API profile"><option value="native">Native driver defaults</option><option value="compatibility">D3D11 feature-level 10 diagnostic compatibility</option></select>
-  <select v-model="transport" class="bg-neutral-900" aria-label="Profile display transport"><option>auto</option><option>copy</option><option>dmabuf</option></select>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(saveProfile)">Save profile</x-button>
-  <select v-model="selected" aria-label="Saved profile" class="bg-neutral-900"><option v-for="p in profiles" :key="p.id" :value="p.id">{{ p.exe }}</option></select>
-  <x-button :disabled="busy || toolsBusy || blocked || !selected" @click="run(loadProfile)">Load profile</x-button>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(applyProfile)">Apply resolution / transport and restart</x-button>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(restoreProfile)">Restore previous application settings</x-button>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(launch)">Start with Windows confirmation</x-button>
-  <p class="text-sm text-neutral-400">Compatibility is process-local and requires a supporting installed UMD. It does not install DLL translation layers or change DWM settings. Display changes affect the VM and require an explicit restart.</p>
+  <p>Keep a separate display and compatibility profile for each application.</p>
+  <div class="integration-fields"><label class="integration-field">Saved profile<select v-model="selected"><option value="" disabled>{{ profiles.length ? 'Choose a profile' : 'No profiles saved yet' }}</option><option v-for="p in profiles" :key="p.id" :value="p.id">{{ p.exe }}</option></select></label><div class="integration-actions"><x-button :disabled="busy || toolsBusy || blocked || !selected" @click="run(loadProfile)">Load profile</x-button></div></div>
+  <div class="integration-fields">
+   <label class="integration-field">Windows application<input v-model="exe" placeholder="C:\Games\Game.exe"><small>Full path to the .exe file inside Windows.</small></label>
+   <label class="integration-field">Display resolution<select v-model="resolution"><option v-for="r in HELIOS_RESOLUTIONS" :key="r.key">{{ r.key }}</option></select></label>
+  </div>
+  <details><summary>Compatibility & launch arguments</summary>
+   <div class="integration-fields">
+    <label class="integration-field">Graphics compatibility<select v-model="api"><option value="native">Driver defaults (recommended)</option><option value="compatibility">D3D11 feature level 10 · diagnostic</option></select><small>The diagnostic option requires a supporting installed driver.</small></label>
+    <label class="integration-field">Display transfer<select v-model="transport"><option value="auto">Automatic (recommended)</option><option value="copy">Copy · compatibility fallback</option><option value="dmabuf">DMA-BUF · direct transfer</option></select></label>
+   </div>
+   <div v-for="(argument,index) in appArguments" :key="index" class="integration-actions"><label class="integration-field">Argument {{ index+1 }}<input v-model="appArguments[index]" placeholder="e.g. -windowed"></label><x-button :disabled="busy || toolsBusy || blocked" :aria-label="'Remove argument '+(index+1)" @click="appArguments.splice(index,1)">Remove</x-button></div>
+   <x-button :disabled="busy || toolsBusy || blocked || appArguments.length>=32" @click="appArguments.push('')">Add argument</x-button>
+   <p>Each row is one argument. Spaces stay within that argument; no JSON or shell quoting is needed.</p>
+  </details>
+  <div class="integration-actions"><x-button :disabled="busy || toolsBusy || blocked || !exe" @click="run(saveProfile)">Save profile</x-button><x-button class="integration-primary" :disabled="busy || toolsBusy || blocked || !exe" @click="run(launch)">Start application</x-button></div>
+  <p>Confirm the application start in Windows. Applying its display settings is a separate step and restarts the VM.</p>
+  <details><summary>Apply display settings to the VM</summary><x-button :disabled="busy || toolsBusy || blocked || !exe" @click="run(applyProfile)">Apply display settings & restart</x-button><x-button :disabled="busy || toolsBusy || blocked" @click="run(restoreProfile)">Restore previous display settings</x-button></details>
  </div>
- <div v-show="section==='performance'" class="integration-card"><h3>CPU & memory</h3>
-  <p class="text-sm">Changes are trials: confirm within five minutes or the host restores the previous configuration, even if this window closes.</p>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>trialAction('status'))">Trial status</x-button>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>trialAction('confirm'))">Keep working configuration</x-button>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>trialAction('recover'))">Restore previous configuration now</x-button>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>trialAction('accept-external'))">Keep external edits after a conflict</x-button>
-  <input v-model="cpuSet" aria-label="Linux CPU set" placeholder="CPU set, e.g. 2-7 (empty: unrestricted)" class="bg-neutral-900 p-1 w-full">
-  <label><input type="checkbox" v-model="hugepages"> Use already reserved 2 MiB hugepages</label>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>apply('resources'))">Apply resources and restart</x-button>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>restore('resources'))">Restore resources</x-button>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(compactCache)">Trial smaller readback cache (restart)</x-button>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>restore('readback-cache'))">Restore readback cache</x-button>
+ <div v-show="section==='performance'" class="integration-card"><h3>Configuration trial</h3>
+  <p class="integration-notice">CPU, memory and network changes are tried for five minutes. Keep a working configuration before the timer expires, or the previous settings are restored automatically.</p>
+  <div class="integration-actions"><x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>trialAction('status'))">Check trial status</x-button><x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>trialAction('confirm'))">Keep changes</x-button><x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>trialAction('recover'))">Undo trial</x-button></div>
+  <details><summary>Resolve an external configuration conflict</summary><p>Use this only when the trial reports that configuration was edited outside WinBoat.</p><x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>trialAction('accept-external'))">Keep external edits</x-button></details>
+ </div>
+ <div v-show="section==='performance'" class="integration-card"><h3>CPU & memory tuning</h3>
+  <p>RAM size and core count are configured in Container settings above. Use these options only for measured workload tuning.</p>
+  <details><summary>Advanced resource settings</summary>
+   <label class="integration-field">Allowed Linux CPU cores<input v-model="cpuSet" placeholder="e.g. 2-7"><small>Leave empty to use all available host cores.</small></label>
+   <label class="integration-toggle"><input type="checkbox" v-model="hugepages"> Use already reserved 2 MiB hugepages</label>
+   <div class="integration-actions"><x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>apply('resources'))">Try resource settings & restart</x-button><x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>restore('resources'))">Restore resources</x-button></div>
+   <p>Hugepages must already be reserved on Linux. WinBoat checks available space before applying this option.</p>
+   <x-button :disabled="busy || toolsBusy || blocked" @click="run(compactCache)">Try smaller display cache & restart</x-button><x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>restore('readback-cache'))">Restore display cache</x-button>
+  </details>
  </div>
  <div v-show="section==='performance'" class="integration-card"><h3>Network connection</h3>
-  <select v-model="network" aria-label="Network mode" class="bg-neutral-900"><option value="nat">NAT</option><option value="bridge">LAN via existing Docker macvlan</option><option value="isolated">Isolated (no guest networking)</option></select>
-  <input v-if="network==='bridge'" v-model="networkName" aria-label="Existing Docker macvlan network" placeholder="Existing Docker macvlan network" class="bg-neutral-900 p-1">
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>apply('network'))">Apply network and restart</x-button>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>restore('network'))">Restore network</x-button>
-  <p class="text-sm text-neutral-400">Profiles are experiments; use the existing A/B comparison to measure them. LAN and isolated modes can make the guest API, RDP and shares unavailable. Local Desktop remains the recovery display. A macvlan places Windows directly on your LAN.</p>
+  <div class="integration-fields"><label class="integration-field">Connection mode<select v-model="network"><option value="nat">Shared network · NAT (recommended)</option><option value="bridge">Direct LAN · existing macvlan network</option><option value="isolated">Isolated · no guest network</option></select></label><label v-if="network==='bridge'" class="integration-field">Docker macvlan network<input v-model="networkName" placeholder="Existing network name"></label></div>
+  <p v-if="network==='nat'">Share the host connection through the existing VM network.</p><p v-else class="integration-notice">LAN and isolated modes can disconnect shared folders and Windows management. Keep Local Desktop available. LAN mode places Windows directly on your local network.</p>
+  <div class="integration-actions"><x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>apply('network'))">Try network settings & restart</x-button><x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>restore('network'))">Restore network</x-button></div>
  </div>
- <div v-show="section==='display'" class="integration-card"><h3>Local Desktop image & efficiency</h3>
-  <label><input type="checkbox" v-model="background"> Limit background viewer work to 5 updates/s</label>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(saveBackground)">Save background limit</x-button>
-  <label>Local Desktop sharpening <select v-model.number="sharpen" aria-label="Viewer sharpening" class="bg-neutral-900"><option :value="0">Off</option><option :value="25">25%</option><option :value="50">50%</option><option :value="100">100%</option></select></label>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(saveSharpen)">Save sharpening</x-button>
-  <p class="text-sm text-neutral-400">Adjusts Local Desktop image sharpness. Extra filtering can increase GPU use. Reopen Local Desktop after saving.</p>
+ <div v-show="section==='display'" class="integration-card"><h3>Local Desktop preferences</h3>
+  <div class="integration-fields"><label class="integration-field">Image sharpening<select v-model.number="sharpen"><option :value="0">Off (original image)</option><option :value="25">Subtle · 25%</option><option :value="50">Medium · 50%</option><option :value="100">Strong · 100%</option></select><small>Extra filtering can increase GPU use.</small></label></div>
+  <label class="integration-toggle"><input type="checkbox" v-model="background"> Reduce updates while Local Desktop is in the background</label>
+  <p>Limits background updates to five per second. Reopen Local Desktop after saving these preferences.</p>
+  <x-button class="integration-primary" :disabled="busy || toolsBusy || blocked" @click="run(saveViewerSettings)">Save display preferences</x-button>
  </div>
  <div v-show="section==='diagnostics'" class="integration-card"><h3>Graphics testing & recovery</h3>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(versions)">Check stack compatibility</x-button>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(testHelios)">Timed Helios test with VGA recovery</x-button>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(rollback)">Prepare recorded stable rollback</x-button><p class="text-sm">{{ trialMessage }}</p>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(runAcceptance)">Run graphics probes (Windows confirmation)</x-button>
-  <select v-model="scenario" aria-label="Regression scenario" class="bg-neutral-900"><option>cold-boot</option><option>resize</option><option>logon</option><option>standby</option></select>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(baseline)">Record before transition</x-button>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(checkTransition)">Check after transition</x-button>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(gate)">Check release evidence</x-button>
-  <p class="text-sm text-neutral-400">Run the Windows Helios Control acceptance probes, perform the selected transition, then run fresh probes and capture again. Existing graphics controls provide timed testing and stable rollback. A build alone cannot pass this gate.</p>
+  <p>Check the installed graphics stack before testing a driver or preparing a rollback.</p>
+  <div class="integration-actions"><x-button :disabled="busy || toolsBusy || blocked" @click="run(versions)">Check graphics compatibility</x-button><x-button :disabled="busy || toolsBusy || blocked" @click="run(testHelios)">Test Helios with timed VGA recovery</x-button></div><p role="status">{{ trialMessage }}</p>
+  <details><summary>Prepare a driver rollback</summary><p>Requires the recorded stable package and a VGA-only rescue boot. The actual driver replacement is completed in Windows.</p><x-button :disabled="busy || toolsBusy || blocked" @click="run(rollback)">Prepare stable rollback</x-button></details>
+  <details><summary>Developer acceptance & regression tests</summary>
+   <p>Run the probes, record a baseline, perform a transition and run fresh probes before checking the result. A successful build alone does not establish driver stability.</p>
+   <x-button :disabled="busy || toolsBusy || blocked" @click="run(runAcceptance)">Run graphics probes · confirm in Windows</x-button>
+   <label class="integration-field">Transition to test<select v-model="scenario"><option value="cold-boot">Cold boot</option><option value="resize">Display resize</option><option value="logon">Windows sign-in</option><option value="standby">Standby & resume</option></select></label>
+   <x-button :disabled="busy || toolsBusy || blocked" @click="run(baseline)">1. Record before</x-button><x-button :disabled="busy || toolsBusy || blocked" @click="run(checkTransition)">2. Check after</x-button><x-button :disabled="busy || toolsBusy || blocked" @click="run(gate)">Check release evidence</x-button>
+   <x-button :disabled="busy || toolsBusy || blocked" @click="run(checkTransport)">Compare DMA-BUF layouts</x-button><x-button :disabled="busy || toolsBusy || blocked" @click="run(layoutTrace)">Start layout tracing & restart</x-button><x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>restore('diagnostics'))">Stop layout tracing</x-button>
+  </details>
  </div>
  <div v-show="section==='backups'" class="integration-card"><h3>Back up while Windows is running</h3>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(chooseBackupFolder)">Choose backup destination</x-button>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(prepareLive)">Configure agent channel and backup folder (restart)</x-button>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>restore('live-backup'))">Remove export channel (keeps saved files)</x-button>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>live('check'))">Check Windows agent</x-button>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(startLive)">Start VSS disk export</x-button>
-  <input v-model="backupId" aria-label="Live export identity" placeholder="Export identity" class="bg-neutral-900 p-1">
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(openLiveFolder)">Open exports folder</x-button>
-  <x-button :disabled="busy || toolsBusy || blocked || !backupId" @click="run(()=>live('status'))">Refresh export status</x-button>
-  <x-button :disabled="busy || toolsBusy || blocked" @click="run(thaw)">Recover VSS thaw</x-button>
-  <p class="text-sm text-neutral-400">Requires Windows QEMU Guest Agent with VSS support, a new host image and enough backup space. The worker resumes and thaws independently of this window. Exports include writable disks and firmware; RAM, GPU/TPM state and shared folders are excluded; retain the original VM and encryption recovery keys. Restore exports offline using their block mapping.</p>
+  <p>Export Windows disks using VSS. Requires the Windows QEMU Guest Agent with VSS support and a compatible host image.</p>
+  <div class="integration-actions"><x-button class="integration-primary" :disabled="busy || toolsBusy || blocked" @click="run(startLive)">Export Windows disks</x-button><x-button :disabled="busy || toolsBusy || blocked" @click="run(openLiveFolder)">Open backup folder</x-button></div>
+  <label class="integration-field">Export ID<input v-model="backupId" placeholder="Shown after starting an export"></label><x-button :disabled="busy || toolsBusy || blocked || !backupId" @click="run(()=>live('status'))">Check export progress</x-button>
+  <details><summary>Set up live backups</summary><x-button :disabled="busy || toolsBusy || blocked" @click="run(chooseBackupFolder)">Choose backup folder</x-button><x-button :disabled="busy || toolsBusy || blocked" @click="run(prepareLive)">Configure live backup & restart</x-button><x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>live('check'))">Check Windows backup agent</x-button><x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>restore('live-backup'))">Remove setup · keep files</x-button></details>
+  <details><summary>Backup contents & interrupted export recovery</summary><p>Includes writable disks and firmware, but not RAM, GPU/TPM state or shared folders. Retain encryption recovery keys. Restore disk exports offline using their disk mapping. Copying and thaw recovery continue independently of this page.</p><x-button :disabled="busy || toolsBusy || blocked" @click="run(thaw)">Recover interrupted VSS freeze</x-button></details>
  </div>
- <div v-show="section==='display'" class="integration-card"><h3>Game mouse capture</h3><x-button :disabled="busy || toolsBusy || blocked" @click="run(relativeMouse)">Switch guest to relative USB mouse (restart)</x-button><x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>restore('mouse'))">Restore mouse device</x-button>
-  <p class="text-sm text-neutral-400">Capture is enabled inside the native viewer on X11. Ctrl+Alt+G and loss of focus release the pointer. Wayland capture remains unavailable.</p>
+ <div v-show="section==='display'" class="integration-card"><h3>Game mouse capture</h3>
+  <p>Use relative mouse input inside Local Desktop on X11. Press Ctrl+Alt+G or leave the window to release the pointer. Wayland capture is not available.</p>
+  <details><summary>Change the Windows mouse device</summary><p>Switching mouse devices restarts Windows and changes Browser Display pointer behavior.</p><x-button :disabled="busy || toolsBusy || blocked" @click="run(relativeMouse)">Enable relative mouse & restart</x-button><x-button :disabled="busy || toolsBusy || blocked" @click="run(()=>restore('mouse'))">Restore mouse device</x-button></details>
  </div>
  <VMProjectTools v-show="section==='performance' || section==='backups' || section==='diagnostics'" :section="section" :blocked="busy || blocked" @busy="toolsBusy=$event" />
  <div v-if="message" class="integration-feedback" role="status"><details v-if="message.trim().startsWith('{') || message.trim().startsWith('[')"><summary>View operation result</summary><pre>{{ message }}</pre></details><span v-else>{{ message }}</span></div>
@@ -108,7 +107,7 @@ const remote:typeof import('@electron/remote')=require('@electron/remote'),fs:ty
 const {promisify}:typeof import('util')=require('util'),fetch:typeof import('node-fetch').default=guestFetch;
 const toolsBusy=ref(false);
 const winboat=new Winboat(),config=new WinboatConfig();const busy=ref(false),message=ref(''),automatic=ref(false),metrics=ref<any>(),metricText=ref('No sample yet. Viewer rate is not application FPS.');let previous:any;
-const exe=ref(''),argumentsJSON=ref('[]'),resolution=ref('1920x1080'),api=ref<ApplicationProfile['api']>('native'),transport=ref<ApplicationProfile['transport']>('auto'),profiles=ref<{id:string;exe:string}[]>([]),selected=ref('');
+const exe=ref(''),appArguments=ref<string[]>([]),resolution=ref('1920x1080'),api=ref<ApplicationProfile['api']>('native'),transport=ref<ApplicationProfile['transport']>('auto'),profiles=ref<{id:string;exe:string}[]>([]),selected=ref('');
 const sharpen=ref(config.config.viewerSharpenPercent??0);
 const cpuSet=ref(''),hugepages=ref(false),background=ref(config.config.viewerBackgroundFPS===5),network=ref<NetworkMode>('nat'),networkName=ref(''),scenario=ref('cold-boot'),backupId=ref(config.config.lastLiveBackupId??'');let before='';
 const tick=setInterval(()=>{if(props.section==='performance'&&automatic.value&&!busy.value&&!toolsBusy.value&&!props.blocked)void run(sample);},5000);onBeforeUnmount(()=>clearInterval(tick));watch([busy,toolsBusy],([a,b])=>emit('busy',a||b));
@@ -123,9 +122,9 @@ async function sample(){const result=await execute('workbench.py',['metrics','--
  if(winboat.qmpMgr){const responses=await Promise.allSettled([winboat.qmpMgr.executeCommand('query-kvm'),winboat.qmpMgr.executeCommand('query-status')]);result.qemu=responses.map(row=>row.status==='fulfilled'?row.value:{state:'unavailable'});}
  previous=current;metrics.value=result;}
 async function importFrames(){const choice=await remote.dialog.showOpenDialog({properties:['openFile'],filters:[{name:'PresentMon CSV',extensions:['csv']}]});if(!choice.canceled)metrics.value=await execute('workbench.py',['metrics','--presentmon',choice.filePaths[0],'--application',exe.value.split('\\').pop()||'']);}
-function profile(){return applicationProfile({schema:1,exe:exe.value,resolution:resolution.value,transport:transport.value,api:api.value,args:JSON.parse(argumentsJSON.value)});}
+function profile(){return applicationProfile({schema:1,exe:exe.value,resolution:resolution.value,transport:transport.value,api:api.value,args:[...appArguments.value]});}
 async function saveProfile(){const p=profile(),id=crypto.randomBytes(16).toString('hex');fs.writeFileSync(path.join(privateRoot('ApplicationProfiles'),id+'.json'),JSON.stringify(p),{mode:0o600,flag:'wx'});profiles.value.push({id,exe:p.exe});selected.value=id;}
-async function loadProfile(){if(!/^[a-f0-9]{32}$/.test(selected.value))throw new Error('Choose a saved profile.');const file=path.join(privateRoot('ApplicationProfiles'),selected.value+'.json');if(fs.lstatSync(file).isSymbolicLink()||fs.statSync(file).size>131072)throw new Error('Invalid profile file.');const p=applicationProfile(JSON.parse(fs.readFileSync(file,'utf8')));exe.value=p.exe;resolution.value=p.resolution;transport.value=p.transport;api.value=p.api;argumentsJSON.value=JSON.stringify(p.args);}
+async function loadProfile(){if(!/^[a-f0-9]{32}$/.test(selected.value))throw new Error('Choose a saved profile.');const file=path.join(privateRoot('ApplicationProfiles'),selected.value+'.json');if(fs.lstatSync(file).isSymbolicLink()||fs.statSync(file).size>131072)throw new Error('Invalid profile file.');const p=applicationProfile(JSON.parse(fs.readFileSync(file,'utf8')));exe.value=p.exe;resolution.value=p.resolution;transport.value=p.transport;api.value=p.api;appArguments.value=[...p.args];}
 async function replace(service:ReturnType<Winboat['parseCompose']>['services']['windows'],trial=false){const next=winboat.parseCompose();next.services.windows=service;await winboat.replaceCompose(next,trial);emit('changed');}
 async function applyProfile(){
  const p=profile();if(!await confirm('Apply application display settings and restart Windows?','Save Windows work first. These display settings affect the VM. Starting the application is a separate step.'))return;
@@ -150,8 +149,11 @@ async function restore(kind:string){
  try{await replace(changePolicy(winboat.parseCompose().services.windows,kind,null));if(kind==='application')config.config.viewerProfileBefore=undefined;if(kind==='diagnostics')config.config.viewerContractTrace=false;}catch(error){config.config.viewerTransport=old;config.config.viewerContractTrace=oldTrace;throw error;}
 }
 async function compactCache(){if(await confirm('Trial a smaller display readback cache?','Keeps two import entries instead of the default eight. The shared dynamic VRAM ceiling stays in force. Measure cache misses and frame times; confirm this trial within five minutes.'))await replace(changePolicy(winboat.parseCompose().services.windows,'readback-cache',{environment:{HELIOS_READBACK_CACHE_ENTRIES:'2'}}),true);}
-async function saveSharpen(){if(![0,25,50,100].includes(sharpen.value))throw new Error('Invalid sharpening strength');config.config.viewerSharpenPercent=sharpen.value;message.value='Saved. Reopen Local Desktop to apply; choose Off to restore the original image.';}
-async function saveBackground(){config.config.viewerBackgroundFPS=background.value?5:0;message.value='Saved. Reopen Local Desktop for this viewer setting.';}
+async function saveViewerSettings(){
+ if(![0,25,50,100].includes(sharpen.value))throw new Error('Invalid sharpening strength');
+ config.config.viewerSharpenPercent=sharpen.value;config.config.viewerBackgroundFPS=background.value?5:0;
+ message.value='Display preferences saved. Reopen Local Desktop to apply them.';
+}
 async function versions(){message.value=JSON.stringify(await execute('graphics-center.py',['preflight']),null,2);}
 async function rollback(){if(await confirm('Prepare the recorded stable graphics package?','Requires the existing VGA-only rescue and verified backup prerequisites. This prepares rollback; driver replacement remains a Windows maintenance action.'))message.value=JSON.stringify(await execute('graphics-center.py',['prepare-rollback']),null,2);}
 async function runAcceptance(){const response=await fetch(`http://127.0.0.1:${winboat.getHostPort(GUEST_API_PORT)}/graphics/validation/run`,{method:'POST',headers:{'X-WinBoat-Validation':'acceptance'},timeout:6000});if(!response.ok)throw new Error(await response.text());message.value='Tests requested. Confirm Windows elevation, wait for completion, then capture the regression checkpoint.';}
