@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 #pragma once
 #include <stdbool.h>
+#include <math.h>
 #include <stdint.h>
 typedef struct FramePacer { bool initialized; int64_t last_us; } FramePacer;
 static inline bool frame_pacer_consume(FramePacer *p, int64_t now, unsigned fps, bool background)
@@ -26,4 +27,12 @@ static inline void frame_bgra_to_rgba(uint8_t *out,const uint8_t *in,
         uint64_t i=(uint64_t)y*stride+(uint64_t)x*4;
         out[i]=in[i+2];out[i+1]=in[i+1];out[i+2]=in[i];out[i+3]=in[i+3];
     }
+}
+/* X11 warp centers are physical pixels; prevent fractional-center motion drift. */
+static inline bool frame_relative_motion(double x,double y,int width,int height,int scale,int *dx,int *dy)
+{
+    if (!isfinite(x) || !isfinite(y) || width<=0 || height<=0 || width>32767 || height>32767 || scale<1 || scale>8) return false;
+    double rx=x*scale-(width*scale/2),ry=y*scale-(height*scale/2);
+    if (fabs(rx)>32767 || fabs(ry)>32767) return false;
+    *dx=(int)lround(rx);*dy=(int)lround(ry);return true;
 }

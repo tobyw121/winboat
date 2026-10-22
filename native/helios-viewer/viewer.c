@@ -7,6 +7,8 @@
 #define GDK_VERSION_MIN_REQUIRED GDK_VERSION_4_8
 #endif
 #include <gtk/gtk.h>
+#include <gdk/x11/gdkx.h>
+#include <X11/Xlib.h>
 #include <gio/gunixfdlist.h>
 #include <glib-unix.h>
 #include <epoxy/gl.h>
@@ -73,6 +75,7 @@ struct Viewer {
  guint64 copy_wall_us, completion_wait_us, copy_samples, skipped_redraws;
  guint64 coalesced_updates;
  guint8 *software_scratch;gsize software_scratch_capacity;
+ gboolean pointer_grabbed;
  guint background_fps,transport_mode;
  gboolean background_paused;
  FramePacer frame_pacer;
@@ -104,6 +107,8 @@ static void queue_frame_redraw(Viewer *v) {
 }
 static void update_cursor(Viewer *v) {
  if (v->parent && v->parent->active!=v) return;
+ Viewer *root=v->parent?v->parent:v;
+ if (root->pointer_grabbed) {gtk_widget_set_cursor_from_name(v->area,"none");return;}
  Viewer *d=displayed(v);
  if (d->cursor_visible && d->cursor) gtk_widget_set_cursor(v->area,d->cursor);
  else gtk_widget_set_cursor_from_name(v->area,d->cursor_visible?"default":"none");
@@ -179,7 +184,33 @@ static void input(Viewer *v, const char *iface, const char *method, GVariant *ar
  g_dbus_connection_call(v->bus,"org.qemu",d->console_path,iface,method,args,NULL,
                         G_DBUS_CALL_FLAGS_NONE,2000,NULL,NULL,NULL);
 }
+static void release_pointer(Viewer *v) {
+ if (!v->pointer_grabbed) return;
+ GdkDisplay *display=gtk_widget_get_display(v->area);
+ if (GDK_IS_X11_DISPLAY(display)) {XUngrabPointer(gdk_x11_display_get_xdisplay(display),CurrentTime);XFlush(gdk_x11_display_get_xdisplay(display));}
+ v->pointer_grabbed=FALSE;update_cursor(v);
+}
+static void center_pointer(Viewer *v) {
+ graphene_point_t point=GRAPHENE_POINT_INIT(gtk_widget_get_width(v->area)/2.0,gtk_widget_get_height(v->area)/2.0),target;
+ if (!gtk_widget_compute_point(v->area,v->window,&point,&target)) return;
+ GdkSurface *surface=gtk_native_get_surface(GTK_NATIVE(v->window));int scale=gdk_surface_get_scale_factor(surface);
+ Display *display=gdk_x11_display_get_xdisplay(gtk_widget_get_display(v->area));
+ XWarpPointer(display,None,gdk_x11_surface_get_xid(surface),0,0,0,0,(int)(target.x*scale),(int)(target.y*scale));XFlush(display);
+}
+static void capture_pointer(GtkButton *button,Viewer *v) {
+ (void)button;
+ if (v->pointer_grabbed) {release_pointer(v);return;}
+ Viewer *d=displayed(v);GVariant *mode=d->mouse?g_dbus_proxy_get_cached_property(d->mouse,"IsAbsolute"):NULL;
+ gboolean relative=mode && !g_variant_get_boolean(mode);g_clear_pointer(&mode,g_variant_unref);
+ GdkDisplay *display=gtk_widget_get_display(v->area);
+ if (!relative || !GDK_IS_X11_DISPLAY(display)) {gtk_label_set_text(GTK_LABEL(v->status),"Game capture needs X11 and a relative guest mouse. Enable it in VM integration; Ctrl+Alt+G releases capture.");return;}
+ GdkSurface *surface=gtk_native_get_surface(GTK_NATIVE(v->window));Window window=gdk_x11_surface_get_xid(surface);
+ int status=XGrabPointer(gdk_x11_display_get_xdisplay(display),window,True,PointerMotionMask|ButtonPressMask|ButtonReleaseMask,GrabModeAsync,GrabModeAsync,window,None,CurrentTime);
+ if (status!=GrabSuccess) {gtk_label_set_text(GTK_LABEL(v->status),"Host pointer capture was refused.");return;}
+ v->pointer_grabbed=TRUE;gtk_widget_set_cursor_from_name(v->area,"none");gtk_widget_grab_focus(v->area);center_pointer(v);
+}
 static void release_input(Viewer *v) {
+ release_pointer(v);
  if (!v->bus) return;
  for (guint i=1;i<256;i++) if (v->held[i]) {
   input(v,IFACE "Keyboard","Release",g_variant_new("(u)",i)); v->held[i]=FALSE;
@@ -191,6 +222,7 @@ static void release_input(Viewer *v) {
 }
 static gboolean key_press(GtkEventControllerKey *controller, guint value, guint code, GdkModifierType state, Viewer *v) {
  (void)controller;
+ if ((value==GDK_KEY_g || value==GDK_KEY_G) && (state&(GDK_CONTROL_MASK|GDK_ALT_MASK))==(GDK_CONTROL_MASK|GDK_ALT_MASK)) {release_input(v);return TRUE;}
  if (value==GDK_KEY_Return && (state&(GDK_CONTROL_MASK|GDK_ALT_MASK))==(GDK_CONTROL_MASK|GDK_ALT_MASK)) {
   release_input(v);
   if (gtk_window_is_fullscreen(GTK_WINDOW(v->window))) gtk_window_unfullscreen(GTK_WINDOW(v->window));
@@ -222,6 +254,14 @@ static void motion(GtkEventControllerMotion *controller, double x, double y, Vie
  (void)controller;
  Viewer *d=displayed(v);
  if (!d->width || !d->height) return;
+ if (v->pointer_grabbed) {
+  GVariant *mode=d->mouse?g_dbus_proxy_get_cached_property(d->mouse,"IsAbsolute"):NULL;
+  gboolean absolute=!mode || g_variant_get_boolean(mode);g_clear_pointer(&mode,g_variant_unref);
+  if (absolute) {release_input(v);return;}
+  int dx,dy;
+  if (!frame_relative_motion(x,y,gtk_widget_get_width(v->area),gtk_widget_get_height(v->area),gtk_widget_get_scale_factor(v->area),&dx,&dy)) {release_input(v);return;}
+  if (dx || dy) {input(v,IFACE "Mouse","RelMotion",g_variant_new("(ii)",dx,dy));center_pointer(v);}return;
+ }
  int ox,oy,w,h;viewport(v,gtk_widget_get_width(v->area),gtk_widget_get_height(v->area),&ox,&oy,&w,&h);
  if (x<ox || y<oy || x>=ox+w || y>=oy+h) {v->have_position=FALSE;return;}
  GVariant *mode=g_dbus_proxy_get_cached_property(d->mouse,"IsAbsolute");
@@ -468,6 +508,9 @@ static gboolean import_dma(Viewer *v,GDBusMethodInvocation *inv,GVariant *handle
   g_variant_get_child(handles,p,"h",&handle);g_variant_get_child(offsets,p,"u",&offset);g_variant_get_child(strides,p,"u",&stride);
   fds[p]=g_unix_fd_list_get(list,handle,NULL);
   if (fds[p]<0 || !stride || stride>INT32_MAX || offset>INT32_MAX) {ok=FALSE;break;}
+  struct stat contract_info;
+  if (!g_strcmp0(g_getenv("HELIOS_VIEWER_CONTRACT"),"1") && fstat(fds[p],&contract_info)==0)
+   g_printerr("{\"event\":\"dmabuf-contract\",\"console\":%u,\"inode\":%" G_GUINT64_FORMAT ",\"bytes\":%" G_GINT64_FORMAT ",\"width\":%u,\"height\":%u,\"stride\":%u,\"offset\":%u,\"fourcc\":%u,\"modifier\":%" G_GUINT64_FORMAT "}\n",v->console_id,(guint64)contract_info.st_ino,(gint64)contract_info.st_size,bw,bh,stride,offset,fourcc,modifier);
   if (modifier==0) {
    struct stat info;
    /* Explicit LINEAR only. Size 0 is unknown for some exporters; EGL remains
@@ -1266,6 +1309,8 @@ int main(int argc,char **argv) {
  GtkWidget *bar=gtk_header_bar_new(),*full=gtk_button_new_with_label("Fullscreen"),*attention=gtk_button_new_with_label("Ctrl+Alt+Del");
  gtk_widget_set_tooltip_text(full,"Toggle fullscreen (Ctrl+Alt+Enter)");
  gtk_widget_set_tooltip_text(attention,"Send Ctrl+Alt+Delete to Windows");
+ GtkWidget *capture=gtk_button_new_with_label("Capture mouse");gtk_widget_set_tooltip_text(capture,"Relative game mouse on X11; Ctrl+Alt+G or loss of focus releases capture.");
+ gtk_header_bar_pack_start(GTK_HEADER_BAR(bar),capture);g_signal_connect(capture,"clicked",G_CALLBACK(capture_pointer),&v);
  gtk_header_bar_pack_start(GTK_HEADER_BAR(bar),attention);gtk_header_bar_pack_end(GTK_HEADER_BAR(bar),full);
  GtkWidget *resize=gtk_check_button_new_with_label("Resize guest"),*aspect=gtk_check_button_new_with_label("Keep aspect");
  v.aspect=aspect;
