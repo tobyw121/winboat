@@ -130,3 +130,36 @@ and relative-coordinate tests. Real Windows VSS writers, UAC, physical NVIDIA
 rendering, LAN reachability and games still require validation on a desktop VM.
 
 The [project reliability guide](project-reliability.md) documents the added configuration watchdog, backup staging/timers, scoped API sessions and extended clipboard.
+
+
+## Organized VM integration settings
+
+Configuration → **VM integration** uses seven sections. The section picker is
+keyboard accessible and wraps on narrow windows. It does not unmount active
+panels: profile edits, clipboard preferences and running operations survive a
+section change. Automatic performance refresh pauses outside Performance & network.
+
+| Section | Main tasks |
+| --- | --- |
+| Overview | Start Windows, check connection, shut down or restart |
+| Clipboard & files | Share clipboard, manually transfer images, exchange files |
+| Display & audio | Viewer preferences, mouse capture, playback/microphone, output windows |
+| Applications | Save/load profiles, start a Windows app, apply display settings |
+| Performance & network | Measurements, configuration trials, CPU/memory tuning, networking |
+| Backups | Offline snapshots, live disk exports, scheduled checks, restore staging |
+| Diagnostics | Host checks, graphics testing/recovery, compatibility notes, API permissions |
+
+Common actions stay visible. Setup, developer probes, conflict handling and
+recovery details use expandable panels. Restarting actions say so on the button
+and retain their confirmation dialogs. JSON results are expandable rather than
+filling the settings page. Application arguments use one field per argument;
+saved profile JSON and its validation are unchanged, including spaces and empty
+arguments. Viewer preferences have a single Save action and require reopening
+the viewer.
+
+`npm run test:integration-ui` renders the actual four integration templates in
+Chromium with inert host/guest actions. It checks category visibility, advanced
+controls, retained fields, literal arguments, disabled inputs and 1200/480 px
+layouts. It never starts a VM or a real clipboard session. Set `CHROME_BIN` if
+Chromium/Google Chrome is not on PATH, and `UI_SCREENSHOT_DIR` to save previews.
+The VM integration workflow publishes these fixture screenshots for review.

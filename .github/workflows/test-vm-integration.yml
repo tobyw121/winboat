@@ -62,6 +62,16 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run test:integration
       - run: npm run test:workbench
+      - name: Check integration navigation and responsive controls in Chromium
+        run: npm run test:integration-ui
+        env:
+          UI_SCREENSHOT_DIR: ${{ runner.temp }}/integration-ui
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-ui-preview
+          path: ${{ runner.temp }}/integration-ui/*.png
+          if-no-files-found: ignore
       - name: Check relative mouse coordinates and invalid input
         run: cc -std=c11 -Wall -Wextra -Werror tests/relative-mouse.c -lm -o /tmp/relative-mouse && /tmp/relative-mouse
       - run: npx vue-tsc --noEmit --skipLibCheck -p src/renderer/tsconfig.json

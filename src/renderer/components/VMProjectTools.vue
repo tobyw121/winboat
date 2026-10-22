@@ -1,45 +1,45 @@
 <template>
 <section class="integration-stack">
  <div v-show="section==='diagnostics'" class="integration-card"><h3>Host & connection checks</h3>
- <div class="flex flex-wrap gap-2">
-  <x-button :disabled="busy || blocked" @click="run(()=>tool('project-health.py',['host']))">Host hardware preflight</x-button>
-  <x-button :disabled="busy || blocked" @click="run(()=>tool('project-health.py',['network']))">Check API / RDP / network reachability</x-button>
-  <x-button :disabled="busy || blocked" @click="run(shares)">Check authenticated shared folders</x-button>
-  <x-button :disabled="busy || blocked" @click="run(incidents)">Explain a graphics diagnostic report</x-button>
- </div></div>
- <details v-show="section==='diagnostics'" class="integration-card"><summary>Application compatibility observations</summary>
-  <p v-for="entry in compatibility" :key="entry.application" class="text-sm">{{ entry.application }} — {{ entry.status }}: {{ entry.note }}</p>
-  <p class="text-sm">Observations are tied to their reported driver/hardware. They do not certify your current installation; profiles are applied explicitly.</p>
+  <p>Check Linux hardware, Windows connectivity or shared folders without changing your configuration.</p>
+  <div class="integration-actions"><x-button :disabled="busy || blocked" @click="run(()=>tool('project-health.py',['host']))">Check host hardware</x-button><x-button :disabled="busy || blocked" @click="run(()=>tool('project-health.py',['network']))">Check Windows connection</x-button><x-button :disabled="busy || blocked" @click="run(shares)">Check shared folders</x-button><x-button :disabled="busy || blocked" @click="run(incidents)">Explain a graphics report</x-button></div>
+ </div>
+ <details v-show="section==='diagnostics'" class="integration-card"><summary>Known application compatibility</summary>
+  <p v-for="entry in compatibility" :key="entry.application">{{ entry.application }} — {{ entry.status }}: {{ entry.note }}</p>
+  <p>These observations apply to the reported driver and hardware. They do not certify your installation or apply profiles automatically.</p>
  </details>
  <div v-show="section==='performance'" class="integration-card"><h4>Measurement history</h4>
-  <input v-model="label" maxlength="80" aria-label="Measurement label" class="bg-neutral-900 p-1">
-  <x-button :disabled="busy || blocked" @click="run(record)">Record CPU / GPU sample</x-button>
-  <x-button :disabled="busy || blocked" @click="run(history)">Load history</x-button>
-  <select v-model="before" aria-label="Before measurement" class="bg-neutral-900"><option v-for="r in records" :key="r.id" :value="r.id">{{ r.timeUtc }} — {{ r.label }}</option></select>
-  <select v-model="after" aria-label="After measurement" class="bg-neutral-900"><option v-for="r in records" :key="r.id" :value="r.id">{{ r.timeUtc }} — {{ r.label }}</option></select>
-  <x-button :disabled="busy || blocked || !before || !after" @click="run(()=>tool('project-health.py',['compare','--before',before,'--after',after]))">Compare matching environments</x-button>
-  <svg v-if="points" viewBox="0 0 400 100" role="img" aria-label="Container CPU history, scaled to largest observed sample" class="w-full h-24"><polyline :points="points" fill="none" stroke="currentColor" stroke-width="2" /></svg>
-  <p class="text-sm">Chart: container CPU, 100% equals one core; vertical scale follows the largest sample. Point samples do not establish an FPS improvement.</p>
+  <p>Save a labeled sample before and after a change, then compare matching environments.</p>
+  <label class="integration-field">Sample name<input v-model="label" maxlength="80" placeholder="e.g. Before changing the display cache"></label>
+  <div class="integration-actions"><x-button :disabled="busy || blocked" @click="run(record)">Save current sample</x-button><x-button :disabled="busy || blocked" @click="run(history)">Refresh history</x-button></div>
+  <svg v-if="points" viewBox="0 0 400 100" role="img" aria-label="Container CPU history, scaled to largest observed sample" class="w-full h-24"><polyline :points="points" fill="none" stroke="var(--integration-accent)" stroke-width="2" /></svg>
+  <p v-if="!records.length" class="integration-empty">No history loaded. Save a sample or refresh your history.</p>
+  <details><summary>Compare saved samples</summary>
+   <div class="integration-fields"><label class="integration-field">Before<select v-model="before"><option value="" disabled>Select a sample</option><option v-for="r in records" :key="r.id" :value="r.id">{{ r.timeUtc }} — {{ r.label }}</option></select></label><label class="integration-field">After<select v-model="after"><option value="" disabled>Select a sample</option><option v-for="r in records" :key="r.id" :value="r.id">{{ r.timeUtc }} — {{ r.label }}</option></select></label></div>
+   <x-button :disabled="busy || blocked || !before || !after" @click="run(()=>tool('project-health.py',['compare','--before',before,'--after',after]))">Compare samples</x-button>
+   <p>Chart shows container CPU; 100% equals one core. The scale follows the largest sample. Point samples do not establish an FPS improvement.</p>
+  </details>
  </div>
- <div v-show="section==='backups'" class="integration-card"><h4>Verify & restore disk exports</h4>
-  <input v-model="exportId" aria-label="Export identity to verify" placeholder="32-character export identity" class="bg-neutral-900 p-1">
-  <x-button :disabled="busy || blocked" @click="run(()=>backup('inventory'))">Export capacity / inventory</x-button>
-  <x-button :disabled="busy || blocked || !exportId" @click="run(()=>backup('verify'))">Verify disk checksums</x-button>
-  <x-button :disabled="busy || blocked || !exportId" @click="run(stage)">Stage verified restore in a new folder</x-button>
-  <p class="text-sm">Staging verifies QCOW2 structure, converts to each original disk format and compares disk contents. It preserves the original VM. TPM state is absent: the staged folder remains blocked from automatic boot.</p>
-  <input v-model.number="keep" type="number" min="1" max="50" aria-label="Retained scheduled offline checkpoints" class="bg-neutral-900 p-1">
-  <x-button :disabled="busy || blocked" @click="run(()=>schedule(true))">Enable daily offline backup check</x-button>
-  <x-button :disabled="busy || blocked" @click="run(()=>schedule(false))">Disable scheduled check</x-button>
-  <p class="text-sm">The user timer skips running or uncleanly stopped VMs. Retention applies only to scheduled offline checkpoints; manual snapshots and live exports are preserved. Requires a systemd user session.</p>
+ <div v-show="section==='backups'" class="integration-card"><h4>Scheduled snapshots</h4>
+  <p>Check once a day for a safely stopped VM and create an offline checkpoint. Running Windows is skipped.</p>
+  <div class="integration-fields"><label class="integration-field">Scheduled checkpoints to keep<input v-model.number="keep" type="number" min="1" max="50"><small>Manual snapshots and live disk exports are kept separately.</small></label></div>
+  <x-button :disabled="busy || blocked" @click="run(()=>schedule(true))">Enable daily checks</x-button><x-button :disabled="busy || blocked" @click="run(()=>schedule(false))">Disable daily checks</x-button>
+  <p>Requires a systemd user session. Existing files are kept when scheduling is disabled.</p>
  </div>
- <div v-show="section==='diagnostics'" class="integration-card"><h4>Windows API permissions</h4>
-  <label v-for="scope in availableScopes" :key="scope" class="mr-3"><input type="checkbox" v-model="scopes" :value="scope"> {{ scope }}</label>
-  <x-button :disabled="busy || blocked || !scopes.length" @click="run(pair)">Pair with Windows consent (10 minutes)</x-button>
-  <x-button :disabled="busy || blocked" @click="run(revokeGuestSession)">Revoke this session</x-button>
-  <p class="text-sm">{{ pairingCode }}</p>
-  <p class="text-sm">Enable session enforcement locally in Helios Control first. Pairing tokens stay in memory and are limited to the paired loopback API endpoint. Older scripts require a token when enforcement is enabled. This does not encrypt LAN traffic.</p>
- </div>
- <details v-if="result"><summary>Result</summary><pre role="status" class="text-xs whitespace-pre-wrap max-h-72 overflow-auto">{{ result }}</pre></details>
+ <details v-show="section==='backups'" class="integration-card"><summary>Verify disk exports & stage a restore</summary>
+  <p>Verify an existing export before staging its disks in a new folder. The original VM is kept.</p>
+  <label class="integration-field">Export ID<input v-model="exportId" placeholder="ID shown when the disk export started"></label>
+  <div class="integration-actions"><x-button :disabled="busy || blocked" @click="run(()=>backup('inventory'))">List exports & available space</x-button><x-button :disabled="busy || blocked || !exportId" @click="run(()=>backup('verify'))">Verify disk checksums</x-button><x-button :disabled="busy || blocked || !exportId" @click="run(stage)">Stage restore in a new folder</x-button></div>
+  <p>Staging verifies disk structure and contents, then converts to the original disk formats. TPM state is not included; staged disks are blocked from automatic boot.</p>
+ </details>
+ <details v-show="section==='diagnostics'" class="integration-card"><summary>Windows API permissions</summary>
+  <p>Pair a temporary session with only the permissions you need. First enable session enforcement in Windows Helios Control.</p>
+  <div class="integration-fields"><label v-for="scope in availableScopes" :key="scope" class="integration-toggle"><input type="checkbox" v-model="scopes" :value="scope"> {{ scopeLabels[scope] }}</label></div>
+  <x-button :disabled="busy || blocked || !scopes.length" @click="run(pair)">Pair for 10 minutes</x-button><x-button :disabled="busy || blocked" @click="run(revokeGuestSession)">Revoke session</x-button>
+  <p role="status">{{ pairingCode }}</p>
+  <p>Confirm the code in Windows. Tokens stay in memory and apply only to the paired local API endpoint. Older scripts need a token when enforcement is enabled. This does not encrypt LAN traffic.</p>
+ </details>
+ <div v-if="result" class="integration-feedback" role="status"><details v-if="result.trim().startsWith('{') || result.trim().startsWith('[')"><summary>View check result</summary><pre>{{ result }}</pre></details><span v-else>{{ result }}</span></div>
 </section>
 </template>
 <script setup lang="ts">
@@ -54,6 +54,7 @@ import {compatibility} from '../data/compatibility';
 const props=defineProps<{blocked:boolean;section:IntegrationSection}>(),emit=defineEmits<{busy:[value:boolean]}>();
 const remote:typeof import('@electron/remote')=require('@electron/remote'),path:typeof import('path')=require('path'),child:typeof import('child_process')=require('child_process'),util:typeof import('util')=require('util'),crypto:typeof import('crypto')=require('crypto');
 const busy=ref(false),result=ref(''),pairingCode=ref(''),label=ref('Manual sample'),records=ref<Array<{id:string;label:string;timeUtc:string;cpuPercentOfOneCore?:number}>>([]),before=ref(''),after=ref(''),exportId=ref(new WinboatConfig().config.lastLiveBackupId??''),keep=ref(5);
+const scopeLabels:Record<string,string>={read:'Read status',graphics:'Graphics controls',power:'Windows power',application:'Start applications',clipboard:'Clipboard sharing',maintenance:'Maintenance'};
 const availableScopes=['read','graphics','power','application','clipboard','maintenance'],scopes=ref(['read']),winboat=new Winboat();
 const points=computed(()=>{const rows=records.value.filter(r=>Number.isFinite(r.cpuPercentOfOneCore)).slice(-100);if(rows.length<2)return '';const max=Math.max(100,...rows.map(r=>r.cpuPercentOfOneCore!));return rows.map((r,i)=>`${i*400/(rows.length-1)},${100-r.cpuPercentOfOneCore!*100/max}`).join(' ');});
 async function run(action:()=>Promise<unknown>){if(busy.value||props.blocked)return;busy.value=true;emit('busy',true);try{await action();}catch(e){result.value=String(e);}finally{busy.value=false;emit('busy',false);}}
