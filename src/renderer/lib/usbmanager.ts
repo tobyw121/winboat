@@ -71,6 +71,7 @@ export class USBManager {
      */
     #setupDeviceUpdateListeners() {
         usb.on("attach", async (device: Device) => {
+            try {
             this.devices.value = getDeviceList();
             logger.info(`USB device attached: ${this.stringifyDevice(device)}`);
             if (
@@ -81,9 +82,11 @@ export class USBManager {
                 logger.info(`Device is in passthrough list, adding to VM: ${this.stringifyDevice(device)}`);   
                 await this.#QMPAddDevice(device);
             }
+            } catch(error){logger.error("Automatic USB connection blocked",error);}
         });
 
         usb.on("detach", async (device: Device) => {
+            try {
             this.devices.value = getDeviceList();
 
             // Remove from MTP cache
@@ -100,6 +103,7 @@ export class USBManager {
                 logger.info(`Device is in passthrough list, removing from VM: ${this.stringifyDevice(device)}`);
                 await this.#QMPRemoveDevice(device.deviceDescriptor.idVendor, device.deviceDescriptor.idProduct);
             }
+            } catch(error){logger.error("USB detach incomplete",error);}
         });
     }
 
@@ -112,6 +116,7 @@ export class USBManager {
         watch(this.#winboat.isOnline, async (isOnline: boolean) => {
             if (!isOnline) return;
 
+            try {
             logger.info("Guest is online, passing through devices");
             // Pass through any devices that are in the passthrough list & connected
             for (const ptDevice of this.#wbConfig.config.passedThroughDevices) {
@@ -121,6 +126,7 @@ export class USBManager {
                     await this.#QMPAddDevice(device);
                 }
             }
+            } catch(error){logger.error("Automatic USB reconnection blocked",error);}
         });
     }
 
@@ -222,13 +228,11 @@ export class USBManager {
             throw new Error(`Device "${ptDevice.manufacturer} | ${ptDevice.product}" is already in the passthrough list`);
         }
 
-        // Push doesn't properly track reactivity, so we use concat instead
-        this.#wbConfig.config.passedThroughDevices = this.#wbConfig.config.passedThroughDevices.concat(ptDevice);
-        this.ptDevices.value = this.#wbConfig.config.passedThroughDevices;
-
         if (this.#winboat.isOnline.value && !await this.#QMPCheckIfDeviceExists(ptDevice.vendorId, ptDevice.productId)) {
             await this.#QMPAddDevice(device);
         }
+        this.#wbConfig.config.passedThroughDevices = this.#wbConfig.config.passedThroughDevices.concat(ptDevice);
+        this.ptDevices.value = this.#wbConfig.config.passedThroughDevices;
 
         logger.info(`Added device "${ptDevice.manufacturer} | ${ptDevice.product}" to passthrough list`);
     }
@@ -238,14 +242,13 @@ export class USBManager {
      * @param ptDevice The device's PTSerializableDeviceInfo object to remove
      */
     async removeDeviceFromPassthroughList(ptDevice: PTSerializableDeviceInfo) {
+        if (this.#winboat.isOnline.value && await this.#QMPCheckIfDeviceExists(ptDevice.vendorId, ptDevice.productId)) {
+            await this.#QMPRemoveDevice(ptDevice.vendorId, ptDevice.productId);
+        }
         this.#wbConfig.config.passedThroughDevices = this.#wbConfig.config.passedThroughDevices.filter(
             d => d.vendorId !== ptDevice.vendorId || d.productId !== ptDevice.productId
         );
         this.ptDevices.value = this.#wbConfig.config.passedThroughDevices;
-
-        if (this.#winboat.isOnline.value && await this.#QMPCheckIfDeviceExists(ptDevice.vendorId, ptDevice.productId)) {
-            await this.#QMPRemoveDevice(ptDevice.vendorId, ptDevice.productId);
-        }
 
         logger.info(`Removed device "${ptDevice.manufacturer} | ${ptDevice.product}" from passthrough list`);
     }
@@ -341,14 +344,14 @@ export class USBManager {
             response = await this.#winboat.qmpMgr!.executeCommand("human-monitor-command", {"command-line": "info qtree"})
             assert("return" in response);
     
-            // @ts-ignore property "result" already exists due to assert
+            // @ts-ignore QMP return is a string for the human monitor.
             return response.return.includes(`usb-host, id "${vendorId}:${productId}"`);
         } catch(e) {
             logger.error(`There was an error checking whether USB device '${vendorId}:${productId}' exists`);
             logger.error(e);
             logger.error(`QMP response: ${response}`);
+            throw e;
         }
-        return false;
     }
     
     // TODO: handle hostaddr/hostbus in case of duplicate VID/PID
@@ -387,6 +390,11 @@ export class USBManager {
         try {
             response = await this.#winboat.qmpMgr!.executeCommand("device_del", { id: `${vendorId}:${productId}`});
             assert("return" in response);
+            const deadline=Date.now()+5000;
+            while(await this.#QMPCheckIfDeviceExists(vendorId,productId)){
+                if(Date.now()>=deadline)throw new Error('Windows has not released this USB device yet. Eject it in Windows and retry.');
+                await new Promise(resolve=>setTimeout(resolve,200));
+            }
         } catch(e) {
             logger.error(`There was an error removing USB device '${vendorId}:${productId}'`);
             logger.error(e);

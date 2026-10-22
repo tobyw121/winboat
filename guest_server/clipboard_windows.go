@@ -268,7 +268,7 @@ func runClipboardAgent() {
 			}
 			return 0
 		}
-		if msg == 0x02b1 && (wparam == 7 || wparam == 6 || wparam == 2) {
+		if msg == 0x02b1 && (wparam == 7 || wparam == 6 || wparam == 2 || wparam == 4) {
 			active = false
 			send(clipboardMessage{Kind: "locked"})
 			return 0

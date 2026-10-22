@@ -36,7 +36,7 @@ export async function startClipboard(readHost:boolean,readGuest:boolean){
                 else if(toHost){const text=guard?.remoteChange(value);if(text!==undefined)remote.clipboard.writeText(text);}
                 clipboardMessage.value='Plain text sharing active. Files are excluded; host empty text is sent only on request.';
             }
-        }catch(error){await stopClipboard();clipboardMessage.value=String(error);return;}
+        }catch(error){if(epoch!==generation)return;await stopClipboard();clipboardMessage.value=String(error);return;}
         if(epoch===generation)timer=setTimeout(tick,1000);
     };void tick();
 }

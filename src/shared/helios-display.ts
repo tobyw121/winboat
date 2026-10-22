@@ -36,6 +36,7 @@ export function configureHeliosDisplay<T extends { environment: Record<string, s
     const next = JSON.parse(JSON.stringify(service)) as T;
     next.volumes = next.volumes.filter(volume => volumeTarget(volume) !== HELIOS_DISPLAY_MOUNT);
     delete next.environment.HELIOS_DISPLAY;
+    if (!enabled) delete next.environment.HELIOS_AUDIO_DBUS;
     if (enabled) {
         if (next.environment.HELIOS !== '1') throw new Error('Local display requires Helios.');
         if (!directory || !/^\/[A-Za-z0-9_./-]+$/.test(directory) || directory.split('/').includes('..')) {

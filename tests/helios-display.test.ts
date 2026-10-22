@@ -93,3 +93,9 @@ test('the display bus uses EXTERNAL auth and restricts its well-known QEMU name 
     assert.ok(!config.includes('ANONYMOUS'));
     assert.equal(heliosDisplayAddress('/tmp/test display'), 'unix:path=%2Ftmp%2Ftest%20display%2Fbus');
 });
+
+test('leaving Local Desktop also clears its opt-in audio backend',()=>{
+ const service={environment:{HELIOS:'1',HELIOS_DISPLAY:'dbus',HELIOS_AUDIO_DBUS:'1'},volumes:[]};
+ const result=configureHeliosDisplay(service,false);assert.equal(result.environment.HELIOS_AUDIO_DBUS,undefined);
+ assert.equal(service.environment.HELIOS_AUDIO_DBUS,'1');
+});

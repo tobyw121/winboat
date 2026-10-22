@@ -1,0 +1,55 @@
+name: VM integration
+on:
+  workflow_dispatch:
+  push:
+    branches: [work, main]
+    paths:
+      - 'guest_server/clipboard*'
+      - 'guest_server/vm_*'
+      - 'guest_server/main.go'
+      - 'native/helios-audio/**'
+      - 'native/helios-viewer/**'
+      - 'src/**'
+      - 'package.json'
+      - 'electron-builder.json'
+      - 'scripts/helios/vm-snapshots.py'
+      - 'tests/*integration*'
+      - 'tests/helios-audio*'
+      - 'tests/*clipboard*'
+      - 'tests/*exchange*'
+      - 'tests/*snapshots*'
+      - 'tests/*qmp*'
+      - 'tests/*usb-host*'
+      - '.github/workflows/test-vm-integration.yml'
+permissions:
+  contents: read
+jobs:
+  integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: guest_server/go.sum
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run test:integration
+      - run: npx vue-tsc --noEmit --skipLibCheck -p src/renderer/tsconfig.json
+      - run: npm run build
+      - name: Test clipboard consent, expiry and controlled power
+        working-directory: guest_server
+        run: go test clipboard_broker.go clipboard_broker_test.go vm_power.go vm_power_test.go
+      - name: Cross-build native Windows session helper
+        working-directory: guest_server
+        run: GOOS=windows GOARCH=amd64 go build -o /tmp/winboat-server.exe .
+      - name: Install host audio test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-gi gir1.2-gstreamer-1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good dbus
+      - name: Exercise actual FD-passed audio peers with simulated host devices
+        run: sudo /usr/bin/python3 tests/helios-audio-peer.py
