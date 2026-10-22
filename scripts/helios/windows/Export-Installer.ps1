@@ -52,5 +52,9 @@ $receipt = [ordered]@{
     manifestSha256 = $identity.manifestSha256
     driverVersion = $identity.driverVersion
 }
+$patchReceipt = Join-Path $PackageRoot 'compatibility-patches.json'
+if (Test-Path -LiteralPath $patchReceipt) {
+    $receipt['compatibilityPatchSha256'] = (Get-FileHash -LiteralPath $patchReceipt -Algorithm SHA256).Hash.ToLowerInvariant()
+}
 $receipt | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $PackageRoot 'helios-build.json') -Encoding ascii
 Write-Host "Complete WinBoat-built installer exported from $WinBoatCommit"

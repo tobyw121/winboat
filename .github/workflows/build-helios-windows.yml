@@ -4,6 +4,11 @@ name: Build WinBoat Helios Windows installer
 # Only pinned third-party engines/loaders are fetched into a separate build tree.
 on:
   workflow_dispatch:
+    inputs:
+      compatibility_patches:
+        description: 'Experimental pinned Proton-GE presentation patches (not hardware validated)'
+        type: boolean
+        default: false
   push:
     branches: [work]
     paths:
@@ -11,6 +16,7 @@ on:
       - 'scripts/helios/windows/**'
       - 'helios/upstream/**'
       - 'helios/source.lock.json'
+      - 'helios/compatibility/**'
       - 'tests/helios-device-features.*'
 
 permissions:
@@ -58,11 +64,16 @@ jobs:
       - name: Check WinBoat installer integration
         shell: pwsh
         working-directory: .
-        run: ./tests/helios-windows.test.ps1 -RepoRoot $env:GITHUB_WORKSPACE
+        run: |
+          ./tests/helios-windows.test.ps1 -RepoRoot $env:GITHUB_WORKSPACE
+          ./tests/compatibility-patches.test.ps1
       - name: Prepare embedded Helios sources
         shell: pwsh
         working-directory: .
-        run: ./scripts/helios/windows/Initialize-Sources.ps1 -RepoRoot $env:GITHUB_WORKSPACE -Component driver
+        run: |
+          ./scripts/helios/windows/Initialize-Sources.ps1 -RepoRoot $env:GITHUB_WORKSPACE -Component driver -CompatibilityPatches:($env:COMPATIBILITY_PATCHES -eq 'true')
+        env:
+          COMPATIBILITY_PATCHES: ${{ inputs.compatibility_patches }}
       - name: Check Atlas provisioning result validation (PowerShell 7)
         shell: pwsh
         working-directory: .
@@ -137,6 +148,10 @@ jobs:
       - name: Build driver package
         shell: pwsh
         run: ./ci/windows/Build-Driver.ps1 -RepoRoot $env:HELIOS_SOURCE_ROOT -OutputDir "$env:RUNNER_TEMP/helios-driver" -Configuration ${{ matrix.configuration }}
+      - name: Export experimental patch receipt
+        if: inputs.compatibility_patches
+        shell: pwsh
+        run: Copy-Item compatibility-patches.json "$env:RUNNER_TEMP/helios-driver/compatibility-patches.json"
       - uses: actions/upload-artifact@v4
         with:
           name: helios-driver-${{ matrix.configuration }}
@@ -436,6 +451,10 @@ jobs:
           -VulkanHeadersCommit $env:VULKAN_HEADERS_COMMIT
           -OpenClLoaderCommit $env:OPENCL_LOADER_COMMIT
           -OpenClHeadersCommit $env:OPENCL_HEADERS_COMMIT
+      - name: Export experimental package identity
+        if: inputs.compatibility_patches
+        shell: pwsh
+        run: Copy-Item "$env:RUNNER_TEMP/artifacts/driver/compatibility-patches.json" "$env:RUNNER_TEMP/helios-package/compatibility-patches.json"
       - name: Export the complete installer and paired WinBoat receipt
         shell: pwsh
         run: >-
@@ -445,11 +464,12 @@ jobs:
           -WinBoatCommit $env:GITHUB_SHA
       - uses: actions/upload-artifact@v4
         with:
-          name: helios-windows-x64-${{ steps.metadata.outputs.version }}-${{ matrix.configuration }}
+          name: helios-windows-x64-${{ steps.metadata.outputs.version }}-${{ matrix.configuration }}${{ inputs.compatibility_patches && '-ge-candidate' || '' }}
           path: |
             ${{ runner.temp }}/helios-package/*.zip
             ${{ runner.temp }}/helios-package/*.sha256
             ${{ runner.temp }}/helios-package/HeliosSetup.exe
             ${{ runner.temp }}/helios-package/helios-build.json
+            ${{ runner.temp }}/helios-package/compatibility-patches.json
           if-no-files-found: error
           retention-days: 30

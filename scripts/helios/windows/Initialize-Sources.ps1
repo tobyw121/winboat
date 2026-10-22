@@ -1,7 +1,8 @@
 param(
     [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path,
     [string]$BuildRoot,
-    [ValidateSet('none', 'driver', 'mesa', 'all')][string]$Component = 'none'
+    [ValidateSet('none', 'driver', 'mesa', 'all')][string]$Component = 'none',
+    [switch]$CompatibilityPatches
 )
 
 Set-StrictMode -Version Latest
@@ -77,6 +78,12 @@ foreach ($name in $wanted) {
         & git -C $destination submodule update --init --recursive
         if ($LASTEXITCODE -ne 0) { throw "Nested dependency initialization failed: $name" }
     }
+}
+if ($CompatibilityPatches) {
+    if ($Component -notin @('driver','all')) { throw 'Compatibility patches require driver sources.' }
+    & (Join-Path $PSScriptRoot 'Apply-CompatibilityPatches.ps1') -RepoRoot $RepoRoot -BuildRoot $BuildRoot
+} elseif (Test-Path (Join-Path $BuildRoot 'compatibility-patches.json')) {
+    throw 'Patched build tree requires -CompatibilityPatches or a new empty BuildRoot.'
 }
 $env:HELIOS_SOURCE_ROOT = $BuildRoot
 $env:WINBOAT_ROOT = $RepoRoot

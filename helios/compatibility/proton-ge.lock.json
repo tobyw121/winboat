@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "upstream": "https://github.com/GloriousEggroll/proton-ge-custom",
+  "revision": "88004a046c575af0b96131ff7b76dcd598da51ad",
+  "patches": [
+    {
+      "component": "dxvk-helios",
+      "baseRevision": "6948271578bf2aa6481389a07b5070c95f911952",
+      "file": "patches/dxvk-acquire-backpressure.patch",
+      "sha256": "40ea378a41ce97fbb8b9930e62461f8eb5495411a5f5109859969357801f453a",
+      "source": "patches/dxvk/dxvk-preserve-swapchain-on-acquire-backpressure.patch"
+    },
+    {
+      "component": "vkd3d-proton-helios",
+      "baseRevision": "3d1ba76b2c2e89b657112b44e0771beff3677ebe",
+      "file": "patches/vkd3d-present-waits.patch",
+      "sha256": "e1d20600a42770208ca57c2c61077a2eaf75c56298cfd7052932abf07c98e875",
+      "source": "patches/vkd3d-proton/0001-vkd3d-bound-present-waits-during-swapchain-drain.patch"
+    }
+  ]
+}
