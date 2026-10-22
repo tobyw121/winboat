@@ -80,6 +80,16 @@ class PerformanceTests(unittest.TestCase):
             parent.rmdir();parent.symlink_to(root,target_is_directory=True)
             with self.assertRaises(ValueError): perf.cache_environment({},root,b'driver-a')
 
+    def test_guest_agent_is_local_opt_in_and_relative_mouse_replaces_only_the_standard_tablet(self):
+        result=perf.options(BASE,{'HELIOS_AGENT_CHANNEL':'1'})
+        self.assertIn('unix:/run/winboat-maintenance-qmp,server=on,wait=off',result)
+        self.assertNotIn('/run/winboat-qga',BASE)
+        with self.assertRaises(ValueError):perf.options(result,{'HELIOS_AGENT_CHANNEL':'1'})
+        args=BASE+['-device','usb-tablet,id=input,bus=usb.0']
+        self.assertIn('usb-mouse,id=input,bus=usb.0',perf.options(args,{'HELIOS_RELATIVE_MOUSE':'1'}))
+        with self.assertRaises(ValueError):perf.options(BASE,{'HELIOS_RELATIVE_MOUSE':'1'})
+        self.assertEqual(perf.options(args,{'HELIOS_RESCUE':'1','HELIOS_RELATIVE_MOUSE':'1'}),args)
+
     def test_cpu_lists_are_bounded(self):
         self.assertEqual(perf.cpu_set('1,3-5'),{1,3,4,5})
         for value in ['','5-3','0-999999','1;reboot','-1']:

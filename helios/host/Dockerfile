@@ -57,6 +57,7 @@ RUN --mount=type=secret,id=proxy_ca \
 LABEL org.winboat.helios.revision="d82ce565ac792eb48da5e59f2a82a12ff221851d"
 LABEL org.winboat.helios.display="dbus-v9"
 LABEL org.winboat.integration.audio="dbus-v1"
+LABEL org.winboat.integration.maintenance="qga-v1"
 LABEL org.winboat.helios.runtime="glvnd-v12"
 RUN --mount=from=compiled,source=/opt/helios,target=/build/runtime \
     --mount=type=bind,source=helios/host,target=/build/host \
@@ -70,6 +71,7 @@ RUN --mount=from=compiled,source=/opt/helios,target=/build/runtime \
     install -m 755 /build/host/display.sh /run/display.sh && \
     install -m 644 /build/host/display-resolution.sh /opt/helios/display-resolution.sh && \
     install -m 644 /build/host/performance.py /opt/helios/performance.py && \
+    install -m 644 /build/host/live-backup.py /opt/helios/live-backup.py && \
     install -m 755 /build/host/qemu.sh /usr/bin/qemu-system-x86_64 && \
     install -m 755 /build/host/qemu.sh /usr/local/bin/qemu-system-x86_64 && \
     /usr/bin/qemu-system-x86_64 --version && \

@@ -187,6 +187,8 @@ jobs:
           cmp helios/host/renderer-patches/SHA256SUMS /tmp/renderer-patches.sha256
       - name: Verify actual QEMU I/O polling properties without a guest disk
         run: docker run --rm --network none -e LD_LIBRARY_PATH=/opt/helios/renderer/lib:/opt/helios/lib --entrypoint python3 -v "$PWD:/src:ro" -w /src winboat-helios-test:drm-node tests/helios-io-poll-qemu.py
+      - name: Verify live disk export against real QEMU with simulated VSS
+        run: docker run --rm --network none -e LD_LIBRARY_PATH=/opt/helios/renderer/lib:/opt/helios/lib --entrypoint python3 -v "$PWD:/src:ro" -w /src winboat-helios-test:drm-node tests/live-backup-qemu.py
       - name: Verify runtime capability label
         run: |
           test "$(docker image inspect --format '{{index .Config.Labels "org.winboat.helios.runtime"}}' winboat-helios-test:drm-node)" = glvnd-v12

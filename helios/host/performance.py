@@ -34,6 +34,13 @@ def options(args, env, huge_free=None):
     args = list(args)
     if env.get('HELIOS_RESCUE') == '1' or inspection(args):
         return args
+    if number(env,'HELIOS_AGENT_CHANNEL',1):
+        if any('org.qemu.guest_agent.0' in value or '/run/winboat-qga' in value or '/run/winboat-maintenance-qmp' in value for value in args):raise ValueError('Custom guest-agent/maintenance channel already present')
+        args+=['-chardev','socket,path=/run/winboat-qga,server=on,wait=off,id=wbqga','-device','virtio-serial-pci,id=wbserial','-device','virtserialport,bus=wbserial.0,chardev=wbqga,name=org.qemu.guest_agent.0','-qmp','unix:/run/winboat-maintenance-qmp,server=on,wait=off']
+    if number(env,'HELIOS_RELATIVE_MOUSE',1):
+        tablets=[i for i,v in enumerate(args) if i and args[i-1]=='-device' and v.split(',')[0]=='usb-tablet']
+        if len(tablets)!=1:raise ValueError('Relative mouse requires exactly one standard USB tablet to replace')
+        i=tablets[0];args[i]='usb-mouse'+args[i][len('usb-tablet'):]
     if number(env,'HELIOS_AUDIO_DBUS',1):
         if env.get('HELIOS_DISPLAY')!='dbus' or '-audio' in args:raise ValueError('Local audio requires D-Bus display and an explicit compatible audio configuration')
         backends=[i for i,value in enumerate(args) if value=='-audiodev']
