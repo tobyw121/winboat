@@ -31,6 +31,8 @@
     </div>
 </template>
 <script setup lang="ts">
+import {guestSessionEnvironment} from '../lib/guest-session';
+
 import {ref,watch} from 'vue';
 import {viewerTelemetryPath} from '../lib/helios-display';
 import {nativeDesktopEnvironment} from '../../shared/native-desktop-environment';
@@ -47,7 +49,7 @@ watch(busy,value=>emit('busy',value));
 const actions=[['preflight','Check graphics stack compatibility'],['load','Inspect guest CPU and I/O load'],['helios-disable','Disable Helios; keep VGA'],['rescue-boot','VGA-only rescue boot'],['restore-host','Restore host graphics'],['check-update','Check update transaction'],['prepare-rollback','Prepare stable rollback'],['capture-enable','Capture DWM dumps (30 minutes)'],['capture-disable','Stop DWM dump capture']];
 function scriptPath(name:string){return remote.app.isPackaged?path.join(process.resourcesPath,'graphics-tools',name):path.resolve(remote.app.getAppPath(),'../..','scripts/helios',name);}
 async function execute(name:string,args:string[]){return promisify(child.execFile)('python3',[scriptPath(name),...args],{timeout:240000,maxBuffer:262144,
-    env:nativeDesktopEnvironment(hostEnvironment(),remote.app.isPackaged?path.dirname(process.resourcesPath):undefined)});}
+    env:{...nativeDesktopEnvironment(hostEnvironment(),remote.app.isPackaged?path.dirname(process.resourcesPath):undefined),...guestSessionEnvironment()}});}
 async function backup(verify:boolean){
     if(busy.value)return;busy.value=true;
     try{
@@ -61,7 +63,7 @@ async function backup(verify:boolean){
         }
         if(!file)return;message.value='Verifying storage. Large disks can take several minutes…';
         const {stdout}=await promisify(child.execFile)('python3',[scriptPath('backup-vm.py'),verify?'--verify':'--create',file],
-            {timeout:24*60*60*1000,maxBuffer:65536,env:nativeDesktopEnvironment(hostEnvironment(),remote.app.isPackaged?path.dirname(process.resourcesPath):undefined)});
+            {timeout:24*60*60*1000,maxBuffer:65536,env:{...nativeDesktopEnvironment(hostEnvironment(),remote.app.isPackaged?path.dirname(process.resourcesPath):undefined),...guestSessionEnvironment()}});
         message.value=JSON.stringify(JSON.parse(stdout));remote.shell.showItemInFolder(file);
     }catch(error){message.value=error instanceof Error?error.message:String(error);}finally{busy.value=false;}
 }
@@ -105,7 +107,7 @@ async function run(action:string){
         message.value='Working…';
         const script=remote.app.isPackaged?path.join(process.resourcesPath,'graphics-tools','graphics-center.py'):path.resolve(remote.app.getAppPath(),'../..','scripts/helios/graphics-center.py');
         const {stdout}=await promisify(child.execFile)('python3',[script,action],{timeout:240000,maxBuffer:262144,
-            env:nativeDesktopEnvironment(hostEnvironment(),remote.app.isPackaged?path.dirname(process.resourcesPath):undefined)});
+            env:{...nativeDesktopEnvironment(hostEnvironment(),remote.app.isPackaged?path.dirname(process.resourcesPath):undefined),...guestSessionEnvironment()}});
         const data=JSON.parse(stdout.trim().split('\n').pop()??'');
         if(action==='status'){status.value=data;message.value='Updated. No driver or VM setting changed.';}
         else if(['load','preflight'].includes(action))message.value=JSON.stringify(data.driver??data,null,2);

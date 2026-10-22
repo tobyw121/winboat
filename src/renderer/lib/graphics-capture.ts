@@ -1,3 +1,4 @@
+import {guestSessionEnvironment} from './guest-session';
 import { ref } from 'vue';
 import { graphicsCapture } from '../../shared/graphics-capture';
 import { nativeDesktopEnvironment } from '../../shared/native-desktop-environment';
@@ -14,7 +15,7 @@ const capture = graphicsCapture(async () => {
         : path.resolve(remote.app.getAppPath(),'../..','scripts/helios/diagnose-graphics.py');
     const result = await promisify(child.execFile)('python3',[script,'--samples','12','--interval','2','--expected-runtime',HELIOS_RUNTIME_VERSION],{
         timeout:240000,maxBuffer:2*1024*1024,
-        env:nativeDesktopEnvironment(hostEnvironment(),remote.app.isPackaged?path.dirname(process.resourcesPath):undefined),
+        env:{...nativeDesktopEnvironment(hostEnvironment(),remote.app.isPackaged?path.dirname(process.resourcesPath):undefined),...guestSessionEnvironment()},
     });
     return result.stdout;
 });
@@ -27,7 +28,7 @@ export async function captureGraphics(bundle=false):Promise<void> {
             const script=remote.app.isPackaged?path.join(process.resourcesPath,'graphics-tools','support-bundle.py')
                 :path.resolve(remote.app.getAppPath(),'../..','scripts/helios/support-bundle.py');
             const run=promisify(child.execFile);
-            const env=nativeDesktopEnvironment(hostEnvironment(),remote.app.isPackaged?path.dirname(process.resourcesPath):undefined);
+            const env={...nativeDesktopEnvironment(hostEnvironment(),remote.app.isPackaged?path.dirname(process.resourcesPath):undefined),...guestSessionEnvironment()};
             const {stdout}=await run('python3',[script,report],{timeout:15000,maxBuffer:2*1024*1024,env});
             const preview=JSON.parse(stdout);
             if(!/^[a-f0-9]{64}$/.test(preview.sha256) || typeof preview.preview!=='object') throw new Error('Invalid filtered preview.');

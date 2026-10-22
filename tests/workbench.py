@@ -21,7 +21,7 @@ class Tests(unittest.TestCase):
    with path.open('a') as stream:stream.write('app.exe,43,20\n')
    with self.assertRaises(ValueError):m.load('measure-performance').read_frame_times(path,'app.exe')
  def test_release_gate_rejects_missing_or_other_package_evidence(self):
-  identity={'manifestSha256':'a'*64,'machineId':'m','version':'v'};v={'hostImage':'host','acceptance':{'automatedPassed':True,'finishedAtUtc':__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat(),'tests':[{'name':name,'status':'passed','exitCode':0,'sha256':'a'*64} for name in ('D3D11','Vulkan features','Vulkan presentation','OpenGL','D3D11 1x resize','D3D11 format contracts')],'identity':identity}}
+  identity={'manifestSha256':'a'*64,'machineId':'m','version':'v','profile':{}};v={'hostImage':'host','acceptance':{'automatedPassed':True,'finishedAtUtc':__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat(),'tests':[{'name':name,'status':'passed','exitCode':0,'sha256':'a'*64} for name in ('Stack versions','D3D11','Vulkan features','Vulkan presentation','OpenGL','D3D11 1x resize','D3D11 format contracts')],'identity':identity}}
   scenarios={name:{'hostImage':'host','acceptance':{'identity':identity},'assessment':{'state':'passed'}} for name in ('cold-boot','resize','logon')}
   self.assertEqual(m.release_gate(v,scenarios)['state'],'eligible-for-visual-confirmation')
   scenarios['resize']['hostImage']='old';self.assertEqual(m.release_gate(v,scenarios)['state'],'incomplete')

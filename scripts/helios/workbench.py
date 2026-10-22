@@ -23,7 +23,7 @@ def release_gate(validation,scenarios):
   age=(datetime.datetime.now(datetime.timezone.utc)-finish).total_seconds()
   if not 0<=age<=86400:missing.append('fresh-acceptance')
  except (KeyError,ValueError,TypeError):missing.append('fresh-acceptance')
- for name in ('D3D11','Vulkan features','Vulkan presentation','OpenGL','D3D11 1x resize','D3D11 format contracts'):
+ for name in ('Stack versions','D3D11','Vulkan features','Vulkan presentation','OpenGL','D3D11 1x resize','D3D11 format contracts'):
   rows=[r for r in acceptance.get('tests',[]) if r.get('name')==name and r.get('status')=='passed' and r.get('exitCode')==0 and len(str(r.get('sha256','')))==64]
   if len(rows)!=1:missing.append(name)
  required={'cold-boot','resize','logon'}
@@ -31,7 +31,8 @@ def release_gate(validation,scenarios):
   row=scenarios.get(scenario,{})
   assessment=row.get('assessment',{})
   recorded=row.get('acceptance',{}).get('identity',{});identity=acceptance.get('identity',{})
-  if not identity.get('manifestSha256') or any(recorded.get(k)!=identity.get(k) for k in ('manifestSha256','version','machineId')) or row.get('hostImage')!=validation.get('hostImage'):missing.append(scenario+'-identity')
+  if not isinstance(identity.get('profile'),dict):missing.append(scenario+'-profile')
+  if not identity.get('manifestSha256') or any(recorded.get(k)!=identity.get(k) for k in ('manifestSha256','version','machineId','profile')) or row.get('hostImage')!=validation.get('hostImage'):missing.append(scenario+'-identity')
   if assessment.get('state')=='failed':failures.append(scenario)
   elif assessment.get('state')!='passed':missing.append(scenario)
  transaction=validation.get('transaction',{})

@@ -1,3 +1,4 @@
+import {guestSessionEnvironment} from './guest-session';
 import {ref} from 'vue';
 import {nativeDesktopEnvironment} from '../../shared/native-desktop-environment';
 import {hostEnvironment} from './host-environment';
@@ -12,7 +13,7 @@ async function run(args:string[]):Promise<State> {
     const script=remote.app.isPackaged?path.join(process.resourcesPath,'graphics-tools','graphics-trial.py')
         :path.resolve(remote.app.getAppPath(),'../..','scripts/helios/graphics-trial.py');
     const {stdout}=await promisify(child.execFile)('python3',[script,...args],{timeout:180000,maxBuffer:65536,
-        env:nativeDesktopEnvironment(hostEnvironment(),remote.app.isPackaged?path.dirname(process.resourcesPath):undefined)});
+        env:{...nativeDesktopEnvironment(hostEnvironment(),remote.app.isPackaged?path.dirname(process.resourcesPath):undefined),...guestSessionEnvironment()}});
     const state=JSON.parse(stdout.trim().split('\n').pop()??'');
     if(!/^[a-f0-9]{32}$/.test(state.id)||typeof state.phase!=='string')throw new Error('Invalid graphics trial state');
     return state;

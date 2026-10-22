@@ -17,6 +17,11 @@ function Invoke-HeliosAcceptance([string]$RunLabel) {
     $state=Read-HeliosValidationJson (Join-Path $env:ProgramData 'Helios\install-state.json')
     $start=[DateTime]::UtcNow
     $runId=[guid]::NewGuid().ToString('N');$rows=@()
+    $stackScript=Join-Path $PSScriptRoot 'Get-HeliosDiagnostics.ps1'
+    $coherence='unknown'
+    try {$coherence=(& $stackScript | ConvertFrom-Json).stackCoherence.state} catch {}
+    $rows += [ordered]@{name='Stack versions';coverage='Bound miniport, API paths and loaded runtime coherence';status=$(if($coherence -eq 'coherent-observed'){'passed'}elseif($coherence -eq 'mismatch'){'failed'}else{'inconclusive'});exitCode=$(if($coherence -eq 'coherent-observed'){0}else{1});sha256=(Get-FileHash -LiteralPath $stackScript -Algorithm SHA256).Hash}
+
     $verify=Join-Path $env:ProgramData 'Helios\Verify-Helios.ps1'
     $verification=Invoke-HeliosValidationProcess "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',('"'+$verify+'"'))
     $rows += [ordered]@{name='Package integrity';coverage='Installed package verifier, API registrations and runtime hashes';status=$verification.status;
