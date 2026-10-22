@@ -119,6 +119,9 @@ if "$export_host"; then
     docker save "$image" | gzip -6 > "$temporary/packages/$archive"
     (cd "$temporary/packages" && sha256sum -- "$archive" >> SHA256SUMS)
 fi
+python3 scripts/helios/release-set.py create --directory "$temporary/packages" --image "$image"
+(cd "$temporary/packages" && sha256sum RELEASE-SET.json >> SHA256SUMS)
+python3 scripts/helios/release-set.py verify --directory "$temporary/packages" --local-image
 (cd "$temporary/packages" && sha256sum -c SHA256SUMS)
 cp -a --no-preserve=ownership "$temporary/packages/." "$root/dist/"
 printf '\nBuild complete: %s/dist\nHelios host image: %s\n' "$root" "$image"
