@@ -106,55 +106,61 @@
                 </x-card>
 
                 <x-card class="p-4 my-0 w-full bg-neutral-800/20">
-                    <VMIntegration @changed="assignValues" @busy="integrationBusy=$event" :blocked="isApplyingChanges || graphicsBusy || trialRunning || captureRunning" />
-                </x-card>
-
-                <x-card v-if="heliosEnabled" class="p-4 my-0 w-full bg-neutral-800/20">
-                    <h1 class="text-lg font-semibold mb-2">Graphics diagnostics</h1>
-                    <p class="text-sm text-neutral-400">Record flickering for about a minute. Collects guest status and existing host logs without changing drivers or restarting Windows. Requires Python 3 on Linux.</p>
-                    <x-button :disabled="integrationBusy || graphicsBusy || captureRunning || isApplyingChanges" @click="captureGraphics()">{{ captureRunning ? 'Recording…' : 'Capture flickering' }}</x-button>
-                    <x-button :disabled="integrationBusy || graphicsBusy || captureRunning || isApplyingChanges" @click="captureGraphics(true)">Create support ZIP</x-button>
-                    <x-button :disabled="integrationBusy || graphicsBusy || trialRunning || captureRunning || isApplyingChanges" @click="testHelios()">Test installed Helios (60 seconds)</x-button>
-                    <p v-if="trialMessage" class="text-sm text-neutral-400 mt-2">{{ trialMessage }}</p>
-                    <GraphicsCenter @busy="graphicsBusy=$event" :blocked="isApplyingChanges || integrationBusy || trialRunning || captureRunning" />
-                    <p v-if="captureMessage" class="text-sm text-neutral-400 mt-2">{{ captureMessage }}</p>
-                </x-card>
-
-                <x-card v-if="heliosEnabled" class="p-4 my-0 w-full bg-neutral-800/20">
-                    <h1 class="text-lg font-semibold">Measured performance profiles</h1>
-                    <p class="text-sm text-neutral-400">Save work first: applying restarts this VM. Measure the same scene in A1/B1/A2/B2 order; profiles are experiments, not promised speedups. The original managed values are retained for restoration.</p>
-                    <select v-model="performanceChoice" :disabled="integrationBusy || graphicsBusy || isApplyingChanges || trialRunning || captureRunning" aria-label="Performance profile" class="bg-neutral-900 p-2">
-                        <option v-for="name in Object.keys(PERFORMANCE_PROFILES)" :key="name" :value="name">{{ name }}</option>
-                    </select>
-                    <x-button :disabled="integrationBusy || graphicsBusy || isApplyingChanges || trialRunning || captureRunning" @click="savePerformance(false)">Apply and restart</x-button>
-                    <x-button :disabled="integrationBusy || graphicsBusy || isApplyingChanges || trialRunning || captureRunning" @click="savePerformance(true)">Restore original values</x-button>
-                    <p>{{ performanceMessage }}</p>
-                </x-card>
-                <x-card v-if="heliosEnabled" class="p-4 my-0 w-full bg-neutral-800/20">
-                    <h1 class="text-lg font-semibold mb-2">Windows resolution</h1>
-                    <p class="text-neutral-400 text-sm">Choose the startup resolution for Helios and VGA. Saving restarts the VM. With Helios 22.22.291.0 or newer, change the running resolution in Windows Settings → System → Display without restarting. Local Desktop follows the new image size; zoom only scales the picture.</p>
-                    <div class="flex items-center gap-3 mt-3">
-                        <select v-model="resolution" aria-label="Windows startup resolution" :disabled="integrationBusy || graphicsBusy || isApplyingChanges" class="rounded bg-neutral-900 p-2">
-                            <option v-for="mode in HELIOS_RESOLUTIONS" :key="mode.key" :value="mode.key">{{ mode.label }}</option>
-                        </select>
-                        <x-button :disabled="integrationBusy || graphicsBusy || isApplyingChanges || !origHeliosEnabled || resolution === origResolution" @click="saveResolution">Save resolution and restart</x-button>
-                    </div>
-                    <p v-if="resolutionMessage" class="text-sm text-neutral-400 mt-2">{{ resolutionMessage }}</p>
-                </x-card>
-
-                <x-card class="p-4 my-0 w-full bg-neutral-800/20">
-                    <h1 class="text-lg font-semibold mb-3">Shared Folders</h1>
-                    <SharedFolders v-model="sharedFolders" :disabled="integrationBusy || graphicsBusy || isApplyingChanges" />
-                    <div class="mt-4 flex gap-3 items-center">
-                        <x-button :disabled="integrationBusy || graphicsBusy || isApplyingChanges || !sharesNeedSaving || !!sharedFolderErrors(sharedFolders).length" @click="saveShares">Save shared folders</x-button>
-                        <span class="text-sm text-neutral-400">Applies these folders and restarts the VM.</span>
-                    </div>
-                    <p v-if="shareSaveMessage" class="text-sm mt-2" role="status">{{ shareSaveMessage }}</p>
-                    <div class="mt-4 flex gap-3 items-center"><x-button :disabled="integrationBusy || graphicsBusy || isApplyingChanges || checkingShares || !sharedFolders.some(folder => folder.enabled) || winboat.containerStatus.value !== ContainerStatus.Running || JSON.stringify(sharedFolders) !== origSharedFolders || !compose?.services.windows['x-winboat-shared-folders']" @click="testShares">Test saved shares</x-button><span class="text-sm text-neutral-400">Save changes and start the VM before testing.</span></div>
-                    <div v-for="result in shareResults" :key="result.name" class="text-sm mt-2" :class="result.ok ? 'text-green-300' : 'text-red-300'">
-                        <p>{{ result.name }}: {{ result.message }}</p><div v-if="result.windowsPath" class="flex gap-2 items-center"><code>{{ result.windowsPath }}</code><x-button @click="copyWindowsPath(result.windowsPath)">Copy direct path</x-button></div>
-                    </div>
-                    <p v-if="shareTestError" class="text-sm text-red-300 mt-2">{{ shareTestError }}</p>
+                    <VMIntegration @changed="assignValues" @busy="integrationBusy=$event" :blocked="isApplyingChanges || graphicsBusy || trialRunning || captureRunning">
+                        <template #diagnostics>
+                            <div v-if="heliosEnabled" class="integration-card">
+                                <h3>Capture a graphics issue</h3>
+                                <p class="text-sm text-neutral-400">Record flickering for about a minute. Collects guest status and existing host logs without changing drivers or restarting Windows. Requires Python 3 on Linux.</p>
+                                <x-button :disabled="integrationBusy || graphicsBusy || captureRunning || isApplyingChanges" @click="captureGraphics()">{{ captureRunning ? 'Recording…' : 'Capture flickering' }}</x-button>
+                                <x-button :disabled="integrationBusy || graphicsBusy || captureRunning || isApplyingChanges" @click="captureGraphics(true)">Create support ZIP</x-button>
+                                <x-button :disabled="integrationBusy || graphicsBusy || trialRunning || captureRunning || isApplyingChanges" @click="testHelios()">Test installed Helios (60 seconds)</x-button>
+                                <p v-if="trialMessage" class="text-sm text-neutral-400 mt-2">{{ trialMessage }}</p>
+                                <details><summary>Advanced graphics maintenance</summary><GraphicsCenter @busy="graphicsBusy=$event" :blocked="isApplyingChanges || integrationBusy || trialRunning || captureRunning" /></details>
+                                <p v-if="captureMessage" class="text-sm text-neutral-400 mt-2">{{ captureMessage }}</p>
+                            </div>
+                        </template>
+                        <template #performance>
+                            <div v-if="heliosEnabled" class="integration-card">
+                                <h3>Performance presets</h3>
+                                <p class="text-sm text-neutral-400">Save work first: applying restarts this VM. Measure the same scene in A1/B1/A2/B2 order; profiles are experiments, not promised speedups. The original managed values are retained for restoration.</p>
+                                <select v-model="performanceChoice" :disabled="integrationBusy || graphicsBusy || isApplyingChanges || trialRunning || captureRunning" aria-label="Performance profile" class="bg-neutral-900 p-2">
+                                    <option v-for="name in Object.keys(PERFORMANCE_PROFILES)" :key="name" :value="name">{{ name }}</option>
+                                </select>
+                                <x-button :disabled="integrationBusy || graphicsBusy || isApplyingChanges || trialRunning || captureRunning" @click="savePerformance(false)">Apply and restart</x-button>
+                                <x-button :disabled="integrationBusy || graphicsBusy || isApplyingChanges || trialRunning || captureRunning" @click="savePerformance(true)">Restore original values</x-button>
+                                <p>{{ performanceMessage }}</p>
+                            </div>
+                        </template>
+                        <template #display>
+                            <div v-if="heliosEnabled" class="integration-card">
+                                <h3>Windows startup resolution</h3>
+                                <p class="text-neutral-400 text-sm">Choose the startup resolution for Helios and VGA. Saving restarts the VM. With Helios 22.22.291.0 or newer, change the running resolution in Windows Settings → System → Display without restarting. Local Desktop follows the new image size; zoom only scales the picture.</p>
+                                <div class="integration-actions">
+                                    <select v-model="resolution" aria-label="Windows startup resolution" :disabled="integrationBusy || graphicsBusy || isApplyingChanges" class="rounded bg-neutral-900 p-2">
+                                        <option v-for="mode in HELIOS_RESOLUTIONS" :key="mode.key" :value="mode.key">{{ mode.label }}</option>
+                                    </select>
+                                    <x-button :disabled="integrationBusy || graphicsBusy || isApplyingChanges || !origHeliosEnabled || resolution === origResolution" @click="saveResolution">Save resolution and restart</x-button>
+                                </div>
+                                <p v-if="resolutionMessage" class="text-sm text-neutral-400 mt-2">{{ resolutionMessage }}</p>
+                            </div>
+                        </template>
+                        <template #sharing>
+                            <div class="integration-card">
+                                <h3>Shared folders</h3>
+                                <SharedFolders v-model="sharedFolders" :disabled="integrationBusy || graphicsBusy || isApplyingChanges" />
+                                <div class="integration-actions">
+                                    <x-button :disabled="integrationBusy || graphicsBusy || isApplyingChanges || !sharesNeedSaving || !!sharedFolderErrors(sharedFolders).length" @click="saveShares">Save shared folders</x-button>
+                                    <span class="text-sm text-neutral-400">Applies these folders and restarts the VM.</span>
+                                </div>
+                                <p v-if="shareSaveMessage" class="text-sm mt-2" role="status">{{ shareSaveMessage }}</p>
+                                <div class="integration-actions"><x-button :disabled="integrationBusy || graphicsBusy || isApplyingChanges || checkingShares || !sharedFolders.some(folder => folder.enabled) || winboat.containerStatus.value !== ContainerStatus.Running || JSON.stringify(sharedFolders) !== origSharedFolders || !compose?.services.windows['x-winboat-shared-folders']" @click="testShares">Test saved shares</x-button><span class="text-sm text-neutral-400">Save changes and start the VM before testing.</span></div>
+                                <div v-for="result in shareResults" :key="result.name" class="text-sm mt-2" :class="result.ok ? 'text-green-300' : 'text-red-300'">
+                                    <p>{{ result.name }}: {{ result.message }}</p><div v-if="result.windowsPath" class="flex gap-2 items-center"><code>{{ result.windowsPath }}</code><x-button @click="copyWindowsPath(result.windowsPath)">Copy direct path</x-button></div>
+                                </div>
+                                <p v-if="shareTestError" class="text-sm text-red-300 mt-2">{{ shareTestError }}</p>
+                            </div>
+                        </template>
+                    </VMIntegration>
                 </x-card>
 
                 <!-- Auto Start Container -->

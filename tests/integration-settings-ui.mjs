@@ -39,7 +39,9 @@ for(const name of ['IntegrationDisplay','VMProjectTools','VMWorkbench','VMIntegr
   state[name]=data;return data;
  },render:new Function('Vue',templates[name].code)(Vue)};
 }
-const app=Vue.createApp(components.VMIntegration);app.config.errorHandler=e=>{window.fixtureError=String(e)};app.mount('#app');
+const slotValues=Object.fromEntries(['sharing','display','performance','diagnostics'].map(area=>[area,ref('retained')]));
+const slotViews=Object.fromEntries(['sharing','display','performance','diagnostics'].map(area=>[area,()=>Vue.h('div',{class:'integration-card','data-slot':area},[Vue.h('h3',null,area+' extension'),Vue.h('label',null,['Extension preference',Vue.h('input',{'data-slot-input':area,value:slotValues[area].value,onInput:e=>slotValues[area].value=e.target.value})])])]));
+const app=Vue.createApp({render:()=>Vue.h(components.VMIntegration,null,slotViews)});app.config.errorHandler=e=>{window.fixtureError=String(e)};app.mount('#app');
 window.fixture={active,blocked,state,calls};window.fixtureReady=true;
 </script></body></html>`;
 const server=http.createServer((request,response)=>{
@@ -79,6 +81,10 @@ try{
  await evaluate("(()=>{const e=document.querySelector('input[placeholder=\"e.g. -windowed\"]');e.value='a path with spaces';e.dispatchEvent(new Event('input',{bubbles:true}))})()");
  await click('Overview');await click('Applications');assert.deepEqual(await evaluate('JSON.parse(JSON.stringify(window.fixture.state.VMWorkbench.appArguments.value))'),['a path with spaces']);
  await click('Display & audio');assert.equal(await visible('Save display preferences'),true);assert.equal(await visible('Enable audio & restart'),false);
+ await evaluate("(()=>{const e=document.querySelector('[data-slot-input=display]');window.savedSlotInput=e;e.value='preserved slot edit';e.dispatchEvent(new Event('input',{bubbles:true}))})()");await click('Overview');await click('Display & audio');
+ assert.equal(await evaluate("document.querySelector('[data-slot-input=display]').value"),'preserved slot edit');
+ assert.equal(await evaluate("window.savedSlotInput===document.querySelector('[data-slot-input=display]')"),true);
+ assert.equal(await evaluate("document.querySelector('[data-slot=sharing]').checkVisibility()"),false);
  await click('Save display preferences');assert.ok((await evaluate('JSON.parse(JSON.stringify(window.fixture.calls))')).includes('saveViewerSettings'));
  const screenshot=async name=>{if(process.env.UI_SCREENSHOT_DIR){fs.mkdirSync(process.env.UI_SCREENSHOT_DIR,{recursive:true});const image=await send('Page.captureScreenshot',{captureBeyondViewport:true});fs.writeFileSync(path.join(process.env.UI_SCREENSHOT_DIR,name+'.png'),Buffer.from(image.data,'base64'));}};
  await screenshot('integration-desktop');

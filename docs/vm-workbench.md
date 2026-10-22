@@ -149,6 +149,10 @@ section change. Automatic performance refresh pauses outside Performance & netwo
 | Backups | Offline snapshots, live disk exports, scheduled checks, restore staging |
 | Diagnostics | Host checks, graphics testing/recovery, compatibility notes, API permissions |
 
+Shared folders, startup resolution, performance presets and graphics capture from
+the main Configuration page also live in these sections; their existing state
+and handlers are retained through mounted slots.
+
 Common actions stay visible. Setup, developer probes, conflict handling and
 recovery details use expandable panels. Restarting actions say so on the button
 and retain their confirmation dialogs. JSON results are expandable rather than
