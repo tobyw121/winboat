@@ -10,12 +10,15 @@
   <div><h3>Shared text clipboard</h3>
    <label><input type="checkbox" v-model="toGuest"> Linux → Windows</label>
    <label class="ml-3"><input type="checkbox" v-model="toHost"> Windows → Linux</label>
-   <x-button @click="run(()=>startClipboard(toGuest,toHost))" :disabled="!toGuest && !toHost">Connect and ask Windows</x-button>
+   <x-button @click="run(()=>startClipboard(toGuest,toHost,images))" :disabled="!toGuest && !toHost">Connect and ask Windows</x-button>
+   <label class="ml-3"><input type="checkbox" v-model="images"> Allow explicit PNG image transfers</label>
    <x-button @click="run(stopClipboard)">Disconnect</x-button>
    <x-button @click="run(()=>transferClipboard('send'))" :disabled="!toGuest">Send text now</x-button>
    <x-button @click="run(()=>transferClipboard('receive'))" :disabled="!toHost">Receive text now</x-button>
+   <x-button @click="run(()=>transferClipboardImage('send'))" :disabled="!toGuest || !images">Send image now</x-button>
+   <x-button @click="run(()=>transferClipboardImage('receive'))" :disabled="!toHost || !images">Receive image now</x-button>
    <p class="text-sm">{{ clipboardState }} — {{ clipboardMessage }}</p>
-   <p class="text-sm text-neutral-400">Plain text only, up to 256 KiB. Windows asks for consent. Locking, logging off or losing host contact stops sharing. Reconnect after unlocking.</p>
+   <p class="text-sm text-neutral-400">Automatic text up to 256 KiB; manual text up to 4 MiB. Explicit PNG images up to 8 MiB / 8 megapixels; uncompressed 24/32-bit Windows bitmaps are supported too. Windows asks for consent. Locking, logging off or losing host contact stops sharing. Reconnect after unlocking.</p>
   </div>
   <div><h3>Offline snapshots</h3>
    <p class="text-sm text-neutral-400">Shut down Windows cleanly first. Includes the VM storage and firmware; excludes shared folders and external disks. Restore keeps the previous storage and leaves the VM stopped. Archives can contain passwords.</p>
@@ -40,10 +43,12 @@
 </section>
 </template>
 <script setup lang="ts">
+import {guestFetch} from '../lib/guest-session';
+
 import {ref,watch,onBeforeUnmount} from 'vue';
 import {Winboat} from '../lib/winboat';
 import {WINBOAT_DIR,GUEST_API_PORT} from '../lib/constants';
-import {startClipboard,stopClipboard,transferClipboard,clipboardState,clipboardMessage} from '../lib/clipboard-sync';
+import {startClipboard,stopClipboard,transferClipboard,transferClipboardImage,clipboardState,clipboardMessage} from '../lib/clipboard-sync';
 import {copyExchangeFile,exchangeDirectory} from '../../shared/exchange-files';
 import {configuredSharedFolders,prepareSharedFolders} from '../lib/shared-folders';
 import {nativeDesktopEnvironment} from '../../shared/native-desktop-environment';
@@ -54,9 +59,9 @@ const props=defineProps<{blocked:boolean}>(),emit=defineEmits<{busy:[value:boole
 const remote:typeof import('@electron/remote')=require('@electron/remote');
 const fs:typeof import('fs')=require('fs'),path:typeof import('path')=require('path');
 const child:typeof import('child_process')=require('child_process'),util:typeof import('util')=require('util');
-const fetch:typeof import('node-fetch').default=require('node-fetch');
+const fetch:typeof import('node-fetch').default=guestFetch;
 const winboat=new Winboat(),busy=ref(false),message=ref(''),status=ref('Refresh to query QEMU and the guest independently.');
-const toGuest=ref(true),toHost=ref(true),label=ref('Before changes'),snapshots=ref<Array<{id:string;label:string;createdAtUtc:string;archiveBytes:number}>>([]);
+const images=ref(false),toGuest=ref(true),toHost=ref(true),label=ref('Before changes'),snapshots=ref<Array<{id:string;label:string;createdAtUtc:string;archiveBytes:number}>>([]);
 const displayBusy=ref(false),workbenchBusy=ref(false);
 let transfer:AbortController|undefined;
 onBeforeUnmount(()=>transfer?.abort());

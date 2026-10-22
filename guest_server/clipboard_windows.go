@@ -46,6 +46,9 @@ func launchClipboardWorker(policy clipboardPolicy, emit func(clipboardMessage)) 
 		return nil, err
 	}
 	args := []string{"--clipboard-agent"}
+	if policy.Images {
+		args = append(args, "--clipboard-images")
+	}
 	if policy.ToGuest {
 		args = append(args, "--clipboard-write")
 	}
@@ -77,7 +80,7 @@ func launchClipboardWorker(policy clipboardPolicy, emit func(clipboardMessage)) 
 		defer cmd.Wait()
 		defer worker.Close()
 		scanner := bufio.NewScanner(out)
-		scanner.Buffer(make([]byte, 4096), clipboardLimit*6+1024)
+		scanner.Buffer(make([]byte, 4096), clipboardLimit*6+clipboardImageLimit*2+1024)
 		for scanner.Scan() {
 			var value clipboardMessage
 			if json.Unmarshal(scanner.Bytes(), &value) == nil {
@@ -107,6 +110,9 @@ func clipboardDesktopUnlocked() bool {
 	return ok != 0 && windows.UTF16ToString(name[:]) == "Default"
 }
 func readClipboardText(hwnd uintptr) (string, error) {
+	return readClipboardTextBounded(hwnd, clipboardAutomaticLimit)
+}
+func readClipboardTextBounded(hwnd uintptr, limit uintptr) (string, error) {
 	if !clipboardDesktopUnlocked() {
 		return "", fmt.Errorf("locked desktop")
 	}
@@ -120,7 +126,7 @@ func readClipboardText(hwnd uintptr) (string, error) {
 		return "", fmt.Errorf("no text")
 	}
 	bytes, _, _ := clipKernel.NewProc("GlobalSize").Call(handle)
-	if bytes < 2 || bytes > clipboardLimit*2 {
+	if bytes < 2 || bytes > limit*2 {
 		return "", fmt.Errorf("text too large")
 	}
 	pointer, _, _ := clipGlobalLock.Call(handle)
@@ -196,8 +202,11 @@ func runClipboardAgent() {
 		return
 	}
 	defer cleanup()
-	toGuest, toHost := false, false
+	toGuest, toHost, images := false, false, false
 	for _, arg := range os.Args[2:] {
+		if arg == "--clipboard-images" {
+			images = true
+		}
 		if arg == "--clipboard-write" {
 			toGuest = true
 		}
@@ -215,6 +224,9 @@ func runClipboardAgent() {
 	}
 	if toHost {
 		directions += "Windows to Linux (read clipboard).\n"
+	}
+	if images {
+		directions += "Explicit PNG image transfers (up to 8 MiB).\n"
 	}
 	message, _ := windows.UTF16PtrFromString("Allow this WinBoat desktop session to share plain text?\n\n" + directions + "\nStops on lock, sign-out or host disconnect. Clipboard text may contain private information.")
 	title, _ := windows.UTF16PtrFromString("WinBoat text clipboard")
@@ -249,6 +261,24 @@ func runClipboardAgent() {
 						if writeClipboardText(window, command.Text) == nil {
 							lastSequence, _, _ = clipUser32.NewProc("GetClipboardSequenceNumber").Call()
 							lastOrigin = command.Origin
+						} else {
+							send(clipboardMessage{Kind: "error"})
+						}
+					} else if command.Kind == "image-write" && toGuest && images {
+						if writeClipboardPNG(window, command.PNG) != nil {
+							send(clipboardMessage{Kind: "error"})
+						}
+					} else if command.Kind == "image-read" && toHost && images {
+						if image, e := readClipboardPNG(window); e == nil {
+							send(clipboardMessage{Kind: "image", PNG: image})
+						} else {
+							send(clipboardMessage{Kind: "error"})
+						}
+					} else if command.Kind == "read-large" && toHost {
+						if text, e := readClipboardTextBounded(window, clipboardLimit); e == nil {
+							send(clipboardMessage{Kind: "text", Text: text})
+						} else {
+							send(clipboardMessage{Kind: "error"})
 						}
 					} else if command.Kind == "read" && toHost {
 						if text, err := readClipboardText(window); err == nil {
@@ -308,14 +338,14 @@ func runClipboardAgent() {
 	send(clipboardMessage{Kind: "ready"})
 	go func() {
 		scanner := bufio.NewScanner(os.Stdin)
-		scanner.Buffer(make([]byte, 4096), clipboardLimit*6+1024)
+		scanner.Buffer(make([]byte, 4096), clipboardLimit*6+clipboardImageLimit*2+1024)
 		for scanner.Scan() {
 			var command clipboardMessage
-			if json.Unmarshal(scanner.Bytes(), &command) != nil || !validClipboard(command.Text) {
+			if json.Unmarshal(scanner.Bytes(), &command) != nil || !validClipboard(command.Text) || (command.PNG != "" && !validClipboardPNG(command.PNG)) {
 				continue
 			}
 			pendingMu.Lock()
-			if len(pending) < 8 {
+			if len(pending) < 2 {
 				pending = append(pending, command)
 			}
 			pendingMu.Unlock()

@@ -73,3 +73,39 @@ func TestClipboardInputBoundsAndBrowserOrigins(t *testing.T) {
 		t.Fatal("Browser origin paired")
 	}
 }
+
+func TestImagesRequireSeparateConsentAndAreOneShot(t *testing.T) {
+	f := &fakeClipboard{}
+	var emit func(clipboardMessage)
+	b := clipboardBroker{launch: func(p clipboardPolicy, cb func(clipboardMessage)) (clipboardWorker, error) { emit = cb; return f, nil }}
+	call := func(body, token string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", "/integration/clipboard", strings.NewReader(body))
+		if token == "connect" {
+			r.Header.Set("X-WinBoat-Clipboard", token)
+		} else {
+			r.Header.Set("X-WinBoat-Clipboard-Token", token)
+		}
+		w := httptest.NewRecorder()
+		b.handler(w, r)
+		return w
+	}
+	w := call(`{"toHost":true,"toGuest":true}`, "connect")
+	var result map[string]string
+	json.Unmarshal(w.Body.Bytes(), &result)
+	key := result["token"]
+	emit(clipboardMessage{Kind: "ready"})
+	if call(`{"kind":"image-read"}`, key).Code != 409 {
+		t.Fatal("image consent bypass")
+	}
+	b.policy.Images = true
+	if call(`{"kind":"image-read"}`, key).Code != 200 {
+		t.Fatal("consented image request rejected")
+	}
+	if call(`{"kind":"image-write","png":"bad"}`, key).Code != 400 {
+		t.Fatal("invalid image accepted")
+	}
+	emit(clipboardMessage{Kind: "locked"})
+	if b.snapshot.PNG != "" {
+		t.Fatal("locked image retained")
+	}
+}

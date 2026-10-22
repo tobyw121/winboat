@@ -13,13 +13,16 @@ import (
 	"unicode/utf8"
 )
 
-const clipboardLimit = 256 * 1024
+const clipboardLimit = 4 * 1024 * 1024
+const clipboardAutomaticLimit = 256 * 1024
 
 type clipboardPolicy struct {
 	ToGuest bool `json:"toGuest"`
 	ToHost  bool `json:"toHost"`
+	Images  bool `json:"images"`
 }
 type clipboardMessage struct {
+	PNG    string `json:"png,omitempty"`
 	Kind   string `json:"kind"`
 	Text   string `json:"text"`
 	Origin string `json:"origin,omitempty"`
@@ -29,6 +32,8 @@ type clipboardWorker interface {
 	Close()
 }
 type clipboardSnapshot struct {
+	Kind     string `json:"kind,omitempty"`
+	PNG      string `json:"png,omitempty"`
 	State    string `json:"state"`
 	Revision uint64 `json:"revision"`
 	Text     string `json:"text"`
@@ -66,11 +71,26 @@ func (b *clipboardBroker) observe(key string, message clipboardMessage) {
 		b.snapshot.State = "active"
 	case "locked", "closed", "denied":
 		b.snapshot = clipboardSnapshot{State: message.Kind, Revision: b.snapshot.Revision + 1}
+	case "image":
+		if b.snapshot.State != "active" || !b.policy.ToHost || !b.policy.Images || !validClipboardPNG(message.PNG) {
+			return
+		}
+		b.snapshot.Revision++
+		b.snapshot.Kind = "image"
+		b.snapshot.PNG = message.PNG
+		b.snapshot.Text = ""
+	case "error":
+		b.snapshot.Revision++
+		b.snapshot.Kind = "unsupported"
+		b.snapshot.PNG = ""
+		b.snapshot.Text = ""
 	case "text":
 		if b.snapshot.State != "active" || !b.policy.ToHost || !validClipboard(message.Text) {
 			return
 		}
 		b.snapshot.Revision++
+		b.snapshot.Kind = "text"
+		b.snapshot.PNG = ""
 		b.snapshot.Text = message.Text
 		b.snapshot.Origin = message.Origin
 	}
@@ -146,6 +166,7 @@ func (b *clipboardBroker) handler(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method == "GET" {
 		value := b.snapshot
+		b.snapshot.PNG = "" // Images are one-shot, never a polling history.
 		b.mu.Unlock()
 		json.NewEncoder(w).Encode(value)
 		return
@@ -156,14 +177,14 @@ func (b *clipboardBroker) handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var value clipboardMessage
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, clipboardLimit*6+1024))
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, clipboardLimit*6+clipboardImageLimit*2+1024))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&value) != nil || !validClipboard(value.Text) || len(value.Origin) > 64 || strings.ContainsAny(value.Origin, "\r\n") {
+	if decoder.Decode(&value) != nil || !validClipboard(value.Text) || (value.PNG != "" && !validClipboardPNG(value.PNG)) || len(value.Origin) > 64 || strings.ContainsAny(value.Origin, "\r\n") {
 		b.mu.Unlock()
 		http.Error(w, `{"error":"Invalid plain text"}`, 400)
 		return
 	}
-	if b.snapshot.State != "active" || b.worker == nil || (value.Kind == "write" && !b.policy.ToGuest) || (value.Kind == "read" && !b.policy.ToHost) || (value.Kind != "write" && value.Kind != "read") {
+	if b.snapshot.State != "active" || b.worker == nil || ((value.Kind == "write" || value.Kind == "image-write") && !b.policy.ToGuest) || ((value.Kind == "read" || value.Kind == "read-large" || value.Kind == "image-read") && !b.policy.ToHost) || ((value.Kind == "image-read" || value.Kind == "image-write") && !b.policy.Images) || (value.Kind != "write" && value.Kind != "read" && value.Kind != "read-large" && value.Kind != "image-write" && value.Kind != "image-read") || (value.Kind == "image-write" && !validClipboardPNG(value.PNG)) {
 		b.mu.Unlock()
 		http.Error(w, `{"error":"Clipboard direction or desktop unavailable"}`, 409)
 		return

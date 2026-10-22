@@ -15,3 +15,9 @@ test('plain text byte limits account for multibyte text and prohibit NUL',()=>{
  assert.equal(validClipboardText('ä'.repeat(131073)),false);
  assert.equal(validClipboardText('bad\0text'),false);
 });
+
+test('manual text has a separate bounded limit',()=>{
+ assert.equal(validClipboardText('x'.repeat(300000)),false);
+ assert.equal(validClipboardText('x'.repeat(300000),true),true);
+ assert.equal(validClipboardText('x'.repeat(4*1024*1024+1),true),false);
+});
