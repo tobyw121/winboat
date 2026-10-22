@@ -33,6 +33,10 @@
   <p class="text-sm text-neutral-400">Compatibility is process-local and requires a supporting installed UMD. It does not install DLL translation layers or change DWM settings. Display changes affect the VM and require an explicit restart.</p>
  </div>
  <div><h3>Resource and network policies</h3>
+  <p class="text-sm">Changes are trials: confirm within five minutes or the host restores the previous configuration, even if this window closes.</p>
+  <x-button :disabled="busy || blocked" @click="run(()=>trialAction('status'))">Trial status</x-button>
+  <x-button :disabled="busy || blocked" @click="run(()=>trialAction('confirm'))">Keep working configuration</x-button>
+  <x-button :disabled="busy || blocked" @click="run(()=>trialAction('recover'))">Restore previous configuration now</x-button>
   <input v-model="cpuSet" aria-label="Linux CPU set" placeholder="CPU set, e.g. 2-7 (empty: unrestricted)" class="bg-neutral-900 p-1 w-full">
   <label><input type="checkbox" v-model="hugepages"> Use already reserved 2 MiB hugepages</label>
   <x-button :disabled="busy || blocked" @click="run(()=>apply('resources'))">Apply resources and restart</x-button>
@@ -105,7 +109,7 @@ async function importFrames(){const choice=await remote.dialog.showOpenDialog({p
 function profile(){return applicationProfile({schema:1,exe:exe.value,resolution:resolution.value,transport:transport.value,api:api.value,args:JSON.parse(argumentsJSON.value)});}
 async function saveProfile(){const p=profile(),id=crypto.randomBytes(16).toString('hex');fs.writeFileSync(path.join(privateRoot('ApplicationProfiles'),id+'.json'),JSON.stringify(p),{mode:0o600,flag:'wx'});profiles.value.push({id,exe:p.exe});selected.value=id;}
 async function loadProfile(){if(!/^[a-f0-9]{32}$/.test(selected.value))throw new Error('Choose a saved profile.');const file=path.join(privateRoot('ApplicationProfiles'),selected.value+'.json');if(fs.lstatSync(file).isSymbolicLink()||fs.statSync(file).size>131072)throw new Error('Invalid profile file.');const p=applicationProfile(JSON.parse(fs.readFileSync(file,'utf8')));exe.value=p.exe;resolution.value=p.resolution;transport.value=p.transport;api.value=p.api;argumentsJSON.value=JSON.stringify(p.args);}
-async function replace(service:ReturnType<Winboat['parseCompose']>['services']['windows']){const next=winboat.parseCompose();next.services.windows=service;await winboat.replaceCompose(next);emit('changed');}
+async function replace(service:ReturnType<Winboat['parseCompose']>['services']['windows'],trial=false){const next=winboat.parseCompose();next.services.windows=service;await winboat.replaceCompose(next,trial);emit('changed');}
 async function applyProfile(){
  const p=profile();if(!await confirm('Apply application display settings and restart Windows?','Save Windows work first. These display settings affect the VM. Starting the application is a separate step.'))return;
  const service=winboat.parseCompose().services.windows,chosen=configureHeliosResolution(service,p.resolution),old=config.config.viewerTransport,prior=config.config.viewerProfileBefore;
@@ -121,7 +125,8 @@ async function apply(kind:'network'|'resources'){
  if(kind==='resources'&&hugepages.value){if(service.environment.HELIOS!=='1')throw new Error('Hugepage profiles require the Helios host runtime.');const size=service.environment.RAM_SIZE.match(/^(\d+(?:\.\d+)?)([GM])$/i);if(!size)throw new Error('Unsupported RAM size for preflight.');const bytes=Number(size[1])*1024**(size[2].toUpperCase()==='G'?3:2),free=Number(fs.readFileSync('/sys/kernel/mm/hugepages/hugepages-2048kB/free_hugepages','utf8'));if(free*2097152<bytes)throw new Error('Not enough already reserved free 2 MiB hugepages. Host reservations were not changed.');}
  if(cpuSet.value.length>256)throw new Error('CPU list is too long.');
  if(kind==='resources'&&cpuSet.value){const online=fs.readFileSync('/sys/devices/system/cpu/online','utf8').trim();const available=new Set<number>();for(const r of online.split(',')){const [a,b]=r.split('-').map(Number);for(let n=a;n<=(b??a);n++)available.add(n);}for(const r of cpuSet.value.split(',')){const [a,b]=r.split('-').map(Number);if(!Number.isFinite(a)||!Number.isFinite(b??a)||(b??a)-a>4096)throw new Error('Invalid CPU range');for(let n=a;n<=(b??a);n++)if(!available.has(n))throw new Error('CPU set includes an offline CPU');}}
- await replace(kind==='network'?networkPolicy(service,network.value,networkName.value):resourcePolicy(service,cpuSet.value,hugepages.value));}
+ await replace(kind==='network'?networkPolicy(service,network.value,networkName.value):resourcePolicy(service,cpuSet.value,hugepages.value),true);message.value='Configuration trial started. Verify display and connectivity, then keep it within five minutes.';}
+async function trialAction(action:'status'|'confirm'|'recover'){message.value=JSON.stringify(await winboat.configurationTrial(action),null,2);emit('changed');}
 async function restore(kind:string){
  if(!await confirm('Restore saved policy and restart Windows?','Save Windows work first. Other policy settings are preserved.'))return;
  const old=config.config.viewerTransport,oldTrace=config.config.viewerContractTrace;if(kind==='diagnostics')config.config.viewerContractTrace=false;if(kind==='application'&&config.config.viewerProfileBefore!==undefined)config.config.viewerTransport=config.config.viewerProfileBefore;

@@ -577,7 +577,15 @@ export class Winboat {
         this.containerActionLoading.value = false;
     }
 
-    async replaceCompose(composeConfig: ComposeConfig) {
+    async configurationTrial(action: 'status'|'confirm'|'recover' = 'status') {
+        const script = remote.app.isPackaged ? path.join(process.resourcesPath,'graphics-tools','config-trial.py') : path.resolve(remote.app.getAppPath(),'../..','scripts/helios/config-trial.py');
+        const {stdout} = await execFileAsync('python3',[script,action],{timeout:330000,maxBuffer:65536});
+        return JSON.parse(stdout) as {status:string;deadline?:number};
+    }
+
+    async replaceCompose(composeConfig: ComposeConfig, trial = false) {
+        const pending = await this.configurationTrial();
+        if (['pending','restoring','restore-failed','conflict'].includes(pending.status)) throw new Error('A configuration trial needs confirmation or recovery before further changes.');
         if (this.containerStatus.value===ContainerStatus.Running && this.parseCompose().services.windows.environment.HELIOS_AGENT_CHANNEL==='1') {
             const {stdout}=await execFileAsync('docker',['exec','WinBoat','python3','/opt/helios/live-backup.py','busy'],{timeout:5000});
             if(JSON.parse(stdout).state!=='idle')throw new Error('A live export or VSS operation is active. Wait for it to finish before applying configuration changes.');
@@ -590,6 +598,14 @@ export class Winboat {
         try {
             const composeFilePath = path.join(WINBOAT_DIR, 'docker-compose.yml');
 
+            if (trial) {
+                const script = remote.app.isPackaged ? path.join(process.resourcesPath,'graphics-tools','config-trial.py') : path.resolve(remote.app.getAppPath(),'../..','scripts/helios/config-trial.py');
+                const hash = require('crypto').createHash('sha256').update(PrettyYAML.stringify(composeConfig)).digest('hex');
+                await execFileAsync('python3',[script,'begin','--compose',composeFilePath,'--expected',hash]);
+                const watcher = require('child_process').spawn('python3',[script,'watch'],{detached:true,stdio:'ignore'});
+                await new Promise<void>((resolve,reject)=>{watcher.once('spawn',resolve);watcher.once('error',reject);});
+                watcher.unref();
+            }
             // 0. Stop the current container if it's online
             if (this.containerStatus.value === ContainerStatus.Running) {
                 await this.stopContainer();
