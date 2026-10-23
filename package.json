@@ -31,7 +31,7 @@
         "test:shared-folders": "tsx --test tests/shared-folders.test.ts",
         "test:integration-ui": "node tests/integration-settings-ui.mjs",
         "test:integration": "tsx --test tests/clipboard-sync.test.ts tests/qmp-protocol.test.ts tests/exchange-files.test.ts tests/usb-host-use.test.ts && python3 tests/vm-snapshots.py && python3 tests/helios-audio.py",
-        "test:workbench": "tsx --test tests/vm-policies.test.ts && python3 tests/workbench.py && python3 tests/live-backup.py && python3 tests/helios-performance.py && python3 tests/config-trial.py && python3 tests/project-health.py && python3 tests/backup-manager.py && python3 tests/release-set.py && python3 tests/host-game.py && tsx --test tests/guest-session.test.ts"
+        "test:workbench": "tsx --test tests/vm-policies.test.ts && python3 tests/workbench.py && python3 tests/live-backup.py && python3 tests/helios-performance.py && python3 tests/config-trial.py && python3 tests/project-health.py && python3 tests/backup-manager.py && python3 tests/release-set.py && python3 tests/host-game.py && python3 tests/ge-features.py && tsx --test tests/guest-session.test.ts"
     },
     "repository": "https://github.com/TibixDev/winboat",
     "author": {

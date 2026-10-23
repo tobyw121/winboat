@@ -51,3 +51,63 @@ Vulkan driver. It does not add D3D retained-mode support or accelerate pure 2D
 DirectDraw. Upstream documents app-local Windows deployment but explicitly does
 not test it; our checks verify package handling, not game rendering. Original
 license and source: https://github.com/WinterSnowfall/d7vk/tree/v2.3.
+
+## Additional GE DXVK profiles on the Linux host
+
+These use the existing UMU launch route, not the native Helios WDDM bridge.
+Create a **new dedicated prefix and profile** using an installed GE-Proton that
+contains the relevant patched DXGI. Missing support is rejected, not ignored.
+
+```bash
+python3 scripts/compatibility/host-game.py create --exe '/home/me/Games/game.exe' --proton '/home/me/GE-Proton' --prefix '/home/me/.local/share/winboat-prefixes/probe-test' --output '/home/me/probe-test.json' --ge-recipe dxgi-probe-v1
+python3 scripts/compatibility/host-game.py run '/home/me/probe-test.json' --dry-run
+python3 scripts/compatibility/host-game.py run '/home/me/probe-test.json'
+```
+
+- `dxgi-probe-v1`: defer initial fullscreen and surface creation for temporary
+  probe swapchains, using `dxgi.deferInitialFullscreen` and
+  `dxgi.deferSurfaceCreation`.
+- `keep-fullscreen-v1`: retain DXGI fullscreen on focus loss, using
+  `dxgi.keepFullscreenOnFocusLoss`. Explicit mode changes remain controlled by
+  the upstream implementation.
+- `--d7vk`: select GE's bundled D7VK for an x86 game. This is separate from the
+  app-local Windows script above; no Windows VM files are changed.
+
+Recipes carry a reference to GE source commit
+`88004a046c575af0b96131ff7b76dcd598da51ad` and exact option-set hashes. This is
+implementation provenance, not a claim that the user's installed runtime was
+built from that commit. The selected runtime's actual affected file hashes are
+recorded independently. Unsupported options, changed DLLs and wrong D7VK
+architecture are rejected. WineD3D cannot be combined with these Vulkan options.
+Arguments are still passed without a shell. Environment changes affect only the
+UMU child. Nothing claims that these recipes fix Icarus or FurMark.
+
+## Targeted Pyroveil shader roundtrips on the Linux host
+
+Use an installed GE runtime containing its Pyroveil layer and a **reviewed,
+game-version-appropriate** bundle with `pyroveil.json` and optional `cache/`.
+Add `--pyroveil '/home/me/shader-fix'` when creating the profile above. Pyroveil
+can be used without a fullscreen recipe and can be combined with GE D7VK.
+
+The Linux launcher currently accepts x86-64 ELF layer binaries. It validates
+config version 2/type pyroveil, bounded shader matches,
+GLSL-roundtrip actions, extension names and the optional relative cache path
+`cache`. Arbitrary file replacement actions/paths are not supported. It checks
+GE's layer manifests, the layer binary/entrypoint and all original shader-bundle
+hashes. A missing layer, changed config/asset or escaping path blocks launch.
+The reference is upstream Pyroveil; no shader hack is automatically selected
+for an unidentified game or GPU.
+
+Assets are staged inside the game's private prefix. Generated cache files stay
+there; the original fix directory is not the runtime cache. Existing pinned
+staged assets must remain unchanged. The profile records EXE/runtime/recipe/
+shader identities in its prefix ownership marker. Changing these features needs
+a **new prefix/profile**, including an option-free profile for comparison.
+Do not repurpose an existing prefix or delete saves to reset a test. Back up
+saves separately and retain the previous profile/prefix for returning to it.
+
+This enables the Linux GE layer only. It does not register Pyroveil globally,
+in the Windows VM, or in the Helios host renderer. Log/fixture tests do not prove
+that a shader match occurred; use the selected game's Proton log and inspect
+Pyroveil's matched-shader messages on the actual GPU. No hardware rendering or
+performance improvement is certified by the launcher tests.

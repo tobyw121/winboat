@@ -6,13 +6,16 @@ $recipe='d3d11-fl10-v1'
 try{
  New-Item -Type Directory $temporary|Out-Null
  $exe=Join-Path $temporary 'game.exe';'fixture'|Set-Content $exe
- $script:driver='22.22.302.0'
- function Get-HeliosValidationIdentity {return @{version=$script:driver;manifestSha256=('a'*64);profile=[ordered]@{FeatureLevel11=1}}}
+ $script:driver='22.22.302.0';$script:feature=1
+ function Get-HeliosValidationIdentity {return @{version=$script:driver;manifestSha256=('a'*64);profile=[ordered]@{FeatureLevel11=$script:feature}}}
  function Test-HeliosProcessProfileSupport {return $true}
  $info=New-HeliosApplicationStartInfo $exe 'driver-default' '--windowed' $recipe
  if($info.EnvironmentVariables['HELIOS_DIAGNOSTIC_FEATURE_LEVEL'] -ne '0'){throw 'Recipe not applied to child.'}
  New-HeliosApplicationStartInfo $exe 'driver-default' '' $recipe|Out-Null
  Add-Content $exe 'updated'
+ Reject {New-HeliosApplicationStartInfo $exe 'driver-default' '' $recipe} 'changed'
+ New-HeliosApplicationStartInfo $exe 'driver-default' '' $recipe -RebindRecipe|Out-Null
+ $script:feature=0
  Reject {New-HeliosApplicationStartInfo $exe 'driver-default' '' $recipe} 'changed'
  New-HeliosApplicationStartInfo $exe 'driver-default' '' $recipe -RebindRecipe|Out-Null
  $script:driver='22.22.303.0'

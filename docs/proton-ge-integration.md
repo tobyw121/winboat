@@ -52,9 +52,10 @@ GE's Linux Wine fullscreen/FSR, NTSync and Media Foundation changes do not
 implement native Windows features. DXVK-NVAPI is intended for Wine and does not
 make NVIDIA APIs available through a virtual adapter. Pyroveil needs a tested
 native layer or a renderer-scoped shader policy; the Linux latency layer does
-not control the guest's offscreen-to-WDDM presentation chain. D7VK requires a
-separate native compatibility package and per-application validation. None of
-these components is enabled or advertised as working by these patches. HDR
+not control the guest's offscreen-to-WDDM presentation chain. D7VK and Linux-host Pyroveil now have the explicit optional routes described in
+[game recipe integration](ge-game-recipes.md); neither is globally enabled by
+the original presentation patches. Native Windows Pyroveil still needs separate
+integration and validation. HDR
 requires an end-to-end guest, scanout, viewer and host color pipeline.
 
 ## Persistent host shader caches
@@ -113,3 +114,11 @@ The extra texture samples can cost GPU time; this is an image-quality option,
 not a measured performance improvement or AMD FSR implementation. Test rendering
 covers both GL and GLES. The equivalent native viewer environment option is
 `HELIOS_VIEWER_SHARPEN=0..100`.
+
+## Further scoped extensions
+
+The newer [game recipe integration](ge-game-recipes.md) adds version-bound native
+Windows diagnostic recipes, optional app-local D7VK, and verified GE DXVK/
+Pyroveil options for the Linux UMU launcher. The native Windows Pyroveil port,
+HDR and Reflex remain outside this integration. No packaged .302 driver binary
+is silently changed by these application/helper updates.

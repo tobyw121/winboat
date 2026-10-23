@@ -52,7 +52,7 @@ $dll=Join-Path $directory $wrapper
 $stateFile=Join-Path $directory $(if($isD7vk){'.winboat-d7vk.json'}else{'.winboat-d3d9.json'})
 if($Action -eq 'Inspect') {
     [ordered]@{gameExe=$exe;architecture=$architecture;profile=if(Test-Path -LiteralPath $stateFile){$profileName}else{'none'};
-        localD3D9=(Test-Path -LiteralPath $dll);note='Minecraft Java uses OpenGL; do not apply the D3D9 profile to Java. Select the actual Icarus game executable, not its launcher.'} | ConvertTo-Json
+        localD3D9=(Test-Path -LiteralPath (Join-Path $directory 'd3d9.dll'));localD7VK=(Test-Path -LiteralPath (Join-Path $directory 'ddraw.dll'));wrapper=$wrapper;note='Minecraft Java uses OpenGL; do not apply the D3D9 profile to Java. Select the actual Icarus game executable, not its launcher.'} | ConvertTo-Json
     return
 }
 if($isD7vk -and $Action -ne 'Restore' -and $architecture -ne 'x32'){throw 'D7VK v2.3 supports x86 games only.'}

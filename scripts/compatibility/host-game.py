@@ -40,7 +40,7 @@ def proton_identity(value):
 
 def validate(profile):
     required = {'schema', 'exe', 'exeSha256', 'proton', 'prefix', 'gameId', 'args', 'options'}
-    if not isinstance(profile, dict) or set(profile) != required or type(profile['schema']) is not int or profile['schema'] != 1:
+    if not isinstance(profile, dict) or set(profile) - {'ge'} != required or type(profile['schema']) is not int or profile['schema'] != 1:
         raise ValueError('Unknown host game profile schema')
     exe = regular(profile['exe'])
     if exe.suffix.lower() != '.exe' or digest(exe) != profile['exeSha256']:
@@ -58,6 +58,11 @@ def validate(profile):
     options = profile['options']
     if not isinstance(options, dict) or set(options) != {'log', 'wined3d', 'disableEsync', 'disableFsync'} or any(type(v) is not bool for v in options.values()):
         raise ValueError('Unknown compatibility option')
+    if 'ge' in profile:
+        import ge_features
+        if options['wined3d']:
+            raise ValueError('GE Vulkan extensions cannot be combined with WineD3D')
+        ge_features.validate(profile['ge'], profile['proton']['root'], profile['exe'])
     return profile
 
 
@@ -83,7 +88,7 @@ def environment(profile, inherited):
     env = dict(inherited)
     for name in ('PROTONPATH', 'WINEPREFIX', 'GAMEID', 'STORE', 'PROTON_LOG', 'PROTON_USE_WINED3D',
                  'PROTON_NO_ESYNC', 'PROTON_NO_FSYNC', 'WINEDLLOVERRIDES', 'VK_INSTANCE_LAYERS',
-                 'DXVK_CONFIG_FILE', 'DXVK_FILTER_DEVICE_NAME', 'VK_ICD_FILENAMES', 'VK_DRIVER_FILES', 'PYROVEIL', 'LOW_LATENCY_LAYER'):
+                 'DXVK_CONFIG_FILE', 'DXVK_CONFIG', 'PROTON_USE_D7VK', 'PYROVEIL_CONFIG', 'DISABLE_PYROVEIL', 'VK_IMPLICIT_LAYER_PATH', 'VK_ADD_IMPLICIT_LAYER_PATH', 'DXVK_FILTER_DEVICE_NAME', 'VK_ICD_FILENAMES', 'VK_DRIVER_FILES', 'PYROVEIL', 'LOW_LATENCY_LAYER'):
         env.pop(name, None)
     env.update(PROTONPATH=profile['proton']['root'], WINEPREFIX=profile['prefix'], GAMEID=profile['gameId'], PROTON_LOG_DIR=profile['prefix'])
     for option, name in {'log': 'PROTON_LOG', 'wined3d': 'PROTON_USE_WINED3D',
@@ -100,7 +105,7 @@ def run(profile, dry_run=False):
     command = [str(Path(runner).resolve()), profile['exe'], *profile['args']]
     if dry_run:
         return {'command': command, 'prefix': profile['prefix'], 'runtime': profile['proton'],
-                'options': profile['options'], 'scope': 'Linux host only; VM unchanged'}
+                'options': profile['options'], 'ge': profile.get('ge'), 'scope': 'Linux host only; VM unchanged'}
     prefix = Path(profile['prefix'])
     prefix.mkdir(mode=0o700, parents=True, exist_ok=True)
     if prefix.stat().st_uid != os.getuid() or prefix.stat().st_mode & 0o077:
@@ -115,6 +120,7 @@ def run(profile, dry_run=False):
             raise ValueError('This prefix already has an active WinBoat launch') from error
         marker = prefix / '.winboat-umu.json'
         identity = {key: profile[key] for key in ('schema', 'exe', 'exeSha256', 'proton', 'gameId')}
+        if 'ge' in profile: identity['ge'] = profile['ge']
         if marker.exists() or marker.is_symlink():
             if marker.is_symlink() or marker.stat().st_size > 16384 or json.loads(marker.read_text()) != identity:
                 raise ValueError('Prefix belongs to a different game/runtime; select a new dedicated prefix')
@@ -122,8 +128,11 @@ def run(profile, dry_run=False):
             if set(p.name for p in prefix.iterdir()) != {'.winboat-umu.lock'}:
                 raise ValueError('Existing prefix is unmanaged; it will not be modified')
             private_json(marker, identity)
-        result = subprocess.run(command, cwd=Path(profile['exe']).parent,
-                                env=environment(profile, os.environ), check=False)
+        env = environment(profile, os.environ)
+        if 'ge' in profile:
+            import ge_features
+            env.update(ge_features.environment(profile['ge'], prefix))
+        result = subprocess.run(command, cwd=Path(profile['exe']).parent, env=env, check=False)
         return {'exitCode': result.returncode, 'scope': 'Linux host only; VM unchanged'}
 
 
@@ -134,6 +143,9 @@ def main():
     for flag in ('exe', 'proton', 'prefix', 'output'):
         add.add_argument('--' + flag, required=True)
     add.add_argument('--game-id', default='umu-default')
+    add.add_argument('--ge-recipe', choices=['none','dxgi-probe-v1','keep-fullscreen-v1'], default='none')
+    add.add_argument('--pyroveil', help='Directory containing a targeted pyroveil.json and optional cache assets')
+    add.add_argument('--d7vk', action='store_true', help='Use GE bundled D7VK for x86 games')
     add.add_argument('--argument', action='append', default=[])
     launch = sub.add_parser('run')
     launch.add_argument('profile')
@@ -142,6 +154,10 @@ def main():
     try:
         if arguments.action == 'create':
             profile = create(arguments.exe, arguments.proton, arguments.prefix, arguments.game_id, arguments.argument)
+            if arguments.ge_recipe != 'none' or arguments.pyroveil or arguments.d7vk:
+                import ge_features
+                profile['ge'] = ge_features.prepare(profile['proton']['root'], profile['exe'], arguments.ge_recipe, arguments.pyroveil, arguments.d7vk)
+                validate(profile)
             private_json(Path(arguments.output).expanduser(), profile)
             print('Profile created. Edit its four boolean options for per-game A/B tests.')
         else:
