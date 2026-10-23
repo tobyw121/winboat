@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"syscall"
 	"time"
 )
@@ -59,9 +60,9 @@ func runApplicationProfileAgent() {
 	if p.API == "compatibility" {
 		mode = "d3d11-fl10"
 	}
-	data, _ := json.Marshal(map[string]string{"executable": p.Exe, "mode": mode, "arguments": args, "script": script})
+	data, _ := json.Marshal(map[string]string{"executable": p.Exe, "mode": mode, "arguments": args, "script": script, "recipe": p.Recipe, "rebind": strconv.FormatBool(p.RebindRecipe)})
 	// All executable paths and arguments arrive as JSON data, never PowerShell source.
-	const code = `[Console]::InputEncoding=New-Object Text.UTF8Encoding($false);$d=[Console]::In.ReadToEnd()|ConvertFrom-Json;Add-Type -AssemblyName System.Windows.Forms;if([Windows.Forms.MessageBox]::Show(('Start '+$d.executable+[Environment]::NewLine+$d.arguments),'WinBoat application profile','YesNo','Question','Button2') -ne 'Yes'){exit 1};. $d.script -LibraryOnly;$info=New-HeliosApplicationStartInfo $d.executable $d.mode $d.arguments;[void][Diagnostics.Process]::Start($info)`
+	const code = `[Console]::InputEncoding=New-Object Text.UTF8Encoding($false);$d=[Console]::In.ReadToEnd()|ConvertFrom-Json;Add-Type -AssemblyName System.Windows.Forms;if([Windows.Forms.MessageBox]::Show(('Application: '+$d.executable+[Environment]::NewLine+'Recipe: '+$d.recipe+[Environment]::NewLine+'Rebind only: '+$d.rebind+[Environment]::NewLine+$d.arguments),'WinBoat application profile','YesNo','Question','Button2') -ne 'Yes'){exit 1};. $d.script -LibraryOnly;$info=New-HeliosApplicationStartInfo $d.executable $d.mode $d.arguments $d.recipe -RebindRecipe:($d.rebind -eq 'true');if($d.rebind -ne 'true'){[void][Diagnostics.Process]::Start($info)}`
 	ctx, cancel := context.WithTimeout(context.Background(), 85*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, filepath.Join(os.Getenv("SystemRoot"), "System32", "WindowsPowerShell", "v1.0", "powershell.exe"), "-NoProfile", "-NonInteractive", "-Command", code)

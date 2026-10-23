@@ -27,11 +27,13 @@
     <label class="integration-field">Graphics compatibility<select v-model="api"><option value="native">Driver defaults (recommended)</option><option value="compatibility">D3D11 feature level 10 · diagnostic</option></select><small>The diagnostic option requires a supporting installed driver.</small></label>
     <label class="integration-field">Display transfer<select v-model="transport"><option value="auto">Automatic (recommended)</option><option value="copy">Copy · compatibility fallback</option><option value="dmabuf">DMA-BUF · direct transfer</option></select></label>
    </div>
+   <div v-if="api==='native'" class="integration-fields"><label class="integration-field">Versioned diagnostic recipe<select v-model="recipe"><option value="">None (recommended)</option><option v-for="item in nativeRecipes" :key="item.id" :value="item.id">{{ item.label }}</option></select><small>Requires an updated guest service. First use binds the application and driver versions after Windows confirmation.</small></label></div>
+   <details v-if="recipe && api==='native'"><summary>Rebind after an application or driver update</summary><p>Changed executable, driver or driver options block this recipe. Rebinding accepts their current versions after Windows confirmation. It does not start the application. Choose None to stop using the recipe.</p><x-button :disabled="busy || toolsBusy || blocked || !exe" @click="run(rebindRecipe)">Rebind recipe in Windows</x-button></details>
    <div v-for="(argument,index) in appArguments" :key="index" class="integration-actions"><label class="integration-field">Argument {{ index+1 }}<input v-model="appArguments[index]" placeholder="e.g. -windowed"></label><x-button :disabled="busy || toolsBusy || blocked" :aria-label="'Remove argument '+(index+1)" @click="appArguments.splice(index,1)">Remove</x-button></div>
    <x-button :disabled="busy || toolsBusy || blocked || appArguments.length>=32" @click="appArguments.push('')">Add argument</x-button>
    <p>Each row is one argument. Spaces stay within that argument; no JSON or shell quoting is needed.</p>
   </details>
-  <div class="integration-actions"><x-button :disabled="busy || toolsBusy || blocked || !exe" @click="run(saveProfile)">Save profile</x-button><x-button class="integration-primary" :disabled="busy || toolsBusy || blocked || !exe" @click="run(launch)">Start application</x-button></div>
+  <div class="integration-actions"><x-button :disabled="busy || toolsBusy || blocked || !exe" @click="run(saveProfile)">Save profile</x-button><x-button class="integration-primary" :disabled="busy || toolsBusy || blocked || !exe" @click="run(()=>launch())">Start application</x-button></div>
   <p>Confirm the application start in Windows. Applying its display settings is a separate step and restarts the VM.</p>
   <details><summary>Apply display settings to the VM</summary><x-button :disabled="busy || toolsBusy || blocked || !exe" @click="run(applyProfile)">Apply display settings & restart</x-button><x-button :disabled="busy || toolsBusy || blocked" @click="run(restoreProfile)">Restore previous display settings</x-button></details>
  </div>
@@ -99,7 +101,7 @@ import {Winboat} from '../lib/winboat';import {WinboatConfig} from '../lib/confi
 import {WINBOAT_DIR,GUEST_API_PORT} from '../lib/constants';
 import {viewerTelemetryPath} from '../lib/helios-display';
 import {HELIOS_RESOLUTIONS,configureHeliosResolution} from '../../shared/helios-resolution';
-import {networkPolicy,resourcePolicy,changePolicy,applicationProfile,type ApplicationProfile,type NetworkMode} from '../../shared/vm-policies';
+import {networkPolicy,resourcePolicy,changePolicy,applicationProfile,nativeRecipes,type ApplicationProfile,type NetworkMode} from '../../shared/vm-policies';
 import {volumeSource,volumeTarget} from '../../shared/compose-volumes';
 import {nativeDesktopEnvironment} from '../../shared/native-desktop-environment';import {hostEnvironment} from '../lib/host-environment';
 const props=defineProps<{blocked:boolean;section:IntegrationSection}>(),emit=defineEmits<{busy:[value:boolean];changed:[]}>();
@@ -108,6 +110,7 @@ const {promisify}:typeof import('util')=require('util'),fetch:typeof import('nod
 const toolsBusy=ref(false);
 const winboat=new Winboat(),config=new WinboatConfig();const busy=ref(false),message=ref(''),automatic=ref(false),metrics=ref<any>(),metricText=ref('No sample yet. Viewer rate is not application FPS.');let previous:any;
 const exe=ref(''),appArguments=ref<string[]>([]),resolution=ref('1920x1080'),api=ref<ApplicationProfile['api']>('native'),transport=ref<ApplicationProfile['transport']>('auto'),profiles=ref<{id:string;exe:string}[]>([]),selected=ref('');
+const recipe=ref('');
 const sharpen=ref(config.config.viewerSharpenPercent??0);
 const cpuSet=ref(''),hugepages=ref(false),background=ref(config.config.viewerBackgroundFPS===5),network=ref<NetworkMode>('nat'),networkName=ref(''),scenario=ref('cold-boot'),backupId=ref(config.config.lastLiveBackupId??'');let before='';
 const tick=setInterval(()=>{if(props.section==='performance'&&automatic.value&&!busy.value&&!toolsBusy.value&&!props.blocked)void run(sample);},5000);onBeforeUnmount(()=>clearInterval(tick));watch([busy,toolsBusy],([a,b])=>emit('busy',a||b));
@@ -122,9 +125,9 @@ async function sample(){const result=await execute('workbench.py',['metrics','--
  if(winboat.qmpMgr){const responses=await Promise.allSettled([winboat.qmpMgr.executeCommand('query-kvm'),winboat.qmpMgr.executeCommand('query-status')]);result.qemu=responses.map(row=>row.status==='fulfilled'?row.value:{state:'unavailable'});}
  previous=current;metrics.value=result;}
 async function importFrames(){const choice=await remote.dialog.showOpenDialog({properties:['openFile'],filters:[{name:'PresentMon CSV',extensions:['csv']}]});if(!choice.canceled)metrics.value=await execute('workbench.py',['metrics','--presentmon',choice.filePaths[0],'--application',exe.value.split('\\').pop()||'']);}
-function profile(){return applicationProfile({schema:1,exe:exe.value,resolution:resolution.value,transport:transport.value,api:api.value,args:[...appArguments.value]});}
+function profile(){return applicationProfile({schema:1,exe:exe.value,resolution:resolution.value,transport:transport.value,api:api.value,args:[...appArguments.value],...(api.value==='native'&&recipe.value?{recipe:recipe.value}:{})});}
 async function saveProfile(){const p=profile(),id=crypto.randomBytes(16).toString('hex');fs.writeFileSync(path.join(privateRoot('ApplicationProfiles'),id+'.json'),JSON.stringify(p),{mode:0o600,flag:'wx'});profiles.value.push({id,exe:p.exe});selected.value=id;}
-async function loadProfile(){if(!/^[a-f0-9]{32}$/.test(selected.value))throw new Error('Choose a saved profile.');const file=path.join(privateRoot('ApplicationProfiles'),selected.value+'.json');if(fs.lstatSync(file).isSymbolicLink()||fs.statSync(file).size>131072)throw new Error('Invalid profile file.');const p=applicationProfile(JSON.parse(fs.readFileSync(file,'utf8')));exe.value=p.exe;resolution.value=p.resolution;transport.value=p.transport;api.value=p.api;appArguments.value=[...p.args];}
+async function loadProfile(){if(!/^[a-f0-9]{32}$/.test(selected.value))throw new Error('Choose a saved profile.');const file=path.join(privateRoot('ApplicationProfiles'),selected.value+'.json');if(fs.lstatSync(file).isSymbolicLink()||fs.statSync(file).size>131072)throw new Error('Invalid profile file.');const p=applicationProfile(JSON.parse(fs.readFileSync(file,'utf8')));exe.value=p.exe;resolution.value=p.resolution;transport.value=p.transport;api.value=p.api;appArguments.value=[...p.args];recipe.value=p.recipe??'';}
 async function replace(service:ReturnType<Winboat['parseCompose']>['services']['windows'],trial=false){const next=winboat.parseCompose();next.services.windows=service;await winboat.replaceCompose(next,trial);emit('changed');}
 async function applyProfile(){
  const p=profile();if(!await confirm('Apply application display settings and restart Windows?','Save Windows work first. These display settings affect the VM. Starting the application is a separate step.'))return;
@@ -133,7 +136,8 @@ async function applyProfile(){
  try{await replace(changePolicy(service,'application',{environment:{HELIOS_DISPLAY_WIDTH:chosen.environment.HELIOS_DISPLAY_WIDTH,HELIOS_DISPLAY_HEIGHT:chosen.environment.HELIOS_DISPLAY_HEIGHT}}));}catch(error){config.config.viewerTransport=old;if(prior===undefined)config.config.viewerProfileBefore=undefined;throw error;}
 }
 async function restoreProfile(){await restore('application');}
-async function launch(){const response=await fetch(`http://127.0.0.1:${winboat.getHostPort(GUEST_API_PORT)}/integration/application`,{method:'POST',headers:{'Content-Type':'application/json','X-WinBoat-Application':'confirm-in-windows'},body:JSON.stringify(profile()),timeout:95000});if(!response.ok)throw new Error(await response.text());message.value='Application start requested after Windows confirmation.';}
+async function rebindRecipe(){if(!recipe.value||api.value!=='native')throw new Error('Select a native recipe first.');await launch(true);}
+async function launch(rebindRecipe=false){const response=await fetch(`http://127.0.0.1:${winboat.getHostPort(GUEST_API_PORT)}/integration/application`,{method:'POST',headers:{'Content-Type':'application/json','X-WinBoat-Application':'confirm-in-windows'},body:JSON.stringify({...profile(),...(rebindRecipe?{rebindRecipe:true}:{})}),timeout:95000});if(!response.ok)throw new Error(await response.text());message.value=rebindRecipe?'Recipe rebinding requested. Confirm in Windows; the application is not started.':'Application start requested after Windows confirmation.';}
 async function apply(kind:'network'|'resources'){
  if(!await confirm('Apply policy and restart Windows?',kind==='network'?'Network changes may disconnect guest management and shared folders. Keep Local Desktop available; LAN mode exposes Windows on your local network.':'Performance is workload-dependent. Hugepages must already be reserved; no host reservation is changed.'))return;
  const service=winboat.parseCompose().services.windows;

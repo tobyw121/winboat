@@ -31,6 +31,10 @@ on:
       - 'helios/upstream/umd/src/forward/shaders.rs'
       - 'guest_server/scripts/Set-WinBoatGameCompatibility.ps1'
       - 'tests/game-compatibility.test.ps1'
+      - 'tests/d7vk-compatibility.test.ps1'
+      - 'tests/helios-game-recipes.test.ps1'
+      - 'guest_server/scripts/Helios-GameRecipes.ps1'
+      - 'guest_server/scripts/Start-HeliosApplication.ps1'
       - 'guest_server/scripts/Test-WinBoatOpenGL.ps1'
       - 'tests/opengl-game-probe.test.ps1'
       - 'tests/helios-adapter-vulkan.test.ps1'
@@ -63,6 +67,10 @@ on:
       - 'helios/upstream/umd/src/forward/shaders.rs'
       - 'guest_server/scripts/Set-WinBoatGameCompatibility.ps1'
       - 'tests/game-compatibility.test.ps1'
+      - 'tests/d7vk-compatibility.test.ps1'
+      - 'tests/helios-game-recipes.test.ps1'
+      - 'guest_server/scripts/Helios-GameRecipes.ps1'
+      - 'guest_server/scripts/Start-HeliosApplication.ps1'
       - 'guest_server/scripts/Test-WinBoatOpenGL.ps1'
       - 'tests/opengl-game-probe.test.ps1'
       - 'tests/helios-adapter-vulkan.test.ps1'
@@ -111,6 +119,8 @@ jobs:
         shell: pwsh
         run: |
           ./tests/game-compatibility.test.ps1
+          ./tests/d7vk-compatibility.test.ps1
+          ./tests/helios-game-recipes.test.ps1
           ./tests/opengl-game-probe.test.ps1
           ./tests/helios-adapter-vulkan.test.ps1
           ./tests/helios-device-profiles.test.ps1
@@ -118,6 +128,8 @@ jobs:
         shell: powershell
         run: |
           ./tests/game-compatibility.test.ps1
+          ./tests/d7vk-compatibility.test.ps1
+          ./tests/helios-game-recipes.test.ps1
           ./tests/opengl-game-probe.test.ps1
           ./tests/helios-adapter-vulkan.test.ps1
           ./tests/helios-device-profiles.test.ps1

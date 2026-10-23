@@ -26,7 +26,7 @@ for(const name of ['IntegrationDisplay','VMProjectTools','VMWorkbench','VMIntegr
   const data={busy:ref(false),displayBusy:ref(false),workbenchBusy:ref(false),toolsBusy:ref(false),message:ref(''),result:ref(''),
    toGuest:ref(true),toHost:ref(true),images:ref(false),label:ref('Before changes'),snapshots:ref([]),transfer:undefined,
    clipboardState:'Disconnected',clipboardMessage:'Connect to share text',status:'Refresh to check Windows availability.',
-   exe:ref(''),appArguments:ref([]),profiles:ref([]),selected:ref(''),resolution:ref('1920x1080'),api:ref('native'),transport:ref('auto'),
+   recipe:ref(''),nativeRecipes:[],exe:ref(''),appArguments:ref([]),profiles:ref([]),selected:ref(''),resolution:ref('1920x1080'),api:ref('native'),transport:ref('auto'),
    HELIOS_RESOLUTIONS:[{key:'1280x800'},{key:'1920x1080'}],automatic:ref(false),metrics:ref(),metricText:'No sample yet. Viewer rate is not application FPS.',
    cpuSet:ref(''),hugepages:ref(false),network:ref('nat'),networkName:ref(''),sharpen:ref(0),background:ref(false),trialMessage:'',scenario:ref('cold-boot'),backupId:ref(''),
    compatibility:[],records:ref([]),before:ref(''),after:ref(''),points:'',exportId:ref(''),keep:ref(5),availableScopes:['read','graphics','power','application','clipboard','maintenance'],scopes:ref(['read']),scopeLabels:{read:'Read status'},pairingCode:'',

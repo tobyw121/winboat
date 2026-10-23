@@ -1,5 +1,6 @@
 param([string]$ProfileFile,[switch]$LibraryOnly)
 . (Join-Path $PSScriptRoot 'Helios-ValidationCommon.ps1')
+. (Join-Path $PSScriptRoot 'Helios-GameRecipes.ps1')
 function Test-HeliosProcessProfileSupport([string]$Marker='HELIOS_DIAGNOSTIC_FEATURE_LEVEL') {
     [void](Get-HeliosValidationIdentity)
     $state=Read-HeliosValidationJson (Join-Path $env:ProgramData 'Helios\install-state.json')
@@ -16,10 +17,13 @@ function Test-HeliosProcessProfileSupport([string]$Marker='HELIOS_DIAGNOSTIC_FEA
     # source. Old binaries lacking the reader must never silently ignore it.
     return [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($path)).Contains($Marker)
 }
-function New-HeliosApplicationStartInfo([string]$Executable,[string]$Mode,[string]$ArgumentLine='') {
+function New-HeliosApplicationStartInfo([string]$Executable,[string]$Mode,[string]$ArgumentLine='',[string]$Recipe='',[switch]$RebindRecipe) {
+    if($RebindRecipe -and -not $Recipe){throw 'Select a recipe before rebinding.'}
+    if($Recipe){if($Mode -ne 'driver-default'){throw 'A recipe cannot be combined with another compatibility override.'};$Mode=Get-HeliosRecipeMode $Recipe}
     if ($Mode -notin @('driver-default','d3d11-fl10','d3d11-fl11','d3d11-backend-caps')) {throw 'Unknown application profile.'}
     $marker=if($Mode -eq 'd3d11-backend-caps'){'HELIOS_DIAGNOSTIC_BACKEND_CAPS'}else{'HELIOS_DIAGNOSTIC_FEATURE_LEVEL'}
     if ($Mode -ne 'driver-default' -and -not (Test-HeliosProcessProfileSupport $marker)) {throw 'Installed UMD does not support this process-local diagnostic profile.'}
+    if($Recipe){Assert-HeliosRecipeBinding $Executable $Recipe -Rebind:$RebindRecipe}
     $info=New-Object Diagnostics.ProcessStartInfo
     $info.FileName=$Executable;$info.Arguments=$ArgumentLine;$info.WorkingDirectory=Split-Path -Parent $Executable
     $info.UseShellExecute=$false

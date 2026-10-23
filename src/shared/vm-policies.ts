@@ -39,10 +39,15 @@ export function resourcePolicy<T extends Service>(service:T,cpus:string,hugepage
  const env={HELIOS_HUGEPAGES:hugepages?'2M':'off',HELIOS_PREALLOC:hugepages?'1':'0'};
  return changePolicy(service,'resources',{environment:env,cpuset:cpus||null});
 }
-export type ApplicationProfile={schema:1;exe:string;resolution:string;transport:'auto'|'copy'|'dmabuf';api:'native'|'compatibility';args:string[]};
+export const nativeRecipes=[
+ {id:'d3d11-fl10-v1',label:'D3D11 feature level 10 · versioned diagnostic'},
+ {id:'d3d11-backend-caps-v1',label:'D3D11 backend capability checks · versioned diagnostic'},
+] as const;
+export type ApplicationProfile={schema:1;exe:string;resolution:string;transport:'auto'|'copy'|'dmabuf';api:'native'|'compatibility';args:string[];recipe?:typeof nativeRecipes[number]['id']};
 export function applicationProfile(value:unknown):ApplicationProfile{
  const p=value as ApplicationProfile;
  if(!p||p.schema!==1||!/^([A-Za-z]:\\|\\\\)[^\x00-\x1f]*\.exe$/i.test(p.exe)||p.exe.length>1024||!/^\d{3,4}x\d{3,4}$/.test(p.resolution)||!['auto','copy','dmabuf'].includes(p.transport)||!['native','compatibility'].includes(p.api)||!Array.isArray(p.args)||p.args.length>32||p.args.some(a=>typeof a!=='string'||a.length>2048||/[\x00\r\n]/.test(a)))throw new Error('Invalid application profile');
  const [w,h]=p.resolution.split('x').map(Number);if(w<640||h<480||w>7680||h>4320)throw new Error('Resolution outside supported profile bounds');
- return {...p,args:[...p.args]};
+ if(p.recipe!==undefined&&(p.api!=='native'||!nativeRecipes.some(r=>r.id===p.recipe)))throw new Error('Invalid versioned application recipe');
+ return {schema:1,exe:p.exe,resolution:p.resolution,transport:p.transport,api:p.api,args:[...p.args],...(p.recipe?{recipe:p.recipe}:{})};
 }

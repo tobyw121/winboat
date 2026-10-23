@@ -12,16 +12,24 @@ import (
 var applicationProfileMutex sync.Mutex
 
 type applicationProfile struct {
-	Schema     int      `json:"schema"`
-	Exe        string   `json:"exe"`
-	Resolution string   `json:"resolution"`
-	Transport  string   `json:"transport"`
-	API        string   `json:"api"`
-	Args       []string `json:"args"`
+	Schema       int      `json:"schema"`
+	Exe          string   `json:"exe"`
+	Resolution   string   `json:"resolution"`
+	Transport    string   `json:"transport"`
+	API          string   `json:"api"`
+	Args         []string `json:"args"`
+	Recipe       string   `json:"recipe,omitempty"`
+	RebindRecipe bool     `json:"rebindRecipe,omitempty"`
 }
 
 func validApplicationProfile(p applicationProfile) bool {
 	if p.Schema != 1 || len(p.Exe) > 1024 || !strings.HasSuffix(strings.ToLower(p.Exe), ".exe") || !((len(p.Exe) > 3 && p.Exe[1] == ':' && p.Exe[2] == '\\') || strings.HasPrefix(p.Exe, `\\`)) || strings.ContainsAny(p.Exe, "\x00\r\n") || (p.API != "native" && p.API != "compatibility") || len(p.Args) > 32 {
+		return false
+	}
+	if p.Recipe != "" && (p.API != "native" || (p.Recipe != "d3d11-fl10-v1" && p.Recipe != "d3d11-backend-caps-v1")) {
+		return false
+	}
+	if p.RebindRecipe && p.Recipe == "" {
 		return false
 	}
 	for _, a := range p.Args {

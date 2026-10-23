@@ -16,3 +16,10 @@ test('restoring a resource or backup policy preserves newer network and share ch
  const first={...service,volumes:['disk:/storage']};const mounted=changePolicy(first,'live-backup',{volumes:[...first.volumes,'private:/backup']});mounted.volumes.push('later:/shares/later');
  assert.deepEqual(changePolicy(mounted,'live-backup',null).volumes,['disk:/storage','later:/shares/later']);
 });
+
+test('versioned native recipes are explicit and cannot smuggle rebind requests into saved profiles',()=>{
+ const p={schema:1,exe:'C:\\Games\\app.exe',resolution:'1920x1080',transport:'auto',api:'native',args:['a b'],recipe:'d3d11-fl10-v1'};
+ assert.equal(applicationProfile(p).recipe,p.recipe);
+ assert.throws(()=>applicationProfile({...p,recipe:'unknown'}));assert.throws(()=>applicationProfile({...p,api:'compatibility'}));
+ assert.equal('rebindRecipe' in applicationProfile({...p,rebindRecipe:true}),false);
+});

@@ -34,3 +34,27 @@ func TestApplicationProfileConsentBoundary(t *testing.T) {
 		t.Fatal("newline accepted")
 	}
 }
+
+func TestApplicationRecipeValidation(t *testing.T) {
+	p := applicationProfile{Schema: 1, Exe: `C:\game.exe`, API: "native", Recipe: "d3d11-fl10-v1"}
+	if !validApplicationProfile(p) {
+		t.Fatal("versioned recipe rejected")
+	}
+	p.RebindRecipe = true
+	if !validApplicationProfile(p) {
+		t.Fatal("explicit rebind rejected")
+	}
+	p.API = "compatibility"
+	if validApplicationProfile(p) {
+		t.Fatal("stacked overrides accepted")
+	}
+	p.API = "native"
+	p.Recipe = "unknown"
+	if validApplicationProfile(p) {
+		t.Fatal("unknown recipe accepted")
+	}
+	p.Recipe = ""
+	if validApplicationProfile(p) {
+		t.Fatal("rebind without recipe accepted")
+	}
+}
