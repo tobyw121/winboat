@@ -1,0 +1,12 @@
+{
+  "revision": "fecffde64fd32399a877b452332681ef0db7993e",
+  "sha256": "ae86f747ad2a43ad9c05a88cd58def868a99aaaa4e9e78224185ebbaea04dbee",
+  "repository": "tobyw121/winboat",
+  "winboatCommit": "ce72993ed2daa9d9c41b177e226fab79fa82efc1",
+  "sourceSnapshot": "d82ce565ac792eb48da5e59f2a82a12ff221851d",
+  "sourceLockSha256": "a9d80774e49dfafd841432720b0b83dae86aadf33da67d8f94cf02dfbb15b82c",
+  "workflow": ".github/workflows/build-helios-windows.yml",
+  "manifestSha256": "8eaab5151a331071e723e6cf5950d817cb62c37c772e7f862852e2a496cb6ead",
+  "driverVersion": "22.22.302.0",
+  "compatibilityPatchSha256": "29be0742615861e17085b7ff7b6b4f4faf26ffcb83685a91e74fe05a8a26fb09"
+}

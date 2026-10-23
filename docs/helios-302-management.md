@@ -1,8 +1,12 @@
 # Graphics management, measured profiles and .302 symbol artifacts
 
-The bundled stable installer remains **22.22.291.0**. The .301 Windows build
-completed successfully; .302 is the new experimental source candidate with
-separate Mesa debug artifacts. A successful build is not hardware acceptance.
+The bundled stable installer remains **22.22.291.0**. The .302 Windows release build
+[39809847396](https://github.com/tobyw121/winboat/actions/runs/39809847396)
+completed successfully. Its separate installer, including the opt-in pinned GE
+presentation fixes, is available in
+[`resources/helios-22.22.302.0/`](../resources/helios-22.22.302.0/).
+It includes a build receipt, exact patch receipt and checksums. Mesa symbols
+remain separate CI artifacts. A successful build is not hardware acceptance.
 The source version alone does not identify an installed stack: keep the CI
 receipt, installer checksum, package manifest and source commit together.
 
