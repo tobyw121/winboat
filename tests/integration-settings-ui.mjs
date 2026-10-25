@@ -10,7 +10,7 @@ import {parse} from '@vue/compiler-sfc';
 import {compile} from '@vue/compiler-dom';
 import {integrationSections} from '../src/shared/integration-navigation.ts';
 const root=path.resolve(import.meta.dirname,'..'),temporary=fs.mkdtempSync(path.join(os.tmpdir(),'winboat-ui-'));
-const names=['VMIntegration','VMWorkbench','VMProjectTools','IntegrationDisplay'];
+const names=['VMIntegration','VMWorkbench','VMProjectTools','IntegrationDisplay','ImportVM','VMRecoveryStatus'];
 const templates=Object.fromEntries(names.map(name=>{
  const {descriptor}=parse(fs.readFileSync(path.join(root,'src/renderer/components',name+'.vue'),'utf8'));
  return [name,{code:compile(descriptor.template.content,{mode:'function',isCustomElement:tag=>tag.startsWith('x-')}).code,
@@ -21,9 +21,9 @@ import * as Vue from '/vue.js';
 const templates=${JSON.stringify(templates)},sections=${JSON.stringify(integrationSections)};
 const {ref,computed}=Vue,active=ref('overview'),blocked=ref(false),calls=[],state={};
 const components={Icon:{render:()=>Vue.h('svg',{'aria-hidden':true,width:16,height:16,viewBox:'0 0 24 24'},[Vue.h('rect',{x:4,y:4,width:16,height:16,rx:4,fill:'none',stroke:'currentColor','stroke-width':1.5})])}};
-for(const name of ['IntegrationDisplay','VMProjectTools','VMWorkbench','VMIntegration']){
+for(const name of ['IntegrationDisplay','VMProjectTools','VMWorkbench','VMIntegration','ImportVM','VMRecoveryStatus']){
  components[name]={props:['blocked','section'],components,setup(props){
-  const data={busy:ref(false),displayBusy:ref(false),workbenchBusy:ref(false),toolsBusy:ref(false),message:ref(''),result:ref(''),
+  const data={candidate:ref(undefined),trusted:ref(false),storage:ref(''),busy:ref(false),displayBusy:ref(false),workbenchBusy:ref(false),toolsBusy:ref(false),message:ref(''),result:ref(''),
    toGuest:ref(true),toHost:ref(true),images:ref(false),label:ref('Before changes'),snapshots:ref([]),transfer:undefined,
    clipboardState:'Disconnected',clipboardMessage:'Connect to share text',status:'Refresh to check Windows availability.',
    recipe:ref(''),nativeRecipes:[],exe:ref(''),appArguments:ref([]),profiles:ref([]),selected:ref(''),resolution:ref('1920x1080'),api:ref('native'),transport:ref('auto'),
@@ -42,6 +42,7 @@ for(const name of ['IntegrationDisplay','VMProjectTools','VMWorkbench','VMIntegr
 const slotValues=Object.fromEntries(['sharing','display','performance','diagnostics'].map(area=>[area,ref('retained')]));
 const slotViews=Object.fromEntries(['sharing','display','performance','diagnostics'].map(area=>[area,()=>Vue.h('div',{class:'integration-card','data-slot':area},[Vue.h('h3',null,area+' extension'),Vue.h('label',null,['Extension preference',Vue.h('input',{'data-slot-input':area,value:slotValues[area].value,onInput:e=>slotValues[area].value=e.target.value})])])]));
 const app=Vue.createApp({render:()=>Vue.h(components.VMIntegration,null,slotViews)});app.config.errorHandler=e=>{window.fixtureError=String(e)};app.mount('#app');
+window.showRecovery=()=>{app.unmount();Vue.createApp({render:()=>Vue.h('div',null,[Vue.h(components.ImportVM),Vue.h(components.VMRecoveryStatus)])}).mount('#app')};
 window.fixture={active,blocked,state,calls};window.fixtureReady=true;
 </script></body></html>`;
 const server=http.createServer((request,response)=>{
@@ -93,6 +94,15 @@ try{
  await click('Diagnostics');assert.equal(await visible('Run graphics probes · confirm in Windows'),false);
  await evaluate('window.fixture.blocked.value=true');await click('Applications');assert.equal(await evaluate("Array.from(document.querySelectorAll('input')).find(e=>e.placeholder.endsWith('Game.exe')).matches(':disabled')"),true);
  assert.equal(await evaluate('window.fixtureError'),undefined);
+ await evaluate('window.showRecovery()');assert.equal(await visible('Choose VM folder'),true);assert.equal(await visible('Import existing VM'),false);
+ await evaluate("window.fixture.state.ImportVM.candidate.value={storage:'/retained/Windows VM',disks:['data.img'],compose:{services:{windows:{environment:{CPU_CORES:'6',RAM_SIZE:'12G'},image:'saved-image'}}}}");
+ const importDisabled=()=>evaluate("Array.from(document.querySelectorAll('x-button')).find(e=>e.textContent.trim()==='Import existing VM').hasAttribute('disabled')");
+ assert.equal(await importDisabled(),true);
+ await evaluate("document.querySelector('input[type=checkbox]').click()");assert.equal(await importDisabled(),false);
+ await click('Import existing VM');assert.ok((await evaluate('JSON.parse(JSON.stringify(window.fixture.calls))')).includes('restore'));
+ await evaluate('window.fixture.state.ImportVM.busy.value=true');assert.equal(await evaluate("Array.from(document.querySelectorAll('x-button')).find(e=>e.textContent.trim()==='Choose VM folder').hasAttribute('disabled')"),true);
+ assert.equal(await evaluate('window.fixtureError'),undefined);
+ console.log('VM import UI: folder selection, preview, trust requirement, import action and busy controls passed.');
  console.log('Integration UI: seven sections, advanced disclosure, retained form state, literal arguments, display actions, blocked controls and 1200/480px layouts passed.');
 }finally{
  socket?.close();browser?.kill('SIGKILL');await new Promise(resolve=>server.close(resolve));

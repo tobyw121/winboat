@@ -38,6 +38,7 @@
                         <div class="flex flex-row gap-4">
                             <x-button toggled class="px-6" @click="currentStepIdx++">Next</x-button>
                         </div>
+                        <ImportVM />
                     </div>
     
                     <!-- License -->
@@ -649,7 +650,7 @@
                             <x-label class="text-lg text-gray-400 text-center">
                                 Windows has been installed successfully!
                             </x-label>
-                            <x-button @click="$router.push('/home')">Finish</x-button>
+                            <x-button @click="finishSetup">Finish</x-button>
                          </div>
                     </div>
                 </div>
@@ -660,6 +661,7 @@
 </template>
 
 <script setup lang="ts">
+import ImportVM from '../components/ImportVM.vue';
 import SharedFolders from '../components/SharedFolders.vue';
 import {sharedFolderErrors, type SharedFolder} from '../../shared/shared-folders';
 import { openLocalDesktop, localDisplayState, localDisplayMessage } from '../lib/helios-display';
@@ -759,6 +761,8 @@ const steps: Step[] = [
         icon: "bx:bxs-check-circle",
     },
 ];
+
+function finishSetup(){window.location.reload();}
 
 const MIN_CPU_CORES = 1;
 const MIN_RAM_GB = 2;

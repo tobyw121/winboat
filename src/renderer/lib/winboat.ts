@@ -1,3 +1,4 @@
+import {trySaveVmRecovery} from "../../shared/vm-recovery";
 import {guestFetch} from './guest-session';
 import { guestNeedsUpdate } from '../../shared/guest-protocol';
 import { validateConfiguredShares } from './shared-folders';
@@ -188,6 +189,9 @@ class AppManager {
     }
 }
 
+let vmMonitoringEnabled=false;
+export function enableVmMonitoring(){vmMonitoringEnabled=true;}
+
 export class Winboat {
     private static instance: Winboat;
     // Update Intervals
@@ -232,6 +236,7 @@ export class Winboat {
         
         // This is a special interval which will never be destroyed
         this.#containerInterval = setInterval(skipWhileRunning(async () => {
+            if(!vmMonitoringEnabled || !fs.existsSync(path.join(WINBOAT_DIR,'docker-compose.yml')))return;
             const _containerStatus = await this.getContainerStatus();
 
             if (_containerStatus !== this.containerStatus.value) {
@@ -251,6 +256,7 @@ export class Winboat {
         this.#wbConfig = new WinboatConfig();
 
         this.appMgr = new AppManager();
+        trySaveVmRecovery(WINBOAT_DIR);
 
         Winboat.instance = this;
 
@@ -581,6 +587,7 @@ export class Winboat {
     async configurationTrial(action: 'status'|'confirm'|'recover'|'accept-external' = 'status') {
         const script = remote.app.isPackaged ? path.join(process.resourcesPath,'graphics-tools','config-trial.py') : path.resolve(remote.app.getAppPath(),'../..','scripts/helios/config-trial.py');
         const {stdout} = await execFileAsync('python3',[script,action],{timeout:330000,maxBuffer:65536});
+        if (action==='confirm' || action==='accept-external') trySaveVmRecovery(WINBOAT_DIR);
         return JSON.parse(stdout) as {status:string;deadline?:number};
     }
 
@@ -641,6 +648,7 @@ export class Winboat {
             // 5. Deploy the container with the new compose file
             await execFileAsync('docker', ['compose', '-f', composeFilePath, 'up', '-d']);
 
+            if (!trial) trySaveVmRecovery(WINBOAT_DIR);
             logger.info("Replace compose config completed, successfully deployed new container");
 
         } catch(error) {

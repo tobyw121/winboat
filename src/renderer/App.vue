@@ -130,7 +130,7 @@ import { routes } from './router';
 import { Icon } from '@iconify/vue';
 import { onMounted, ref, useTemplateRef, watch } from 'vue';
 import { isInstalled } from './lib/install';
-import { Winboat } from './lib/winboat';
+import { Winboat, enableVmMonitoring } from './lib/winboat';
 import { openAnchorLink } from './utils/openLink';
 import { WinboatConfig } from './lib/config';
 import { USBManager } from './lib/usbmanager';
@@ -154,12 +154,13 @@ const rerenderCounter = ref(0); // TODO: Hack for non-reactive data
 const novncURL = ref("");
 
 onMounted(async () => {
-    new USBManager(); // Instantiate singleton class
     const winboatInstalled = await isInstalled();
     if (!winboatInstalled) {
         console.log("Not installed, redirecting to setup...")
         $router.push('/setup');
     } else {
+        enableVmMonitoring();
+        new USBManager(); // Initialize VM-dependent monitoring only after configuration is available.
         winboat = new Winboat(); // Instantiate singleton class
         wbConfig = new WinboatConfig(); // Instantiate singleton class
         $router.push('/home');

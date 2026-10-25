@@ -1,3 +1,4 @@
+import {existingVmDisks,trySaveVmRecovery} from "../../shared/vm-recovery";
 import {guestFetch} from './guest-session';
 import { prepareSharedFolders } from './shared-folders';
 import { volumeTarget } from '../../shared/compose-volumes';
@@ -141,9 +142,8 @@ export class InstallManager {
 
     async createComposeFile() {
         validateAtlasSelection(this.conf.atlasEnabled, this.conf.windowsVersion, this.conf.customIsoPath);
-        if (this.conf.atlasEnabled && fs.existsSync(this.conf.installFolder) &&
-            fs.readdirSync(this.conf.installFolder).some(name => /^(data.*|windows|system)\.(img|qcow2?|raw|vhdx?|vmdk)$/i.test(name))) {
-            throw new Error('Atlas setup is available for a new VM only. Select a new installation directory. Existing disks will not be modified.');
+        if (existingVmDisks(this.conf.installFolder).length) {
+            throw new Error('This folder contains an existing Windows disk. Use Import existing VM on the welcome screen.');
         }
         this.changeState(InstallStates.CREATING_COMPOSE_FILE);
 
@@ -514,6 +514,7 @@ export class InstallManager {
             if (this.conf.atlasEnabled && this.conf.atlasMode === 'iso') await this.monitorAtlas();
             if (this.conf.heliosEnabled) await this.monitorHelios();
             if (this.conf.atlasEnabled && this.conf.atlasMode === 'live') await this.monitorAtlas();
+            trySaveVmRecovery(WINBOAT_DIR);
             this.changeState(InstallStates.COMPLETED);
 
             logger.info('Installation completed successfully.');
@@ -527,10 +528,11 @@ export class InstallManager {
 }
 
 export async function isInstalled() {
+    if (!fs.existsSync(composeFilePath)) return false;
     // Check if a docker container named WinBoat exists
     try {
         const { stdout: res } = await execAsync('docker ps -a --filter "name=WinBoat" --format "{{.Names}}"');
-        return res.includes('WinBoat');
+        return res.trim().split('\n').includes('WinBoat');
     } catch(e) {
         logger.error("Failed to get WinBoat status, is Docker installed?");
         logger.error(e);

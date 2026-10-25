@@ -1,6 +1,7 @@
 const fs: typeof import("fs") = require("fs");
 const path: typeof import("path") = require("path");
 import { type WinApp } from "../../types";
+import {trySaveVmRecovery} from "../../shared/vm-recovery";
 import { WINBOAT_DIR } from "./constants";
 import { type PTSerializableDeviceInfo } from "./usbmanager";
 
@@ -69,6 +70,7 @@ export class WinboatConfig {
     writeConfig(): void {
         console.log("writing data: ", this.#configData);
         fs.writeFileSync(this.#configPath, JSON.stringify(this.#configData, null, 4), "utf-8");
+        trySaveVmRecovery(WINBOAT_DIR);
     }
 
     readConfig(): WinboatConfigObj {

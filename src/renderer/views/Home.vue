@@ -47,6 +47,7 @@
             <!-- Buttons -->
             <div v-if="!winboat.containerActionLoading.value" class="flex flex-row items-center gap-5 text-gray-200/80">
                 <button title="Start" class="generic-hover" v-if="
+                    winboat.containerStatus.value === ContainerStatus.Created ||
                     winboat.containerStatus.value === ContainerStatus.Exited ||
                     winboat.containerStatus.value === ContainerStatus.Dead
                 " @click="winboat.startContainer()">
@@ -68,6 +69,8 @@
                 <x-throbber class="w-16 h-16"></x-throbber>
             </div>
         </x-card>
+
+        <VMRecoveryStatus />
 
         <!-- Metrics -->
         <div
@@ -112,6 +115,7 @@
 </template>
 
 <script setup lang="ts">
+import VMRecoveryStatus from '../components/VMRecoveryStatus.vue';
 import { onMounted, ref } from 'vue';
 import { ContainerStatus, Winboat } from '../lib/winboat';
 import { type ComposeConfig } from '../../types';

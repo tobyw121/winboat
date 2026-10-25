@@ -98,6 +98,7 @@ import type {IntegrationSection} from '../../shared/integration-navigation';
 import VMProjectTools from './VMProjectTools.vue';
 import {testHelios,trialMessage} from '../lib/graphics-trial';
 import {Winboat} from '../lib/winboat';import {WinboatConfig} from '../lib/config';
+import {trySaveVmRecovery} from '../../shared/vm-recovery';
 import {WINBOAT_DIR,GUEST_API_PORT} from '../lib/constants';
 import {viewerTelemetryPath} from '../lib/helios-display';
 import {HELIOS_RESOLUTIONS,configureHeliosResolution} from '../../shared/helios-resolution';
@@ -126,7 +127,7 @@ async function sample(){const result=await execute('workbench.py',['metrics','--
  previous=current;metrics.value=result;}
 async function importFrames(){const choice=await remote.dialog.showOpenDialog({properties:['openFile'],filters:[{name:'PresentMon CSV',extensions:['csv']}]});if(!choice.canceled)metrics.value=await execute('workbench.py',['metrics','--presentmon',choice.filePaths[0],'--application',exe.value.split('\\').pop()||'']);}
 function profile(){return applicationProfile({schema:1,exe:exe.value,resolution:resolution.value,transport:transport.value,api:api.value,args:[...appArguments.value],...(api.value==='native'&&recipe.value?{recipe:recipe.value}:{})});}
-async function saveProfile(){const p=profile(),id=crypto.randomBytes(16).toString('hex');fs.writeFileSync(path.join(privateRoot('ApplicationProfiles'),id+'.json'),JSON.stringify(p),{mode:0o600,flag:'wx'});profiles.value.push({id,exe:p.exe});selected.value=id;}
+async function saveProfile(){const p=profile(),id=crypto.randomBytes(16).toString('hex');fs.writeFileSync(path.join(privateRoot('ApplicationProfiles'),id+'.json'),JSON.stringify(p),{mode:0o600,flag:'wx'});profiles.value.push({id,exe:p.exe});selected.value=id;trySaveVmRecovery(WINBOAT_DIR);}
 async function loadProfile(){if(!/^[a-f0-9]{32}$/.test(selected.value))throw new Error('Choose a saved profile.');const file=path.join(privateRoot('ApplicationProfiles'),selected.value+'.json');if(fs.lstatSync(file).isSymbolicLink()||fs.statSync(file).size>131072)throw new Error('Invalid profile file.');const p=applicationProfile(JSON.parse(fs.readFileSync(file,'utf8')));exe.value=p.exe;resolution.value=p.resolution;transport.value=p.transport;api.value=p.api;appArguments.value=[...p.args];recipe.value=p.recipe??'';}
 async function replace(service:ReturnType<Winboat['parseCompose']>['services']['windows'],trial=false){const next=winboat.parseCompose();next.services.windows=service;await winboat.replaceCompose(next,trial);emit('changed');}
 async function applyProfile(){
