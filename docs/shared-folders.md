@@ -1,6 +1,6 @@
 # Shared folders
 
-In **Configuration → Shared Folders**, add a Linux directory, choose its Windows
+In **Configuration → VM integration → Shared folders**, add a Linux directory, choose its Windows
 share name and optionally enable **Read only**. Multiple folders are supported.
 Disable an entry to keep its settings without exporting it, or remove it.
 **Save shared folders** applies just these folders and restarts the VM, even

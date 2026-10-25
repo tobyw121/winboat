@@ -46,7 +46,7 @@
    <ul><li v-for="row in snapshots" :key="row.id" class="integration-snapshot"><div>{{ row.label }}<small>{{ row.createdAtUtc }} · {{ Math.ceil(row.archiveBytes/1048576) }} MiB</small></div><div><x-button @click="run(()=>snapshot('restore',row.id))">Restore</x-button><x-button @click="run(()=>snapshot('delete',row.id))">Delete</x-button></div></li></ul>
    <details><summary>What is saved & recovery options</summary><p>Includes VM storage and firmware. Shared folders and external disks are excluded. Restoring keeps the previous storage and leaves the VM stopped. Archives may contain passwords; keep them private.</p><x-button @click="run(()=>snapshot('recover'))">Recover interrupted restore</x-button></details>
   </div>
-  <div v-for="area in ['sharing','display','performance','diagnostics']" :key="area" v-show="active===area && !!$slots[area]" class="integration-stack"><slot :name="area" /></div>
+  <div v-for="area in ['folders','display','performance','diagnostics']" :key="area" v-show="active===area && !!$slots[area]" class="integration-stack"><slot :name="area" /></div>
   <VMWorkbench :section="active" :blocked="busy || displayBusy || blocked" @busy="workbenchBusy=$event" @changed="emit('changed')" />
   <IntegrationDisplay v-show="active==='display'" :blocked="busy || workbenchBusy || blocked" @busy="displayBusy=$event" @changed="emit('changed')" />
  </fieldset>

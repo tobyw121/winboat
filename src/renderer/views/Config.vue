@@ -144,13 +144,13 @@
                                 <p v-if="resolutionMessage" class="text-sm text-neutral-400 mt-2">{{ resolutionMessage }}</p>
                             </div>
                         </template>
-                        <template #sharing>
+                        <template #folders>
                             <div class="integration-card">
                                 <h3>Shared folders</h3>
                                 <SharedFolders v-model="sharedFolders" :disabled="integrationBusy || graphicsBusy || isApplyingChanges" />
                                 <div class="integration-actions">
                                     <x-button :disabled="integrationBusy || graphicsBusy || isApplyingChanges || !sharesNeedSaving || !!sharedFolderErrors(sharedFolders).length" @click="saveShares">Save shared folders</x-button>
-                                    <span class="text-sm text-neutral-400">Applies these folders and restarts the VM.</span>
+                                    <span class="text-sm text-neutral-400">Applies these folders and restarts the VM. Save your work in Windows first.</span>
                                 </div>
                                 <p v-if="shareSaveMessage" class="text-sm mt-2" role="status">{{ shareSaveMessage }}</p>
                                 <div class="integration-actions"><x-button :disabled="integrationBusy || graphicsBusy || isApplyingChanges || checkingShares || !sharedFolders.some(folder => folder.enabled) || winboat.containerStatus.value !== ContainerStatus.Running || JSON.stringify(sharedFolders) !== origSharedFolders || !compose?.services.windows['x-winboat-shared-folders']" @click="testShares">Test saved shares</x-button><span class="text-sm text-neutral-400">Save changes and start the VM before testing.</span></div>

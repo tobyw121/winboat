@@ -6,7 +6,8 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import {spawn,spawnSync} from 'node:child_process';
-import {parse} from '@vue/compiler-sfc';
+import {parse,compileScript} from '@vue/compiler-sfc';
+import {build as bundle} from 'esbuild';
 import {compile} from '@vue/compiler-dom';
 import {integrationSections} from '../src/shared/integration-navigation.ts';
 const root=path.resolve(import.meta.dirname,'..'),temporary=fs.mkdtempSync(path.join(os.tmpdir(),'winboat-ui-'));
@@ -16,8 +17,15 @@ const templates=Object.fromEntries(names.map(name=>{
  return [name,{code:compile(descriptor.template.content,{mode:'function',isCustomElement:tag=>tag.startsWith('x-')}).code,
   actions:[...descriptor.scriptSetup.content.matchAll(/(?:async\s+)?function\s+(\w+)\(/g)].map(m=>m[1])}];
 }));
+// Execute the real folder editor, replacing only the native folder-picker boundary.
+const folderSource=parse(fs.readFileSync(path.join(root,'src/renderer/components/SharedFolders.vue'),'utf8')).descriptor;
+const folderScript=compileScript(folderSource,{id:'sharing-editor',inlineTemplate:true,templateOptions:{compilerOptions:{isCustomElement:tag=>tag.startsWith('x-')}}});
+const folderBundle=await bundle({stdin:{contents:folderScript.content+'\nexport {sharedFolderErrors as testSharedFolderErrors};',loader:'ts',resolveDir:path.join(root,'src/renderer/components')},bundle:true,write:false,format:'esm',external:['vue','electron'],plugins:[{name:'native-folder-picker',setup(builder){builder.onResolve({filter:/^\.\.\/lib\/shared-folders$/},()=>({path:'picker',namespace:'fixture'}));builder.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:`export async function selectSharedFolder(){return window.folderPick;} export function defaultShareName(){return 'Projects';}`}));}}]});
+const folderModule=folderBundle.outputFiles[0].text.replace(/from "vue"/g,'from "/vue.js"');
+assert.match(fs.readFileSync(path.join(root,'src/renderer/views/Config.vue'),'utf8'),/<template #folders>[\s\S]*?<SharedFolders\b/);
 const fixture=`<!doctype html><html><head><meta charset="utf-8"><meta name="xel-theme" content="/xel/themes/fluent-dark.css"><meta name="xel-accent-color" content="#A78AF9"><script type="module" src="/xel.js"></script><link rel="stylesheet" href="/style.css"><style>body{margin:0;background:#24232a;color:#eceaf2;font-family:system-ui}main{max-width:1100px;margin:auto;padding:24px}.grid{display:grid}.text-sm{font-size:.85rem}.w-full{width:100%}.h-24{height:96px}ul{list-style:none;padding:0}button{background:none;font:inherit}</style></head><body><main id="app"></main><script type="module">
 import * as Vue from '/vue.js';
+import SharedFolders,{testSharedFolderErrors} from '/shared-folders.js';
 const templates=${JSON.stringify(templates)},sections=${JSON.stringify(integrationSections)};
 const {ref,computed}=Vue,active=ref('overview'),blocked=ref(false),calls=[],state={};
 const components={Icon:{render:()=>Vue.h('svg',{'aria-hidden':true,width:16,height:16,viewBox:'0 0 24 24'},[Vue.h('rect',{x:4,y:4,width:16,height:16,rx:4,fill:'none',stroke:'currentColor','stroke-width':1.5})])}};
@@ -39,8 +47,10 @@ for(const name of ['IntegrationDisplay','VMProjectTools','VMWorkbench','VMIntegr
   state[name]=data;return data;
  },render:new Function('Vue',templates[name].code)(Vue)};
 }
-const slotValues=Object.fromEntries(['sharing','display','performance','diagnostics'].map(area=>[area,ref('retained')]));
-const slotViews=Object.fromEntries(['sharing','display','performance','diagnostics'].map(area=>[area,()=>Vue.h('div',{class:'integration-card','data-slot':area},[Vue.h('h3',null,area+' extension'),Vue.h('label',null,['Extension preference',Vue.h('input',{'data-slot-input':area,value:slotValues[area].value,onInput:e=>slotValues[area].value=e.target.value})])])]));
+const slotValues=Object.fromEntries(['folders','display','performance','diagnostics'].map(area=>[area,ref('retained')]));
+const slotViews=Object.fromEntries(['folders','display','performance','diagnostics'].map(area=>[area,()=>Vue.h('div',{class:'integration-card','data-slot':area},[Vue.h('h3',null,area+' extension'),Vue.h('label',null,['Extension preference',Vue.h('input',{'data-slot-input':area,value:slotValues[area].value,onInput:e=>slotValues[area].value=e.target.value})])])]));
+const folders=ref([]),savedFolders=ref('[]');window.folderPick='/home/fixture/Projects';
+slotViews.folders=()=>Vue.h('div',{class:'integration-card','data-slot':'folders'},[Vue.h('h3',null,'Shared folders'),Vue.h(SharedFolders,{modelValue:folders.value,disabled:blocked.value,'onUpdate:modelValue':value=>folders.value=value}),Vue.h('x-button',{disabled:blocked.value||JSON.stringify(folders.value)===savedFolders.value||testSharedFolderErrors(folders.value).length>0,onClick:()=>{calls.push('saveShares');savedFolders.value=JSON.stringify(folders.value)}},'Save shared folders')]);
 const app=Vue.createApp({render:()=>Vue.h(components.VMIntegration,null,slotViews)});app.config.errorHandler=e=>{window.fixtureError=String(e)};app.mount('#app');
 window.showRecovery=()=>{app.unmount();Vue.createApp({render:()=>Vue.h('div',null,[Vue.h(components.ImportVM),Vue.h(components.VMRecoveryStatus)])}).mount('#app')};
 window.fixture={active,blocked,state,calls};window.fixtureReady=true;
@@ -49,6 +59,7 @@ const server=http.createServer((request,response)=>{
  const pathname=new URL(request.url,'http://localhost').pathname;
  let file;
  if(pathname==='/'){response.setHeader('Content-Type','text/html');response.end(fixture);return;}
+ if(pathname==='/shared-folders.js'){response.setHeader('Content-Type','text/javascript');response.end(folderModule);return;}
  if(pathname==='/vue.js')file=path.join(root,'node_modules/vue/dist/vue.esm-browser.js');
  else if(pathname==='/xel.js')file=path.join(root,'src/renderer/public/xel/xel.js');
  else if(pathname==='/style.css')file=path.join(root,'src/renderer/styles/vm-integration.css');
@@ -74,9 +85,16 @@ try{
  assert.equal(await evaluate('window.fixtureReady'),true);assert.equal(await evaluate('window.fixtureError'),undefined);
  const visible=label=>evaluate(`Array.from(document.querySelectorAll('h3,h4,x-button,summary')).some(e=>e.textContent.trim()===${JSON.stringify(label)}&&e.checkVisibility({contentVisibilityAuto:true}))`);
  const click=label=>evaluate(`(()=>{const e=Array.from(document.querySelectorAll('button,x-button,summary')).find(e=>e.textContent.trim()===${JSON.stringify(label)}&&e.checkVisibility());if(!e)throw Error('Control not visible: '+${JSON.stringify(label)});e.click()})()`);
- assert.equal(await evaluate("document.querySelectorAll('.integration-nav button').length"),7);
+ assert.equal(await evaluate("document.querySelectorAll('.integration-nav button').length"),8);
  assert.equal(await visible('Windows controls'),true);assert.equal(await visible('Shared clipboard'),false);
  await click('Clipboard & files');assert.equal(await visible('Shared clipboard'),true);assert.equal(await visible('Windows controls'),false);
+ await click('Shared folders');assert.equal(await visible('Add folder'),true);assert.equal(await visible('Shared clipboard'),false);
+ await click('Add folder');assert.equal(await evaluate("document.querySelector('[data-slot=folders] input:not([type])').value"),'Projects');
+ await evaluate("(()=>{const e=document.querySelector('[data-slot=folders] input:not([type])');e.value='Work files';e.dispatchEvent(new Event('input',{bubbles:true}))})()");
+ await click('Overview');await click('Shared folders');assert.equal(await evaluate("document.querySelector('[data-slot=folders] input:not([type])').value"),'Work files');
+ await click('Save shared folders');assert.ok((await evaluate('JSON.parse(JSON.stringify(window.fixture.calls))')).includes('saveShares'));
+ await click('Remove');assert.equal(await evaluate("document.querySelectorAll('[data-slot=folders] input:not([type])').length"),0);
+ await click('Clipboard & files');
  await evaluate("window.fixture.state.VMIntegration.toGuest.value=false");await click('Overview');await click('Clipboard & files');assert.equal(await evaluate('window.fixture.state.VMIntegration.toGuest.value'),false);
  await click('Applications');assert.equal(await visible('Add argument'),false);await click('Compatibility & launch arguments');await click('Add argument');
  await evaluate("(()=>{const e=document.querySelector('input[placeholder=\"e.g. -windowed\"]');e.value='a path with spaces';e.dispatchEvent(new Event('input',{bubbles:true}))})()");
@@ -85,7 +103,7 @@ try{
  await evaluate("(()=>{const e=document.querySelector('[data-slot-input=display]');window.savedSlotInput=e;e.value='preserved slot edit';e.dispatchEvent(new Event('input',{bubbles:true}))})()");await click('Overview');await click('Display & audio');
  assert.equal(await evaluate("document.querySelector('[data-slot-input=display]').value"),'preserved slot edit');
  assert.equal(await evaluate("window.savedSlotInput===document.querySelector('[data-slot-input=display]')"),true);
- assert.equal(await evaluate("document.querySelector('[data-slot=sharing]').checkVisibility()"),false);
+ assert.equal(await evaluate("document.querySelector('[data-slot=folders]').checkVisibility()"),false);
  await click('Save display preferences');assert.ok((await evaluate('JSON.parse(JSON.stringify(window.fixture.calls))')).includes('saveViewerSettings'));
  const screenshot=async name=>{if(process.env.UI_SCREENSHOT_DIR){fs.mkdirSync(process.env.UI_SCREENSHOT_DIR,{recursive:true});const image=await send('Page.captureScreenshot',{captureBeyondViewport:true});fs.writeFileSync(path.join(process.env.UI_SCREENSHOT_DIR,name+'.png'),Buffer.from(image.data,'base64'));}};
  await screenshot('integration-desktop');
@@ -102,8 +120,9 @@ try{
  await click('Import existing VM');assert.ok((await evaluate('JSON.parse(JSON.stringify(window.fixture.calls))')).includes('restore'));
  await evaluate('window.fixture.state.ImportVM.busy.value=true');assert.equal(await evaluate("Array.from(document.querySelectorAll('x-button')).find(e=>e.textContent.trim()==='Choose VM folder').hasAttribute('disabled')"),true);
  assert.equal(await evaluate('window.fixtureError'),undefined);
+ console.log('Shared folders UI: dedicated section, real editor, add, rename, retained edits, save action and remove passed.');
  console.log('VM import UI: folder selection, preview, trust requirement, import action and busy controls passed.');
- console.log('Integration UI: seven sections, advanced disclosure, retained form state, literal arguments, display actions, blocked controls and 1200/480px layouts passed.');
+ console.log('Integration UI: eight sections, advanced disclosure, retained form state, literal arguments, display actions, blocked controls and 1200/480px layouts passed.');
 }finally{
  socket?.close();browser?.kill('SIGKILL');await new Promise(resolve=>server.close(resolve));
  await new Promise(resolve=>setTimeout(resolve,100));fs.rmSync(temporary,{recursive:true,force:true});

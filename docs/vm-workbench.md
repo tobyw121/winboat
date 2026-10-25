@@ -134,7 +134,7 @@ The [project reliability guide](project-reliability.md) documents the added conf
 
 ## Organized VM integration settings
 
-Configuration → **VM integration** uses seven sections. The section picker is
+Configuration → **VM integration** uses eight sections. The section picker is
 keyboard accessible and wraps on narrow windows. It does not unmount active
 panels: profile edits, clipboard preferences and running operations survive a
 section change. Automatic performance refresh pauses outside Performance & network.
@@ -143,6 +143,7 @@ section change. Automatic performance refresh pauses outside Performance & netwo
 | --- | --- |
 | Overview | Start Windows, check connection, shut down or restart |
 | Clipboard & files | Share clipboard, manually transfer images, exchange files |
+| Shared folders | Add/edit Linux network shares, save changes, test access |
 | Display & audio | Viewer preferences, mouse capture, playback/microphone, output windows |
 | Applications | Save/load profiles, start a Windows app, apply display settings |
 | Performance & network | Measurements, configuration trials, CPU/memory tuning, networking |
