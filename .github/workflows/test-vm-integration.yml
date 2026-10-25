@@ -44,6 +44,7 @@ on:
       - 'tests/*qmp*'
       - 'tests/*usb-host*'
       - 'tests/vm-policies.test.ts'
+      - 'tests/vm-recovery.test.ts'
       - 'tests/relative-mouse.c'
       - '.github/workflows/test-vm-integration.yml'
 permissions:
