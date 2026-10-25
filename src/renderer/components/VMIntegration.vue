@@ -46,7 +46,12 @@
    <ul><li v-for="row in snapshots" :key="row.id" class="integration-snapshot"><div>{{ row.label }}<small>{{ row.createdAtUtc }} · {{ Math.ceil(row.archiveBytes/1048576) }} MiB</small></div><div><x-button @click="run(()=>snapshot('restore',row.id))">Restore</x-button><x-button @click="run(()=>snapshot('delete',row.id))">Delete</x-button></div></li></ul>
    <details><summary>What is saved & recovery options</summary><p>Includes VM storage and firmware. Shared folders and external disks are excluded. Restoring keeps the previous storage and leaves the VM stopped. Archives may contain passwords; keep them private.</p><x-button @click="run(()=>snapshot('recover'))">Recover interrupted restore</x-button></details>
   </div>
-  <div v-for="area in ['folders','display','performance','diagnostics']" :key="area" v-show="active===area && !!$slots[area]" class="integration-stack"><slot :name="area" /></div>
+  <!-- Explicit panels keep v-show reactive in optimized builds. A constant v-for
+       around slot outlets can omit the visibility patch when switching sections. -->
+  <div v-show="active==='folders' && !!$slots.folders" class="integration-stack"><slot name="folders" /></div>
+  <div v-show="active==='display' && !!$slots.display" class="integration-stack"><slot name="display" /></div>
+  <div v-show="active==='performance' && !!$slots.performance" class="integration-stack"><slot name="performance" /></div>
+  <div v-show="active==='diagnostics' && !!$slots.diagnostics" class="integration-stack"><slot name="diagnostics" /></div>
   <VMWorkbench :section="active" :blocked="busy || displayBusy || blocked" @busy="workbenchBusy=$event" @changed="emit('changed')" />
   <IntegrationDisplay v-show="active==='display'" :blocked="busy || workbenchBusy || blocked" @busy="displayBusy=$event" @changed="emit('changed')" />
  </fieldset>

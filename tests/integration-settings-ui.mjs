@@ -1,5 +1,6 @@
 // Render the real templates in Chromium with inert host/guest actions. No VM,
 // Docker, filesystem operations or clipboard connections are started by this UI fixture.
+// Match production SFC prefixing/hoisting: unoptimized templates missed hidden slot panels.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -14,7 +15,7 @@ const root=path.resolve(import.meta.dirname,'..'),temporary=fs.mkdtempSync(path.
 const names=['VMIntegration','VMWorkbench','VMProjectTools','IntegrationDisplay','ImportVM','VMRecoveryStatus'];
 const templates=Object.fromEntries(names.map(name=>{
  const {descriptor}=parse(fs.readFileSync(path.join(root,'src/renderer/components',name+'.vue'),'utf8'));
- return [name,{code:compile(descriptor.template.content,{mode:'function',isCustomElement:tag=>tag.startsWith('x-')}).code,
+ return [name,{code:compile(descriptor.template.content,{mode:'function',prefixIdentifiers:true,hoistStatic:true,isCustomElement:tag=>tag.startsWith('x-')}).code,
   actions:[...descriptor.scriptSetup.content.matchAll(/(?:async\s+)?function\s+(\w+)\(/g)].map(m=>m[1])}];
 }));
 // Execute the real folder editor, replacing only the native folder-picker boundary.
@@ -107,7 +108,7 @@ try{
  await click('Save display preferences');assert.ok((await evaluate('JSON.parse(JSON.stringify(window.fixture.calls))')).includes('saveViewerSettings'));
  const screenshot=async name=>{if(process.env.UI_SCREENSHOT_DIR){fs.mkdirSync(process.env.UI_SCREENSHOT_DIR,{recursive:true});const image=await send('Page.captureScreenshot',{captureBeyondViewport:true});fs.writeFileSync(path.join(process.env.UI_SCREENSHOT_DIR,name+'.png'),Buffer.from(image.data,'base64'));}};
  await screenshot('integration-desktop');
- for(const width of [1200,480]){await send('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:false});for(const section of integrationSections){await click(section.label);assert.equal(await evaluate('document.documentElement.scrollWidth<=window.innerWidth'),true,'Horizontal overflow: '+section.id+' at '+width);}}
+ for(const width of [1200,480]){await send('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:false});for(const section of integrationSections){await click(section.label);if(['folders','display','performance','diagnostics'].includes(section.id))assert.equal(await evaluate(`document.querySelector('[data-slot=${section.id}]').checkVisibility()`),true,'Hidden settings panel: '+section.id);assert.equal(await evaluate('document.documentElement.scrollWidth<=window.innerWidth'),true,'Horizontal overflow: '+section.id+' at '+width);}}
  await screenshot('integration-mobile');
  await click('Diagnostics');assert.equal(await visible('Run graphics probes · confirm in Windows'),false);
  await evaluate('window.fixture.blocked.value=true');await click('Applications');assert.equal(await evaluate("Array.from(document.querySelectorAll('input')).find(e=>e.placeholder.endsWith('Game.exe')).matches(':disabled')"),true);
